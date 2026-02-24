@@ -16,13 +16,13 @@ class DashboardController extends Controller
 
     public function index()
     {
+        // Ambil data MQTT dan HTTP sekali saja
+        $mqttData = $this->statisticsService->getMqttData();
+        $httpData = $this->statisticsService->getHttpData();
+
         // Ambil summary statistik
         $summary = $this->statisticsService->getSummary();
         $reliability = $this->statisticsService->getReliability();
-
-        // Ambil data untuk grafik
-        $mqttData = $this->statisticsService->getMqttData();
-        $httpData = $this->statisticsService->getHttpData();
 
         // Prepare data untuk Chart.js - Latency Comparison
         $latencyChartData = [
@@ -31,13 +31,19 @@ class DashboardController extends Controller
             'http' => [],
         ];
 
-        // Group by device dan compare latency
-        $devices = $mqttData->pluck('device_id')->merge($httpData->pluck('device_id'))->unique();
+        // Group by device dan compare latency - gunakan unique devices saja
+        $devices = collect()
+            ->merge($mqttData->pluck('device_id')->unique())
+            ->merge($httpData->pluck('device_id')->unique())
+            ->unique()
+            ->sort()
+            ->values();
         
         foreach ($devices as $deviceId) {
-            $mqttAvg = $mqttData->where('device_id', $deviceId)->avg('latency_ms');
-            $httpAvg = $httpData->where('device_id', $deviceId)->avg('latency_ms');
+            $mqttAvg = $mqttData->where('device_id', $deviceId)->avg('latency_ms') ?? 0;
+            $httpAvg = $httpData->where('device_id', $deviceId)->avg('latency_ms') ?? 0;
             
+            // Hanya tambah ke chart jika ada minimal satu data
             if ($mqttAvg > 0 || $httpAvg > 0) {
                 $latencyChartData['labels'][] = 'Device ' . $deviceId;
                 $latencyChartData['mqtt'][] = round($mqttAvg, 2);
@@ -53,9 +59,10 @@ class DashboardController extends Controller
         ];
 
         foreach ($devices as $deviceId) {
-            $mqttAvg = $mqttData->where('device_id', $deviceId)->avg('daya_mw');
-            $httpAvg = $httpData->where('device_id', $deviceId)->avg('daya_mw');
+            $mqttAvg = $mqttData->where('device_id', $deviceId)->avg('daya_mw') ?? 0;
+            $httpAvg = $httpData->where('device_id', $deviceId)->avg('daya_mw') ?? 0;
             
+            // Hanya tambah ke chart jika ada minimal satu data
             if ($mqttAvg > 0 || $httpAvg > 0) {
                 $powerChartData['labels'][] = 'Device ' . $deviceId;
                 $powerChartData['mqtt'][] = round($mqttAvg, 2);
