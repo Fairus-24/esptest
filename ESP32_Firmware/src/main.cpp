@@ -12,9 +12,10 @@ const char* WIFI_SSID = "Free";
 const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
-const char* HTTP_SERVER = "http://192.168.0.100";  // Apache front, proxied to PHP 8.4 server
+#define SERVER_HOST "192.168.0.104"  // Windows host LAN IP (update if DHCP IP changes)
+const char* HTTP_SERVER = "http://" SERVER_HOST;  // Apache front, proxied to PHP 8.4 server
 const char* HTTP_ENDPOINT = "/esptest/public/api/http-data";
-const char* MQTT_SERVER = "192.168.0.100";  // Same subnet as ESP32
+const char* MQTT_SERVER = SERVER_HOST;  // Same subnet as ESP32
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";
@@ -75,6 +76,8 @@ String buildProtocolPayload(const char* protocol, uint32_t packetSeq, float daya
 bool payloadHasRequiredFields(const String& payload);
 void printStatus();
 void updateTime();
+bool isServerHostSelfTarget();
+void printServerTargetConfig();
 
 // ==================== SETUP ====================
 void setup() {
@@ -93,6 +96,7 @@ void setup() {
     
     // Connect to WiFi
     setupWiFi();
+    printServerTargetConfig();
     
     // Setup MQTT
     mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
@@ -184,6 +188,29 @@ void setupWiFi() {
     }
 }
 
+bool isServerHostSelfTarget() {
+    if (WiFi.status() != WL_CONNECTED) {
+        return false;
+    }
+
+    IPAddress serverIp;
+    if (!serverIp.fromString(SERVER_HOST)) {
+        return false;
+    }
+
+    return serverIp == WiFi.localIP();
+}
+
+void printServerTargetConfig() {
+    Serial.println("[CONFIG] HTTP target: " + String(HTTP_SERVER) + String(HTTP_ENDPOINT));
+    Serial.println("[CONFIG] MQTT target: " + String(MQTT_SERVER) + ":" + String(MQTT_PORT));
+
+    if (isServerHostSelfTarget()) {
+        Serial.println("[CONFIG] ERROR: SERVER_HOST points to ESP32 IP itself.");
+        Serial.println("[CONFIG] Set SERVER_HOST to the PC/Laravel host IP (example: 192.168.0.104).");
+    }
+}
+
 // ==================== SENSOR READING ====================
 void readSensor() {
     float humidity = dht.readHumidity();
@@ -226,6 +253,12 @@ void sendHTTP() {
     long timestampEsp = (long) time(nullptr);
     if (timestampEsp < 1640995200L) {
         Serial.println("[HTTP] NTP time not synced, skipping send");
+        httpSendFail++;
+        return;
+    }
+
+    if (isServerHostSelfTarget()) {
+        Serial.println("[HTTP] ERROR: SERVER_HOST equals ESP32 IP, request aborted.");
         httpSendFail++;
         return;
     }
@@ -387,6 +420,11 @@ void sendMQTT() {
 void connectMQTT() {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[MQTT] WiFi not connected, skipping connection");
+        return;
+    }
+
+    if (isServerHostSelfTarget()) {
+        Serial.println("[MQTT] ERROR: SERVER_HOST equals ESP32 IP, connection aborted.");
         return;
     }
     
@@ -655,7 +693,5 @@ void updateTime() {
     Serial.print("[TIME] ✓ Time synchronized: ");
     Serial.println(ctime(&now));
 }
-
-
 
 

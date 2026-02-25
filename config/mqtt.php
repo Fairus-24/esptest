@@ -1,7 +1,11 @@
 <?php
 
 return [
-    'host' => env('MQTT_HOST', '192.168.0.100'),
+    'host' => env('MQTT_HOST', '127.0.0.1'),
+    'fallback_hosts' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('MQTT_FALLBACK_HOSTS', 'localhost'))
+    ))),
     'port' => (int) env('MQTT_PORT', 1883),
     'topic' => env('MQTT_TOPIC', 'iot/esp32/suhu'),
     'client_id' => env('MQTT_CLIENT_ID', 'laravel-mqtt-worker'),

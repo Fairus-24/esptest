@@ -158,6 +158,26 @@ class DashboardController extends Controller
             $dataWarnings[] = "Variasi daya HTTP sangat rendah (std < 0.5). Data cenderung konstan, cek perhitungan daya firmware.";
         }
 
+        // Host mismatch checks: tampilkan warning jelas jika konfigurasi host broker bermasalah.
+        $mqttHost = trim((string) config('mqtt.host', '127.0.0.1'));
+        $mqttPort = max(1, (int) config('mqtt.port', 1883));
+        $localhostBrokerReachable = $this->isTcpReachable('127.0.0.1', $mqttPort);
+        $configuredBrokerReachable = $this->isTcpReachable($mqttHost, $mqttPort);
+        $mqttHostIsLocal = $this->isLocalHost($mqttHost);
+        $mosquittoLocalOnly = (bool) config('mosquitto.only_for_local_host', true);
+
+        if (!$configuredBrokerReachable && $localhostBrokerReachable) {
+            $dataWarnings[] = "Host mismatch terdeteksi: MQTT_HOST={$mqttHost}:{$mqttPort} tidak bisa diakses, tetapi broker lokal 127.0.0.1:{$mqttPort} aktif. Periksa IP host di .env dan firmware ESP32.";
+        } elseif (!$configuredBrokerReachable && !$localhostBrokerReachable && !$mqttConnected) {
+            $dataWarnings[] = "Broker MQTT tidak terjangkau pada host konfigurasi ({$mqttHost}:{$mqttPort}). Cek Mosquitto service, firewall, dan IP host.";
+        }
+
+        if ($mosquittoLocalOnly && !$mqttHostIsLocal) {
+            $dataWarnings[] = "Konfigurasi berpotensi mismatch: MOSQUITTO_ONLY_LOCAL=true, tetapi MQTT_HOST={$mqttHost} bukan host lokal. Gunakan 127.0.0.1/localhost atau ubah konfigurasi.";
+        }
+
+        $dataWarnings = array_values(array_unique($dataWarnings));
+
         // Prepare data untuk Chart.js - Latency Comparison (per data point, line chart)
         // X-axis dibuat berdasarkan urutan data supaya jumlah titik selalu sama dengan total data point.
         $latencyChartData = [
@@ -266,5 +286,47 @@ class DashboardController extends Controller
             'mqttConnected', 'httpConnected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan',
             'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings'
         ));
+    }
+
+    private function isTcpReachable(string $host, int $port, float $timeoutSeconds = 0.35): bool
+    {
+        $targetHost = trim($host);
+        if ($targetHost === '' || $port < 1) {
+            return false;
+        }
+
+        $socket = @fsockopen($targetHost, $port, $errno, $errstr, $timeoutSeconds);
+        if ($socket === false) {
+            return false;
+        }
+
+        fclose($socket);
+        return true;
+    }
+
+    private function isLocalHost(string $host): bool
+    {
+        $normalized = strtolower(trim($host));
+        if (in_array($normalized, ['localhost', '127.0.0.1', '::1'], true)) {
+            return true;
+        }
+
+        $resolved = filter_var($normalized, FILTER_VALIDATE_IP) ? $normalized : gethostbyname($normalized);
+        if (!filter_var($resolved, FILTER_VALIDATE_IP)) {
+            return false;
+        }
+
+        $localIps = ['127.0.0.1', '::1'];
+        $hostnameIps = @gethostbynamel(gethostname());
+        if (is_array($hostnameIps)) {
+            $localIps = array_merge($localIps, $hostnameIps);
+        }
+
+        $serverAddr = request()->server('SERVER_ADDR');
+        if (is_string($serverAddr) && $serverAddr !== '') {
+            $localIps[] = $serverAddr;
+        }
+
+        return in_array($resolved, array_unique($localIps), true);
     }
 }

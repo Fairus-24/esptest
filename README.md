@@ -80,6 +80,13 @@ The project has been updated with the following behavior:
 21. ESP32 validates required fields before sending/publishing to ensure HTTP and MQTT always carry the same complete core telemetry fields.
 22. Protocol payloads include detailed telemetry (`rssi_dbm`, `tx_duration_ms`, `payload_bytes`, `uptime_s`, `free_heap_bytes`) plus send counters for deeper diagnostics.
 23. On mobile, `Statistical Analysis` cards are centered and aligned consistently with tablet layout.
+24. Auto-refresh now detects `Statistical Analysis` structure changes and reloads once when the section first appears (or structure count changes), so first incoming valid stats are shown immediately.
+25. T-test labels now restore statistical symbols (mu, sigma, sigma^2, plus-minus) in the dashboard.
+26. Data quality cards now support dropdown minimize/expand; header stays visible with status dot (red if any quality row is warning, green if all rows are healthy).
+27. Every T-test card now has a `(?)` help button that explains the meaning of each row/label in that specific card.
+28. MQTT worker and Mosquitto auto-start now support broker host fallback (`MQTT_FALLBACK_HOSTS`) so telemetry keeps flowing when primary LAN IP changes.
+29. Dashboard now shows explicit host-mismatch warnings when `MQTT_HOST` is unreachable while local broker is reachable (or when `MOSQUITTO_ONLY_LOCAL=true` conflicts with a non-local host).
+30. ESP32 firmware now warns when `SERVER_HOST` points to the ESP32 IP itself, and aborts HTTP/MQTT sends to prevent silent misrouting.
 
 ## Tech Stack
 
@@ -94,17 +101,61 @@ The project has been updated with the following behavior:
 
 ### Hardware
 
-- ESP32 DevKit (DOIT ESP32 DevKit V1)
-- DHT11 sensor
-- USB cable
+| Component | Minimum | Notes |
+| --- | --- | --- |
+| ESP32 board | ESP32 DevKit V1 | Tested with DOIT ESP32 DevKit V1 |
+| Temperature/Humidity sensor | DHT11 | Connected to `GPIO 4` in current firmware |
+| USB cable | Data-capable cable | Required for flashing + serial monitor |
+| Local network | Same LAN for PC + ESP32 | HTTP and MQTT both use LAN routing |
 
 ### Software
 
-- Windows + XAMPP (Apache + MySQL)
-- PHP/Composer
-- Node.js (only if rebuilding frontend assets)
-- Mosquitto
-- PlatformIO (for firmware)
+| Tool | Version (recommended) | Why it is needed |
+| --- | --- | --- |
+| Windows + XAMPP | Current stable | Apache + MySQL runtime |
+| PHP | 8.2+ | Laravel runtime (`8.4` binary used by auto-start in this repo) |
+| Composer | 2.x | PHP dependencies |
+| Node.js | 18+ | Frontend rebuild only (optional for runtime) |
+| Mosquitto | 2.x | MQTT broker on port `1883` |
+| PlatformIO | Latest | ESP32 firmware build/upload |
+
+## Pre-Setup Checklist (Values You Must Prepare)
+
+Before editing `.env` or firmware, collect these values first:
+
+| Value | Used in | How to get it |
+| --- | --- | --- |
+| PC LAN IPv4 (example `192.168.0.104`) | `.env` (`MQTT_HOST`), firmware (`SERVER_HOST`) | On Windows: `ipconfig` -> active adapter -> `IPv4 Address` |
+| ESP32 WiFi SSID + password | firmware (`WIFI_SSID`, `WIFI_PASSWORD`) | Router / hotspot settings |
+| MySQL DB name/user/password | `.env` (`DB_*`) | XAMPP MySQL user settings / phpMyAdmin |
+| MQTT credentials | `.env` + firmware (`MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_USER`, `MQTT_PASSWORD`) | Mosquitto config/password file; default in this repo: `esp32/esp32` |
+| PHP binary path | `.env` (`LARAVEL_HTTP_PHP_BINARY`) | `where php` on Windows, or Herd/XAMPP PHP absolute path |
+| Mosquitto binary + config path | `.env` (`MOSQUITTO_BINARY`, `MOSQUITTO_CONFIG`) | Usually `C:/Program Files/mosquitto/...` |
+| Device ID | payload `device_id` | `SELECT id, nama_device FROM devices;` after seed |
+| ESP32 COM port | flashing | `pio device list` or Arduino IDE port menu |
+
+Network must-haves:
+
+- PC and ESP32 must be on the same subnet (for example both `192.168.0.x`).
+- Firewall must allow MQTT port `1883`.
+- Apache/XAMPP must serve `http://<pc-ip>/esptest/public`.
+- Do not set firmware `SERVER_HOST` to ESP32 IP itself.
+
+Quick commands to collect required values:
+
+```powershell
+# 1) PC LAN IP (use this for MQTT_HOST and SERVER_HOST)
+ipconfig
+
+# 2) Find PHP binary path for LARAVEL_HTTP_PHP_BINARY
+where php
+
+# 3) Check Mosquitto port status
+netstat -ano | findstr :1883
+
+# 4) Validate devices table (get valid device_id values)
+php artisan tinker --execute "App\\Models\\Device::select('id','nama_device','lokasi')->get()->toArray();"
+```
 
 ## Installation
 
@@ -129,7 +180,15 @@ copy .env.example .env
 php artisan key:generate
 ```
 
-### 4. Configure Database in `.env`
+### 4. Create Database (MySQL)
+
+Example SQL:
+
+```sql
+CREATE DATABASE esptest CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+### 5. Configure `.env` (Database + Services)
 
 ```env
 DB_CONNECTION=mysql
@@ -140,7 +199,15 @@ DB_USERNAME=root
 DB_PASSWORD=
 ```
 
-### 5. Run Migration + Seed
+Also set service hosts:
+
+```env
+MQTT_HOST=192.168.0.104
+MQTT_FALLBACK_HOSTS=localhost,127.0.0.1
+LARAVEL_HTTP_PORT=8010
+```
+
+### 6. Run Migration + Seed
 
 ```bash
 php artisan migrate --seed
@@ -151,61 +218,135 @@ Seeder creates initial devices:
 - `id=1` -> `ESP32-1`
 - `id=2` -> `ESP32-2`
 
+### 7. Optional but Recommended: Clean Seeded Test Rows Before Live ESP32
+
+Seeder also inserts dummy experiment rows for demo. If you want pure live data:
+
+```bash
+php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
+```
+
 ## Configuration Reference (`.env`)
 
-### MQTT
+### Core App + Database
+
+| Key | Required | Example | How to fill |
+| --- | --- | --- | --- |
+| `APP_URL` | Yes | `http://127.0.0.1/esptest/public` | Match your Apache public URL |
+| `DB_CONNECTION` | Yes | `mysql` | Use MySQL in this project |
+| `DB_HOST` | Yes | `127.0.0.1` | Local MySQL from XAMPP |
+| `DB_PORT` | Yes | `3306` | Default MySQL port |
+| `DB_DATABASE` | Yes | `esptest` | From database created in step 4 |
+| `DB_USERNAME` | Yes | `root` | Your MySQL user |
+| `DB_PASSWORD` | Depends | `` | Your MySQL password |
+
+### MQTT Worker + Broker Targets
+
+| Key | Required | Example | How to fill |
+| --- | --- | --- | --- |
+| `MQTT_AUTO_START` | Yes | `true` | Auto-start worker from web request |
+| `MQTT_HOST` | Yes | `192.168.0.104` | PC LAN IPv4 that runs broker |
+| `MQTT_FALLBACK_HOSTS` | Recommended | `localhost,127.0.0.1` | Local fallback targets |
+| `MQTT_PORT` | Yes | `1883` | Mosquitto listener port |
+| `MQTT_TOPIC` | Yes | `iot/esp32/suhu` | Must match firmware topic |
+| `MQTT_CLIENT_ID` | Yes | `laravel-mqtt-worker` | Base client ID; worker appends PID/hash |
+| `MQTT_USERNAME` | Yes | `esp32` | Broker credential |
+| `MQTT_PASSWORD` | Yes | `esp32` | Broker credential |
+| `MQTT_QOS` | Yes | `0` | Current firmware publishes QoS 0 |
+| `MQTT_RECONNECT_DELAY` | Yes | `3` | Worker reconnect interval (seconds) |
+
+### Internal Laravel HTTP Auto-start
+
+| Key | Required | Example | How to fill |
+| --- | --- | --- | --- |
+| `LARAVEL_HTTP_AUTO_START` | Yes | `true` | Auto-start `artisan serve` behind gateway |
+| `LARAVEL_HTTP_HOST` | Yes | `0.0.0.0` | Listen on all interfaces |
+| `LARAVEL_HTTP_PORT` | Yes | `8010` | Internal port (proxied by Apache gateway) |
+| `LARAVEL_HTTP_HEALTH_HOST` | Yes | `127.0.0.1` | Host for health check |
+| `LARAVEL_HTTP_HEALTH_PATH` | Yes | `/up` | Health route checked before proxy |
+| `LARAVEL_HTTP_PHP_BINARY` | Yes | `C:/Users/LENOVO/.config/herd-lite/bin/php.exe` | Absolute PHP binary path |
+
+### Mosquitto Auto-start
+
+| Key | Required | Example | How to fill |
+| --- | --- | --- | --- |
+| `MOSQUITTO_AUTO_START` | Yes | `true` | Auto-start local broker if unreachable |
+| `MOSQUITTO_ONLY_LOCAL` | Yes | `true` | Safety: only auto-start for local host target |
+| `MOSQUITTO_BINARY` | Yes | `C:/Program Files/mosquitto/mosquitto.exe` | Mosquitto executable path |
+| `MOSQUITTO_CONFIG` | Yes | `C:/Program Files/mosquitto/mosquitto.conf` | Mosquitto config file |
+| `MOSQUITTO_VERBOSE` | Yes | `true` | Verbose broker logs |
+
+### Full Example `.env` Block (Project Defaults)
 
 ```env
+APP_URL=http://127.0.0.1/esptest/public
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=esptest
+DB_USERNAME=root
+DB_PASSWORD=
+
 MQTT_AUTO_START=true
-MQTT_HOST=192.168.0.100
+MQTT_AUTO_START_COOLDOWN=20
+MQTT_HOST=192.168.0.104
+MQTT_FALLBACK_HOSTS=localhost,127.0.0.1
 MQTT_PORT=1883
 MQTT_TOPIC=iot/esp32/suhu
 MQTT_CLIENT_ID=laravel-mqtt-worker
 MQTT_USERNAME=esp32
 MQTT_PASSWORD=esp32
+MQTT_QOS=0
+MQTT_CONNECT_TIMEOUT=5
+MQTT_SOCKET_TIMEOUT=5
 MQTT_KEEP_ALIVE=30
 MQTT_RECONNECT_DELAY=3
-```
 
-### Internal Laravel HTTP Server
-
-```env
 LARAVEL_HTTP_AUTO_START=true
 LARAVEL_HTTP_HOST=0.0.0.0
 LARAVEL_HTTP_PORT=8010
 LARAVEL_HTTP_HEALTH_HOST=127.0.0.1
 LARAVEL_HTTP_HEALTH_PATH=/up
 LARAVEL_HTTP_PHP_BINARY="C:/Users/LENOVO/.config/herd-lite/bin/php.exe"
-```
+LARAVEL_HTTP_START_COOLDOWN=15
+LARAVEL_HTTP_WAIT_SECONDS=8
 
-### Mosquitto Auto-start
-
-```env
 MOSQUITTO_AUTO_START=true
 MOSQUITTO_ONLY_LOCAL=true
 MOSQUITTO_BINARY="C:/Program Files/mosquitto/mosquitto.exe"
 MOSQUITTO_CONFIG="C:/Program Files/mosquitto/mosquitto.conf"
 MOSQUITTO_VERBOSE=true
+MOSQUITTO_START_COOLDOWN=20
+MOSQUITTO_WAIT_SECONDS=8
 ```
 
 ## Running the System
 
 ### Option A (Recommended in this repository)
 
-Use Apache (`http://127.0.0.1/esptest/public`) and let app auto-start supporting services.
+Use Apache (`http://127.0.0.1/esptest/public`) and let the app auto-start supporting services.
 
 1. Start Apache + MySQL in XAMPP.
-2. Open:
+2. Open dashboard URL:
 
 ```text
 http://127.0.0.1/esptest/public
 ```
 
-This triggers:
+What is triggered automatically (via `AppServiceProvider`):
 
-- internal Laravel server auto-start
-- Mosquitto auto-start (if needed)
-- MQTT worker auto-start (if not running)
+- internal Laravel HTTP server (`artisan serve --port=8010`)
+- Mosquitto broker start (if target host is local and broker is down)
+- MQTT worker start (`php mqtt_worker.php`) with lock protection
+
+Expected logs:
+
+- `storage/logs/laravel_http_server.log`
+- `storage/logs/mosquitto.log`
+- `storage/logs/mqtt_worker.log`
+
+If auto-start is disabled or blocked by policy, use manual mode below.
 
 ### Option B (Manual Services)
 
@@ -247,14 +388,42 @@ Firmware directory:
 ESP32_Firmware/
 ```
 
-Current important settings in `ESP32_Firmware/src/main.cpp`:
+Update these values in `ESP32_Firmware/src/main.cpp` before flash:
 
-- `HTTP_SERVER = "http://192.168.0.100"`
-- `HTTP_ENDPOINT = "/esptest/public/api/http-data"`
-- `MQTT_SERVER = "192.168.0.100"`
-- `MQTT_TOPIC = "iot/esp32/suhu"`
-- DHT pin: `GPIO 4`
-- Sensor type: `DHT11`
+| Firmware key | Example | Must match |
+| --- | --- | --- |
+| `WIFI_SSID` / `WIFI_PASSWORD` | your WiFi | Active WLAN used by ESP32 |
+| `SERVER_HOST` | `192.168.0.104` | Same host as Laravel + Mosquitto |
+| `HTTP_ENDPOINT` | `/esptest/public/api/http-data` | Laravel API path through Apache |
+| `MQTT_SERVER` / `MQTT_PORT` | `192.168.0.104`, `1883` | Broker host/port |
+| `MQTT_TOPIC` | `iot/esp32/suhu` | Same as `.env` `MQTT_TOPIC` |
+| `MQTT_USER` / `MQTT_PASSWORD` | `esp32` / `esp32` | Same as broker + `.env` |
+| `DEVICE_ID` | `1` | Existing row in `devices` table |
+| `DHTPIN` / `DHTTYPE` | `4`, `DHT11` | Your sensor wiring |
+
+Important runtime safety:
+
+- Firmware warns and blocks HTTP/MQTT send when `SERVER_HOST` equals ESP32 local IP.
+- This prevents accidental self-targeting (`HTTP -1`, `MQTT -2` loops).
+
+How ESP32 fills each payload field:
+
+| Field | Source in firmware |
+| --- | --- |
+| `device_id` | constant `DEVICE_ID` |
+| `suhu` | `dht.readTemperature()` |
+| `kelembapan` | `dht.readHumidity()` |
+| `timestamp_esp` | NTP-synced Unix timestamp (`time(nullptr)`) |
+| `daya` | dynamic estimate from signal, TX duration, payload size, retries, and sensor/system state |
+| `packet_seq` | protocol-specific counter (`httpPacketSeq` / `mqttPacketSeq`) |
+| `rssi_dbm` | `WiFi.RSSI()` |
+| `tx_duration_ms` | measured send duration per protocol |
+| `payload_bytes` | final serialized JSON payload length |
+| `uptime_s` | `millis()/1000` |
+| `free_heap_bytes` | `ESP.getFreeHeap()` |
+| `sensor_reads` | local counter (diagnostic) |
+| `http_success_count`/`http_fail_count` | local HTTP counters (diagnostic) |
+| `mqtt_success_count`/`mqtt_fail_count` | local MQTT counters (diagnostic) |
 
 Build and upload:
 
@@ -263,6 +432,56 @@ cd ESP32_Firmware
 pio run
 pio run -t upload
 pio device monitor
+```
+
+If upload fails because COM port is busy:
+
+- close serial monitor first,
+- confirm target port with `pio device list`,
+- run upload again.
+
+## First Boot Flow (End-to-End, Recommended Order)
+
+Use this order on a fresh machine/session so the stack starts cleanly:
+
+1. Start XAMPP (`Apache` + `MySQL`).
+2. Confirm database connection: `php artisan migrate:status`.
+3. Open dashboard once: `http://127.0.0.1/esptest/public`.
+4. Wait 5-10 seconds for auto-start services.
+5. Confirm ports:
+   - `1883` (Mosquitto)
+   - `8010` (internal Laravel HTTP)
+6. Confirm worker log shows active subscription:
+   - `storage/logs/mqtt_worker.log`
+   - expected line: connected + listening on topic `iot/esp32/suhu`
+7. Flash ESP32 with updated `SERVER_HOST` and credentials.
+8. Watch serial monitor:
+   - HTTP should return status `201`
+   - MQTT should publish successfully (no repeated reconnect failures)
+9. Refresh dashboard and confirm both protocol counters increase.
+10. If seeded dummy rows are still present, reset from dashboard button or clean table manually.
+
+## Fullstack Validation Matrix (What "Healthy" Looks Like)
+
+| Layer | Check | Healthy result |
+| --- | --- | --- |
+| Laravel API | `POST /api/http-data` | Response `201` + row inserted |
+| MQTT Broker | `mosquitto_pub` test publish | Worker log receives message and stores row |
+| MQTT Worker | `storage/logs/mqtt_worker.log` | No recurring disconnect/error loop |
+| Database | `eksperimens` table growth | New `HTTP` and `MQTT` rows with full required fields |
+| Dashboard UI | Auto refresh every 5s | Charts update and slide to latest data |
+| ESP32 runtime | Serial monitor | No `HTTP -1` / `MQTT -2` after correct host config |
+
+Recommended DB check:
+
+```sql
+SELECT protokol,
+       COUNT(*) AS total_rows,
+       MIN(packet_seq) AS min_seq,
+       MAX(packet_seq) AS max_seq,
+       SUM(CASE WHEN kelembapan IS NULL THEN 1 ELSE 0 END) AS missing_humidity
+FROM eksperimens
+GROUP BY protokol;
 ```
 
 ## API Endpoints
@@ -345,10 +564,16 @@ Other dashboard behavior:
 - chart containers enforce visible height on small screens (mobile chart no longer collapses)
 - protocol field-completeness panel (detail per field for MQTT and HTTP)
 - warning list for any missing required field data
+- quality cards can be collapsed like dropdowns while keeping the header visible
+- quality header shows status dot: red when any row is warning, green when all rows are OK
+- warning list now includes broker host-mismatch diagnostics (`MQTT_HOST` vs reachable local broker) to make IP issues visible without opening logs
 - reliability card now includes sequence continuity (`received/expected`), payload completeness, and transmission-health score
 - power chart now plots realtime power per data point (windowed view) instead of static per-device averages
 - power statistical section remains visible even when variance is zero (constant dataset case)
+- each T-test card provides an inline `(?)` explanation panel for all row labels/values
 - statistical cards remain centered on mobile, matching tablet alignment/flow
+- when `Statistical Analysis` appears for the first time during auto-refresh, the page reloads once to sync the full section
+- t-test labels use standard statistical symbols (mu, sigma, sigma^2, plus-minus)
 
 ## Reliability Formula (Current)
 
@@ -424,13 +649,32 @@ Invoke-RestMethod -Method Post `
 ### MQTT ingest
 
 ```powershell
-mosquitto_pub -h 192.168.0.100 -p 1883 -u esp32 -P esp32 -t iot/esp32/suhu -m "{\"device_id\":1,\"suhu\":27.9,\"kelembapan\":60.4,\"timestamp_esp\":1772021517,\"daya\":81,\"packet_seq\":101,\"rssi_dbm\":-60,\"tx_duration_ms\":45.2,\"payload_bytes\":208,\"uptime_s\":7200,\"free_heap_bytes\":265000}"
+mosquitto_pub -h 127.0.0.1 -p 1883 -u esp32 -P esp32 -t iot/esp32/suhu -m "{\"device_id\":1,\"suhu\":27.9,\"kelembapan\":60.4,\"timestamp_esp\":1772021517,\"daya\":81,\"packet_seq\":101,\"rssi_dbm\":-60,\"tx_duration_ms\":45.2,\"payload_bytes\":208,\"uptime_s\":7200,\"free_heap_bytes\":265000}"
 ```
 
 ### Service state
 ```powershell
 netstat -ano | findstr :1883
 netstat -ano | findstr :8010
+```
+
+### Data completeness audit (HTTP vs MQTT)
+
+```sql
+SELECT protokol,
+       COUNT(*) AS total_rows,
+       SUM(CASE WHEN suhu IS NULL THEN 1 ELSE 0 END) AS miss_suhu,
+       SUM(CASE WHEN kelembapan IS NULL THEN 1 ELSE 0 END) AS miss_kelembapan,
+       SUM(CASE WHEN timestamp_esp IS NULL THEN 1 ELSE 0 END) AS miss_timestamp_esp,
+       SUM(CASE WHEN daya_mw IS NULL THEN 1 ELSE 0 END) AS miss_daya,
+       SUM(CASE WHEN packet_seq IS NULL THEN 1 ELSE 0 END) AS miss_packet_seq,
+       SUM(CASE WHEN rssi_dbm IS NULL THEN 1 ELSE 0 END) AS miss_rssi,
+       SUM(CASE WHEN tx_duration_ms IS NULL THEN 1 ELSE 0 END) AS miss_tx_duration,
+       SUM(CASE WHEN payload_bytes IS NULL THEN 1 ELSE 0 END) AS miss_payload_bytes,
+       SUM(CASE WHEN uptime_s IS NULL THEN 1 ELSE 0 END) AS miss_uptime,
+       SUM(CASE WHEN free_heap_bytes IS NULL THEN 1 ELSE 0 END) AS miss_free_heap
+FROM eksperimens
+GROUP BY protokol;
 ```
 
 ## Troubleshooting
@@ -454,6 +698,26 @@ netstat -ano | findstr :8010
   `device_id`, `suhu`, `kelembapan`, `timestamp_esp`, `daya`, `packet_seq`, `rssi_dbm`, `tx_duration_ms`, `payload_bytes`, `uptime_s`, `free_heap_bytes`.
 - If warnings persist, inspect latest MQTT worker logs and HTTP API validation responses.
 - Legacy rows created before telemetry migration can still trigger warnings until new data replaces them or data is reset.
+
+### Dashboard shows no new data
+
+- Check MQTT worker log for broker connection errors:
+  `storage/logs/mqtt_worker.log`.
+- Verify MQTT host in `.env` points to the same broker endpoint used by ESP32:
+  `MQTT_HOST=192.168.0.104` and `MQTT_FALLBACK_HOSTS=localhost,127.0.0.1`.
+- If dashboard shows `Host mismatch terdeteksi`, fix `.env` and firmware host immediately so both point to the same active machine IP.
+- If ESP32 cannot send HTTP/MQTT, re-check firmware `SERVER_HOST` against your current PC LAN IP (`ipconfig`).
+- Restart worker after host changes so new config is loaded:
+  `php mqtt_worker.php`.
+
+### ESP32 shows HTTP code `-1` and MQTT code `-2`
+
+- This usually means ESP32 is targeting the wrong server IP (often itself).
+- In serial monitor, if WiFi IP is `192.168.0.100`, do not set `SERVER_HOST` to `192.168.0.100` unless your Laravel/Mosquitto host is truly on that IP.
+- Set firmware `SERVER_HOST` to the actual PC host IP (example: `192.168.0.104`), then rebuild and flash:
+  `pio run -t upload`.
+- Keep Laravel worker broker target aligned with ESP32:
+  `.env MQTT_HOST` should be the same host as firmware `MQTT_SERVER`.
 
 ### Power Consumption Analysis not visible
 

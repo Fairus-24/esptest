@@ -32,14 +32,24 @@ class MosquittoAutoStarter
 
     private function ensureRunningUnlocked(): void
     {
-        $host = (string) config('mqtt.host', '127.0.0.1');
         $port = max(1, (int) config('mqtt.port', 1883));
+        $hosts = $this->resolveBrokerHosts();
 
-        if ($this->isBrokerReachable($host, $port)) {
-            return;
+        foreach ($hosts as $candidateHost) {
+            if ($this->isBrokerReachable($candidateHost, $port)) {
+                return;
+            }
         }
 
-        if ((bool) config('mosquitto.only_for_local_host', true) && !$this->isLocalHost($host)) {
+        $startupHost = $hosts[0] ?? '127.0.0.1';
+        foreach ($hosts as $candidateHost) {
+            if ($this->isLocalHost($candidateHost)) {
+                $startupHost = $candidateHost;
+                break;
+            }
+        }
+
+        if ((bool) config('mosquitto.only_for_local_host', true) && !$this->isLocalHost($startupHost)) {
             return;
         }
 
@@ -52,12 +62,46 @@ class MosquittoAutoStarter
         }
 
         $waitSeconds = max(1, (int) config('mosquitto.wait_seconds', 8));
-        if (!$this->waitUntilReachable($host, $port, $waitSeconds)) {
+        if (!$this->waitUntilReachable($startupHost, $port, $waitSeconds)) {
             Log::warning('Mosquitto auto-start attempted but broker is still unreachable.', [
-                'host' => $host,
+                'host' => $startupHost,
                 'port' => $port,
             ]);
         }
+    }
+
+    private function resolveBrokerHosts(): array
+    {
+        $primaryHost = trim((string) config('mqtt.host', '127.0.0.1'));
+        $fallbackHosts = config('mqtt.fallback_hosts', []);
+        if (!is_array($fallbackHosts)) {
+            $fallbackHosts = [];
+        }
+
+        $candidates = array_merge([$primaryHost], $fallbackHosts, ['127.0.0.1', 'localhost']);
+        $hosts = [];
+        $seen = [];
+
+        foreach ($candidates as $candidate) {
+            $host = trim((string) $candidate);
+            if ($host === '') {
+                continue;
+            }
+
+            $normalized = strtolower($host);
+            if (isset($seen[$normalized])) {
+                continue;
+            }
+
+            $seen[$normalized] = true;
+            $hosts[] = $host;
+        }
+
+        if ($hosts === []) {
+            $hosts[] = '127.0.0.1';
+        }
+
+        return $hosts;
     }
 
     private function isBrokerReachable(string $host, int $port): bool

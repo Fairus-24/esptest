@@ -80,22 +80,25 @@
             }
         }
 
-        .container {
-            max-width: 1500px;
-            margin: 0 auto;
-        }
-
-        /* Header Section */
-        .header {
-            color: white;
-            margin-bottom: 50px;
+        .footer {
+            margin-top: 60px;
             text-align: center;
-            animation: slideDown 0.6s ease-out;
+            opacity: 0.98;
         }
 
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-30px); }
-            to { opacity: 1; transform: translateY(0); }
+        .footer-text {
+            font-size: 1.1em;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #fff;
+            text-shadow: 1px 2px 8px rgba(44,62,80,0.25);
+        }
+
+        .footer-meta {
+            font-size: 0.95em;
+            color: #fff;
+            font-weight: 400;
+            text-shadow: 1px 2px 8px rgba(44,62,80,0.18);
         }
 
         .header-content {
@@ -428,7 +431,68 @@
             font-size: 1.1em;
             display: flex;
             align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .ttest-header-title {
+            display: inline-flex;
+            align-items: center;
             gap: 8px;
+        }
+
+        .ttest-help-btn {
+            width: 26px;
+            height: 26px;
+            border: 1px solid rgba(100, 116, 139, 0.35);
+            border-radius: 999px;
+            background: #ffffff;
+            color: #334155;
+            font-weight: 800;
+            font-size: 0.85rem;
+            line-height: 1;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s ease;
+        }
+
+        .ttest-help-btn:hover {
+            background: #eef2ff;
+            border-color: rgba(79, 70, 229, 0.35);
+            color: #3730a3;
+        }
+
+        .ttest-help-btn[aria-expanded="true"] {
+            background: #dbeafe;
+            border-color: rgba(37, 99, 235, 0.4);
+            color: #1d4ed8;
+        }
+
+        .ttest-help-panel {
+            margin: 0 0 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.34);
+            background: rgba(248, 250, 252, 0.82);
+            color: #334155;
+            font-size: 0.79rem;
+            line-height: 1.5;
+        }
+
+        .ttest-help-item {
+            margin: 0 0 6px;
+        }
+
+        .ttest-help-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .ttest-help-label {
+            font-weight: 700;
+            color: #0f172a;
         }
 
         .ttest-card.mqtt-card {
@@ -704,6 +768,17 @@
                 gap: 8px;
             }
 
+            .ttest-help-btn {
+                width: 24px;
+                height: 24px;
+                font-size: 0.8rem;
+            }
+
+            .ttest-help-panel {
+                font-size: 0.76rem;
+                padding: 9px 10px;
+            }
+
             .ttest-row {
                 padding: 10px 0;
                 font-size: 0.9em;
@@ -900,6 +975,17 @@
                 font-size: 0.95em;
                 margin-bottom: 12px;
                 gap: 6px;
+            }
+
+            .ttest-help-btn {
+                width: 22px;
+                height: 22px;
+                font-size: 0.78rem;
+            }
+
+            .ttest-help-panel {
+                font-size: 0.74rem;
+                padding: 8px 9px;
             }
 
             .ttest-row {
@@ -1099,6 +1185,17 @@
             .ttest-card-header {
                 font-size: 0.9em;
                 margin-bottom: 10px;
+            }
+
+            .ttest-help-btn {
+                width: 21px;
+                height: 21px;
+                font-size: 0.76rem;
+            }
+
+            .ttest-help-panel {
+                font-size: 0.72rem;
+                padding: 7px 8px;
             }
 
             .ttest-row {
@@ -1348,13 +1445,76 @@
             border: 1px solid rgba(148, 163, 184, 0.3);
             border-radius: 12px;
             background: rgba(255, 255, 255, 0.72);
-            padding: 10px 12px;
+            overflow: hidden;
+            padding: 0;
         }
 
-        .quality-card h4 {
+        .quality-details {
+            width: 100%;
+        }
+
+        .quality-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 12px;
+            cursor: pointer;
+            list-style: none;
+            user-select: none;
+        }
+
+        .quality-summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .quality-summary:hover {
+            background: rgba(148, 163, 184, 0.08);
+        }
+
+        .quality-summary h4 {
             font-size: 0.88rem;
             color: #0f172a;
-            margin-bottom: 8px;
+            margin: 0;
+            flex: 1;
+        }
+
+        .quality-summary-meta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .quality-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .quality-dot-good {
+            background: #16a34a;
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+        }
+
+        .quality-dot-bad {
+            background: #dc2626;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+        }
+
+        .quality-toggle {
+            color: #64748b;
+            font-size: 0.72rem;
+            transition: transform 0.2s ease;
+        }
+
+        .quality-details[open] .quality-toggle {
+            transform: rotate(180deg);
+        }
+
+        .quality-content {
+            padding: 0 12px 10px;
         }
 
         .quality-row {
@@ -1657,22 +1817,43 @@
         @endif
         <div id="protocolQualityPanel" class="quality-grid">
             @foreach($fieldCompleteness as $protocol => $protocolMeta)
+                @php
+                    $hasQualityIssue = false;
+                    if (($protocolMeta['total'] ?? 0) > 0 && isset($protocolMeta['fields']) && is_array($protocolMeta['fields'])) {
+                        foreach ($protocolMeta['fields'] as $fieldMeta) {
+                            if (($fieldMeta['missing'] ?? 0) > 0) {
+                                $hasQualityIssue = true;
+                                break;
+                            }
+                        }
+                    }
+                @endphp
                 <div class="quality-card">
-                    <h4>{{ $protocol }} Field Completeness ({{ $protocolMeta['total'] }} data)</h4>
-                    @if($protocolMeta['total'] === 0)
-                        <div class="quality-row">
-                            <span>Belum ada data untuk validasi.</span>
-                        </div>
-                    @else
-                        @foreach($protocolMeta['fields'] as $fieldMeta)
+                    <details class="quality-details" data-protocol="{{ $protocol }}" open>
+                        <summary class="quality-summary">
+                            <h4>{{ $protocol }} Field Completeness ({{ $protocolMeta['total'] }} data)</h4>
+                            <span class="quality-summary-meta">
+                                <span class="quality-dot {{ $hasQualityIssue ? 'quality-dot-bad' : 'quality-dot-good' }}" aria-label="{{ $hasQualityIssue ? 'Status warning' : 'Status aman' }}"></span>
+                                <span class="quality-toggle"><i class="fas fa-chevron-down"></i></span>
+                            </span>
+                        </summary>
+                        <div class="quality-content">
+                        @if($protocolMeta['total'] === 0)
                             <div class="quality-row">
-                                <span>{{ $fieldMeta['label'] }}</span>
-                                <span class="quality-badge {{ $fieldMeta['missing'] > 0 ? 'quality-bad' : 'quality-good' }}">
-                                    {{ $fieldMeta['valid'] }}/{{ $fieldMeta['total'] }}
-                                </span>
+                                <span>Belum ada data untuk validasi.</span>
                             </div>
-                        @endforeach
-                    @endif
+                        @else
+                            @foreach($protocolMeta['fields'] as $fieldMeta)
+                                <div class="quality-row">
+                                    <span>{{ $fieldMeta['label'] }}</span>
+                                    <span class="quality-badge {{ $fieldMeta['missing'] > 0 ? 'quality-bad' : 'quality-good' }}">
+                                        {{ $fieldMeta['valid'] }}/{{ $fieldMeta['total'] }}
+                                    </span>
+                                </div>
+                            @endforeach
+                        @endif
+                        </div>
+                    </details>
                 </div>
             @endforeach
         </div>
@@ -1708,10 +1889,6 @@
                     <div class="chart-wrapper">
                         <canvas id="powerChart"></canvas>
                     </div>
-                    <div class="legend">
-                        <div class="legend-item"><div class="legend-color mqtt-legend"></div><span>MQTT Protocol</span></div>
-                        <div class="legend-item"><div class="legend-color http-legend"></div><span>HTTP Protocol</span></div>
-                    </div>
                 @else
                     <div class="no-data"><i class="fas fa-battery-full"></i><p>Belum ada data</p></div>
                 @endif
@@ -1722,68 +1899,62 @@
 
         <!-- T-Test Results -->
         @if($summary['ttest_latency']['valid'])
-            <h2 class="section-title"><i class="fas fa-flask"></i> Statistical Analysis</h2>
-            <div class="ttest-section">
-                <h2 class="ttest-title"><i class="fas fa-calculator"></i> Independent Sample T-Test Results</h2>
-                <div class="ttest-subsection">
-                    <h3>Latency Analysis</h3>
-                    <div class="ttest-grid">
-                        <div class="ttest-card mqtt-card">
-                            <div class="ttest-card-header"><i class="fas fa-broadcast-tower"></i> MQTT Protocol</div>
-                            <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['n'] }}</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Mean (mu)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['mean'] }} ms</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Std Deviation (sigma)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['std_dev'] }} ms</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Variance (sigma^2)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['variance'] }}</span></div>
-                        </div>
-                        <div class="ttest-card http-card">
-                            <div class="ttest-card-header"><i class="fas fa-server"></i> HTTP Protocol</div>
-                            <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['n'] }}</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Mean (mu)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['mean'] }} ms</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Std Deviation (sigma)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['std_dev'] }} ms</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Variance (sigma^2)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['variance'] }}</span></div>
-                        </div>
-                        <div class="ttest-card result-card">
-                            <div class="ttest-card-header"><i class="fas fa-flask-vial"></i> T-Test Results</div>
-                            <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $summary['ttest_latency']['t_value'] }}</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ $summary['ttest_latency']['df'] }}</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">+/-{{ $summary['ttest_latency']['critical_value'] }}</span></div>
-                            <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $summary['ttest_latency']['p_value'] }}</span></div>
-                            <span class="significance-badge @if($summary['ttest_latency']['is_significant']) significance-yes @else significance-no @endif">
-                                @if($summary['ttest_latency']['is_significant'])
-                                    <i class="fas fa-check-circle"></i> Signifikan
-                                @else
-                                    <i class="fas fa-times-circle"></i> Tidak Signifikan
-                                @endif
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                <div class="ttest-subsection">
-                    <h3>Power Consumption Analysis</h3>
-                    @if($summary['ttest_daya']['valid'])
+            <section id="statisticalAnalysisSection">
+                <h2 class="section-title"><i class="fas fa-flask"></i> Statistical Analysis</h2>
+                <div class="ttest-section">
+                    <h2 class="ttest-title"><i class="fas fa-calculator"></i> Independent Sample T-Test Results</h2>
+                    <div class="ttest-subsection">
+                        <h3>Latency Analysis</h3>
                         <div class="ttest-grid">
                             <div class="ttest-card mqtt-card">
-                                <div class="ttest-card-header"><i class="fas fa-broadcast-tower"></i> MQTT Protocol</div>
-                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['n'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Mean (mu)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['mean'] }} mW</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Std Deviation (sigma)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['std_dev'] }} mW</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Variance (sigma^2)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['variance'] }}</span></div>
+                                <div class="ttest-card-header">
+                                    <span class="ttest-header-title"><i class="fas fa-broadcast-tower"></i> MQTT Protocol</span>
+                                    <button type="button" class="ttest-help-btn" data-help-target="ttestHelpLatencyMqtt" aria-controls="ttestHelpLatencyMqtt" aria-expanded="false" title="Lihat penjelasan label">?</button>
+                                </div>
+                                <div id="ttestHelpLatencyMqtt" class="ttest-help-panel" hidden>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Sample Size (N):</span> Jumlah data latency MQTT yang dianalisis.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Mean (μ):</span> Nilai rata-rata latency (ms); makin kecil biasanya makin baik.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran data latency terhadap rata-rata.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku; menunjukkan tingkat variasi data.</p>
+                                </div>
+                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['n'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['mean'] }} ms</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['std_dev'] }} ms</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['variance'] }}</span></div>
                             </div>
                             <div class="ttest-card http-card">
-                                <div class="ttest-card-header"><i class="fas fa-server"></i> HTTP Protocol</div>
-                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['n'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Mean (mu)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['mean'] }} mW</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Std Deviation (sigma)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['std_dev'] }} mW</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Variance (sigma^2)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['variance'] }}</span></div>
+                                <div class="ttest-card-header">
+                                    <span class="ttest-header-title"><i class="fas fa-server"></i> HTTP Protocol</span>
+                                    <button type="button" class="ttest-help-btn" data-help-target="ttestHelpLatencyHttp" aria-controls="ttestHelpLatencyHttp" aria-expanded="false" title="Lihat penjelasan label">?</button>
+                                </div>
+                                <div id="ttestHelpLatencyHttp" class="ttest-help-panel" hidden>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Sample Size (N):</span> Jumlah data latency HTTP yang dianalisis.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Mean (μ):</span> Nilai rata-rata latency (ms); makin kecil biasanya makin baik.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran data latency terhadap rata-rata.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku; menunjukkan tingkat variasi data.</p>
+                                </div>
+                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['n'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['mean'] }} ms</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['std_dev'] }} ms</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['variance'] }}</span></div>
                             </div>
                             <div class="ttest-card result-card">
-                                <div class="ttest-card-header"><i class="fas fa-flask-vial"></i> T-Test Results</div>
-                                <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $summary['ttest_daya']['t_value'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ $summary['ttest_daya']['df'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">+/-{{ $summary['ttest_daya']['critical_value'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $summary['ttest_daya']['p_value'] }}</span></div>
-                                <span class="significance-badge @if($summary['ttest_daya']['is_significant']) significance-yes @else significance-no @endif">
-                                    @if($summary['ttest_daya']['is_significant'])
+                                <div class="ttest-card-header">
+                                    <span class="ttest-header-title"><i class="fas fa-flask-vial"></i> T-Test Results</span>
+                                    <button type="button" class="ttest-help-btn" data-help-target="ttestHelpLatencyResult" aria-controls="ttestHelpLatencyResult" aria-expanded="false" title="Lihat penjelasan label">?</button>
+                                </div>
+                                <div id="ttestHelpLatencyResult" class="ttest-help-panel" hidden>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">t-value:</span> Ukuran jarak perbedaan dua rata-rata terhadap variasi data.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Degrees of Freedom:</span> Parameter statistik yang dipakai untuk interpretasi uji t.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">Critical Value:</span> Nilai batas keputusan uji t pada tingkat signifikansi tertentu.</p>
+                                    <p class="ttest-help-item"><span class="ttest-help-label">p-value:</span> Probabilitas hasil terjadi jika H0 benar; makin kecil makin signifikan.</p>
+                                </div>
+                                <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $summary['ttest_latency']['t_value'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ $summary['ttest_latency']['df'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $summary['ttest_latency']['critical_value'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $summary['ttest_latency']['p_value'] }}</span></div>
+                                <span class="significance-badge @if($summary['ttest_latency']['is_significant']) significance-yes @else significance-no @endif">
+                                    @if($summary['ttest_latency']['is_significant'])
                                         <i class="fas fa-check-circle"></i> Signifikan
                                     @else
                                         <i class="fas fa-times-circle"></i> Tidak Signifikan
@@ -1791,20 +1962,87 @@
                                 </span>
                             </div>
                         </div>
-                    @else
-                        <div class="no-data">
-                            <i class="fas fa-circle-info"></i>
-                            <p>{{ $summary['ttest_daya']['message'] ?? 'Data daya belum cukup untuk analisis statistik.' }}</p>
-                        </div>
-                    @endif
+                    </div>
+                    <div class="ttest-subsection">
+                        <h3>Power Consumption Analysis</h3>
+                        @if($summary['ttest_daya']['valid'])
+                            <div class="ttest-grid">
+                                <div class="ttest-card mqtt-card">
+                                    <div class="ttest-card-header">
+                                        <span class="ttest-header-title"><i class="fas fa-broadcast-tower"></i> MQTT Protocol</span>
+                                        <button type="button" class="ttest-help-btn" data-help-target="ttestHelpPowerMqtt" aria-controls="ttestHelpPowerMqtt" aria-expanded="false" title="Lihat penjelasan label">?</button>
+                                    </div>
+                                    <div id="ttestHelpPowerMqtt" class="ttest-help-panel" hidden>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Sample Size (N):</span> Jumlah data daya MQTT yang dianalisis.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Mean (μ):</span> Nilai rata-rata daya (mW) selama pengukuran.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran konsumsi daya terhadap rata-rata.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku untuk melihat variasi daya.</p>
+                                    </div>
+                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['n'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['mean'] }} mW</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['std_dev'] }} mW</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['variance'] }}</span></div>
+                                </div>
+                                <div class="ttest-card http-card">
+                                    <div class="ttest-card-header">
+                                        <span class="ttest-header-title"><i class="fas fa-server"></i> HTTP Protocol</span>
+                                        <button type="button" class="ttest-help-btn" data-help-target="ttestHelpPowerHttp" aria-controls="ttestHelpPowerHttp" aria-expanded="false" title="Lihat penjelasan label">?</button>
+                                    </div>
+                                    <div id="ttestHelpPowerHttp" class="ttest-help-panel" hidden>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Sample Size (N):</span> Jumlah data daya HTTP yang dianalisis.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Mean (μ):</span> Nilai rata-rata daya (mW) selama pengukuran.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran konsumsi daya terhadap rata-rata.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku untuk melihat variasi daya.</p>
+                                    </div>
+                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['n'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['mean'] }} mW</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['std_dev'] }} mW</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['variance'] }}</span></div>
+                                </div>
+                                <div class="ttest-card result-card">
+                                    <div class="ttest-card-header">
+                                        <span class="ttest-header-title"><i class="fas fa-flask-vial"></i> T-Test Results</span>
+                                        <button type="button" class="ttest-help-btn" data-help-target="ttestHelpPowerResult" aria-controls="ttestHelpPowerResult" aria-expanded="false" title="Lihat penjelasan label">?</button>
+                                    </div>
+                                    <div id="ttestHelpPowerResult" class="ttest-help-panel" hidden>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">t-value:</span> Ukuran jarak perbedaan dua rata-rata terhadap variasi data.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Degrees of Freedom:</span> Parameter statistik yang dipakai untuk interpretasi uji t.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">Critical Value:</span> Nilai batas keputusan uji t pada tingkat signifikansi tertentu.</p>
+                                        <p class="ttest-help-item"><span class="ttest-help-label">p-value:</span> Probabilitas hasil terjadi jika H0 benar; makin kecil makin signifikan.</p>
+                                    </div>
+                                    <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $summary['ttest_daya']['t_value'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ $summary['ttest_daya']['df'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $summary['ttest_daya']['critical_value'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $summary['ttest_daya']['p_value'] }}</span></div>
+                                    <span class="significance-badge @if($summary['ttest_daya']['is_significant']) significance-yes @else significance-no @endif">
+                                        @if($summary['ttest_daya']['is_significant'])
+                                            <i class="fas fa-check-circle"></i> Signifikan
+                                        @else
+                                            <i class="fas fa-times-circle"></i> Tidak Signifikan
+                                        @endif
+                                    </span>
+                                </div>
+                            </div>
+                        @else
+                            <div class="no-data">
+                                <i class="fas fa-circle-info"></i>
+                                <p>{{ $summary['ttest_daya']['message'] ?? 'Data daya belum cukup untuk analisis statistik.' }}</p>
+                            </div>
+                        @endif
+                    </div>
                 </div>
-            </div>
+            </section>
         @endif
 
         <!-- Footer -->
         <div class="footer">
             <p class="footer-text"><i class="fas fa-graduation-cap"></i> Sistem Penelitian - Analisis Komparatif MQTT vs HTTP</p>
-            <p class="footer-meta">MySQL | Laravel | Chart.js | T-Test Analysis</p>
+            <p class="footer-meta">
+                <span style="margin-right:12px;color:#00cc88"><i class="fas fa-database"></i> MySQL</span>
+                <span style="margin-right:12px;color:#667eea"><i class="fas fa-rocket"></i> Laravel</span>
+                <span style="margin-right:12px;color:#0066ff"><i class="fas fa-chart-line"></i> Chart.js</span>
+                <span style="color:#ff6b6b"><i class="fas fa-ruler-combined"></i> T-Test Analysis</span>
+            </p>
         </div>
     </div>
 
@@ -2022,9 +2260,21 @@
             const currentQualityPanel = document.getElementById('protocolQualityPanel');
             const nextQualityPanel = newDoc.getElementById('protocolQualityPanel');
             if (currentQualityPanel && nextQualityPanel) {
+                const qualityOpenState = {};
+                currentQualityPanel.querySelectorAll('.quality-details[data-protocol]').forEach((item) => {
+                    qualityOpenState[item.dataset.protocol] = item.open;
+                });
+
                 if (currentQualityPanel.innerHTML !== nextQualityPanel.innerHTML) {
                     currentQualityPanel.innerHTML = nextQualityPanel.innerHTML;
                 }
+
+                currentQualityPanel.querySelectorAll('.quality-details[data-protocol]').forEach((item) => {
+                    const protocolKey = item.dataset.protocol;
+                    if (Object.prototype.hasOwnProperty.call(qualityOpenState, protocolKey)) {
+                        item.open = qualityOpenState[protocolKey];
+                    }
+                });
             }
         }
 
@@ -2051,6 +2301,43 @@
             const source = useFull ? latestPowerData.full_time_labels : latestPowerData.time_labels;
             if (!Array.isArray(source)) return '-';
             return source[pointIndex - 1] || '-';
+        }
+
+        function bindTtestHelpButtons() {
+            if (document.body && document.body.dataset.ttestHelpBound === '1') return;
+
+            document.addEventListener('click', function(event) {
+                const helpBtn = event.target.closest('.ttest-help-btn');
+                if (!helpBtn) return;
+
+                const targetId = helpBtn.getAttribute('data-help-target');
+                if (!targetId) return;
+
+                const panel = document.getElementById(targetId);
+                if (!panel) return;
+
+                const shouldOpen = panel.hasAttribute('hidden');
+
+                document.querySelectorAll('.ttest-help-btn[aria-expanded="true"]').forEach((openBtn) => {
+                    const openTarget = openBtn.getAttribute('data-help-target');
+                    const openPanel = openTarget ? document.getElementById(openTarget) : null;
+                    if (!openPanel || openBtn === helpBtn) return;
+                    openPanel.setAttribute('hidden', 'hidden');
+                    openBtn.setAttribute('aria-expanded', 'false');
+                });
+
+                if (shouldOpen) {
+                    panel.removeAttribute('hidden');
+                    helpBtn.setAttribute('aria-expanded', 'true');
+                } else {
+                    panel.setAttribute('hidden', 'hidden');
+                    helpBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            if (document.body) {
+                document.body.dataset.ttestHelpBound = '1';
+            }
         }
 
         function updateLatencyToolbarInfo() {
@@ -2642,9 +2929,21 @@
                     const nextHasLatencyChart = !!newDoc.getElementById('latencyChart');
                     const currentHasPowerChart = !!document.getElementById('powerChart');
                     const nextHasPowerChart = !!newDoc.getElementById('powerChart');
+                    const currentHasStatisticalSection = !!document.getElementById('statisticalAnalysisSection');
+                    const nextHasStatisticalSection = !!newDoc.getElementById('statisticalAnalysisSection');
+                    const currentTtestValueCount = document.querySelectorAll('.ttest-value').length;
+                    const nextTtestValueCount = newDoc.querySelectorAll('.ttest-value').length;
+                    const currentSignificanceCount = document.querySelectorAll('.significance-badge').length;
+                    const nextSignificanceCount = newDoc.querySelectorAll('.significance-badge').length;
 
-                    // Jika struktur berubah (misal habis reset jadi no-data), reload sekali agar DOM sinkron.
-                    if (currentHasLatencyChart !== nextHasLatencyChart || currentHasPowerChart !== nextHasPowerChart) {
+                    // Jika struktur berubah (misal habis reset / Statistical Analysis baru muncul), reload sekali agar DOM sinkron.
+                    if (
+                        currentHasLatencyChart !== nextHasLatencyChart ||
+                        currentHasPowerChart !== nextHasPowerChart ||
+                        currentHasStatisticalSection !== nextHasStatisticalSection ||
+                        currentTtestValueCount !== nextTtestValueCount ||
+                        currentSignificanceCount !== nextSignificanceCount
+                    ) {
                         window.location.reload();
                         return;
                     }
@@ -2657,6 +2956,7 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             initCharts(document, { initialLoad: true });
+            bindTtestHelpButtons();
             
             // Animate all stat values immediately on load
             document.querySelectorAll('.stat-value').forEach(el => {

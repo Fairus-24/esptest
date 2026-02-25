@@ -47,7 +47,11 @@ register_shutdown_function(static function () use ($lockHandle): void {
     @fclose($lockHandle);
 });
 
-$server = (string) config('mqtt.host', '192.168.0.100');
+$primaryHost = trim((string) config('mqtt.host', '127.0.0.1'));
+$fallbackHosts = config('mqtt.fallback_hosts', []);
+if (!is_array($fallbackHosts)) {
+    $fallbackHosts = [];
+}
 $port = (int) config('mqtt.port', 1883);
 $topic = (string) config('mqtt.topic', 'iot/esp32/suhu');
 $clientIdBase = (string) config('mqtt.client_id', 'laravel-mqtt-worker');
@@ -58,6 +62,31 @@ $connectTimeout = max(1, (int) config('mqtt.connect_timeout', 5));
 $socketTimeout = max(1, (int) config('mqtt.socket_timeout', 5));
 $keepAlive = max(1, (int) config('mqtt.keep_alive', 30));
 $reconnectDelay = max(1, (int) config('mqtt.reconnect_delay', 3));
+
+$brokerHosts = [];
+$seenHosts = [];
+$hostCandidates = array_merge([$primaryHost], $fallbackHosts, ['127.0.0.1', 'localhost']);
+
+foreach ($hostCandidates as $candidate) {
+    $host = trim((string) $candidate);
+    if ($host === '') {
+        continue;
+    }
+
+    $normalized = strtolower($host);
+    if (isset($seenHosts[$normalized])) {
+        continue;
+    }
+
+    $seenHosts[$normalized] = true;
+    $brokerHosts[] = $host;
+}
+
+if ($brokerHosts === []) {
+    $brokerHosts[] = '127.0.0.1';
+}
+
+$hostIndex = 0;
 
 $settings = (new ConnectionSettings())
     ->setUsername($username !== '' ? $username : null)
@@ -193,16 +222,18 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
     $log("[DB] MQTT data saved. device_id={$deviceId}, packet_seq={$packetSeq}, suhu={$suhu}, kelembapan={$kelembapan}, daya={$daya}, latency_ms={$latencyMs}, rssi_dbm={$rssiDbm}, tx_duration_ms={$txDurationMs}, payload_bytes={$payloadBytes}");
 };
 
-$log("[MQTT] Worker starting. Broker={$server}:{$port}, Topic={$topic}");
+$log('[MQTT] Worker starting. Broker candidates=' . implode(', ', $brokerHosts) . ", Port={$port}, Topic={$topic}");
 
 while (true) {
     $mqtt = null;
+    $server = $brokerHosts[$hostIndex] ?? $brokerHosts[0];
     $clientId = "{$clientIdBase}-" . getmypid() . '-' . substr(md5((string) microtime(true)), 0, 6);
 
     try {
+        $log("[MQTT] Connecting to broker {$server}:{$port} ...");
         $mqtt = new MqttClient($server, $port, $clientId);
         $mqtt->connect($settings, true);
-        $log('[MQTT] Connected. Listening for messages...');
+        $log("[MQTT] Connected to {$server}:{$port}. Listening for messages...");
 
         $mqtt->subscribe($topic, static function (string $incomingTopic, string $message) use ($log, $savePayload): void {
             $log("[MQTT] Message received on {$incomingTopic}: {$message}");
@@ -215,7 +246,13 @@ while (true) {
 
         $mqtt->loop(true);
     } catch (\Throwable $e) {
-        $log('[ERROR] MQTT disconnected: ' . $e->getMessage());
+        $log("[ERROR] MQTT disconnected from {$server}: " . $e->getMessage());
+
+        if (count($brokerHosts) > 1) {
+            $hostIndex = ($hostIndex + 1) % count($brokerHosts);
+            $nextHost = $brokerHosts[$hostIndex];
+            $log("[MQTT] Switching broker candidate to {$nextHost}:{$port}");
+        }
     } finally {
         if ($mqtt !== null) {
             try {
