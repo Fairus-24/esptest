@@ -57,17 +57,28 @@ flowchart LR
 
 The project has been updated with the following behavior:
 
-1. Latency chart is now scrollable/pannable horizontally to inspect older points.
+1. Latency chart is scrollable/pannable horizontally to inspect older points.
 2. Chart view defaults to a small visible window (clear and readable) instead of compressing all points.
 3. Zoom is controlled by buttons (`+`, `-`, `Reset`) with limits to keep chart clean.
-4. Time labels now match total data points exactly.
+4. Time labels always match total data points exactly.
 5. Chart data auto-refreshes every 5 seconds.
 6. If user is idle, chart smoothly follows newest data on the right side.
 7. Data ordering uses real timestamp order and is displayed in WIB (`Asia/Jakarta`, Surabaya).
-8. `Reset Data Eksperimen` button now properly clears experiment data.
+8. `Reset Data Eksperimen` correctly clears all experiment data.
 9. MQTT worker runs with reconnect loop and lock protection (prevents duplicate worker execution).
 10. Auto-start stack scripts were improved for Windows startup and quoting safety.
-11. ESP32 firmware endpoint and response handling were aligned with current backend.
+11. ESP32 firmware sends one humidity field only: `kelembapan` (HTTP and MQTT).
+12. HTTP and MQTT ingest now enforce complete required fields: `device_id`, `suhu`, `kelembapan`, `timestamp_esp`, `daya`.
+13. Dashboard header metrics (temperature/humidity + connection badges) live-sync during auto-refresh.
+14. Dashboard shows protocol field completeness details for MQTT and HTTP.
+15. Dashboard shows warning lists when any required field is missing.
+16. Protocol `AVG Humidity` cards were removed to keep metric cards clean and focused.
+17. Power t-test handles zero-variance datasets (constant power values) without hiding analysis.
+18. Reliability now uses a rolling window (latest 300 points/protocol) and combines sequence continuity (`packet_seq`), payload completeness, and transmission health (latency + TX duration quality).
+19. Power chart now uses per-data-point time-series (not per-device average), so realtime variation is visible.
+20. ESP32 payload generation now uses payload-byte-aware power estimation (two-pass build), so sent `daya` is closer to actual transmission conditions.
+21. ESP32 validates required fields before sending/publishing to ensure HTTP and MQTT always carry the same complete core telemetry fields.
+22. Protocol payloads include detailed telemetry (`rssi_dbm`, `tx_duration_ms`, `payload_bytes`, `uptime_s`, `free_heap_bytes`) plus send counters for deeper diagnostics.
 
 ## Tech Stack
 
@@ -265,12 +276,37 @@ Sample payload:
 {
   "device_id": 1,
   "suhu": 27.9,
+  "kelembapan": 60.4,
   "timestamp_esp": 1772021517,
-  "daya": 81
+  "daya": 81,
+  "packet_seq": 1201,
+  "rssi_dbm": -58,
+  "tx_duration_ms": 97.5,
+  "payload_bytes": 212,
+  "uptime_s": 8451,
+  "free_heap_bytes": 271232,
+  "sensor_reads": 412,
+  "http_success_count": 120,
+  "http_fail_count": 2,
+  "mqtt_success_count": 118,
+  "mqtt_fail_count": 3
 }
 ```
 
 Success response: `201 Created`.
+
+Validation rules:
+- `device_id`: required, must exist in `devices`.
+- `suhu`: required numeric (`-50` to `150`).
+- `kelembapan`: required numeric (`0` to `100`).
+- `timestamp_esp`: required Unix timestamp (seconds).
+- `daya`: required numeric (`>= 0`).
+- `packet_seq`: required integer (`>= 1`), used for packet-loss reliability.
+- `rssi_dbm`: required integer (`-120` to `0`).
+- `tx_duration_ms`: required numeric (`>= 0`).
+- `payload_bytes`: required integer (`>= 1`).
+- `uptime_s`: required integer (`>= 0`).
+- `free_heap_bytes`: required integer (`>= 0`).
 
 ### POST `/reset-data`
 
@@ -300,7 +336,29 @@ Other dashboard behavior:
 
 - T-test summary for latency and power
 - protocol-level summary cards
-- reset experiment data button
+- dedicated reset experiment data button
+- modernized header cards for temperature and humidity
+- live status badges for MQTT and HTTP connectivity
+- responsive layout tuned for desktop, tablet, and mobile
+- mobile and tablet keep temperature and humidity header cards aligned side-by-side
+- chart containers enforce visible height on small screens (mobile chart no longer collapses)
+- protocol field-completeness panel (detail per field for MQTT and HTTP)
+- warning list for any missing required field data
+- reliability card now includes sequence continuity (`received/expected`), payload completeness, and transmission-health score
+- power chart now plots realtime power per data point (windowed view) instead of static per-device averages
+- power statistical section remains visible even when variance is zero (constant dataset case)
+
+## Reliability Formula (Current)
+
+Reliability is computed per protocol from the latest `300` records:
+
+- with sequence available:
+  - `55%` sequence continuity (`packet_seq`)
+  - `25%` required-field completeness
+  - `20%` transmission health (latency + TX duration quality)
+- without sequence:
+  - `60%` required-field completeness
+  - `40%` transmission health
 
 ## Data Model
 
@@ -317,11 +375,17 @@ Other dashboard behavior:
 - `device_id` (FK -> `devices.id`)
 - `protokol` (`MQTT` or `HTTP`)
 - `suhu`
-- `kelembapan` (nullable)
+- `kelembapan` (required at ingest, legacy rows may still be `NULL`)
 - `timestamp_esp`
 - `timestamp_server`
 - `latency_ms`
 - `daya_mw`
+- `packet_seq`
+- `rssi_dbm`
+- `tx_duration_ms`
+- `payload_bytes`
+- `uptime_s`
+- `free_heap_bytes`
 - timestamps
 
 ## Quick Verification Checklist
@@ -338,8 +402,15 @@ php artisan migrate:status
 $body = @{
   device_id = 1
   suhu = 26.7
+  kelembapan = 59.8
   timestamp_esp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
   daya = 79.5
+  packet_seq = 101
+  rssi_dbm = -60
+  tx_duration_ms = 96.2
+  payload_bytes = 210
+  uptime_s = 7200
+  free_heap_bytes = 265000
 } | ConvertTo-Json -Compress
 
 Invoke-RestMethod -Method Post `
@@ -351,11 +422,10 @@ Invoke-RestMethod -Method Post `
 ### MQTT ingest
 
 ```powershell
-mosquitto_pub -h 192.168.0.100 -p 1883 -u esp32 -P esp32 -t iot/esp32/suhu -m "{\"device_id\":1,\"suhu\":27.9,\"timestamp_esp\":1772021517,\"daya\":81}"
+mosquitto_pub -h 192.168.0.100 -p 1883 -u esp32 -P esp32 -t iot/esp32/suhu -m "{\"device_id\":1,\"suhu\":27.9,\"kelembapan\":60.4,\"timestamp_esp\":1772021517,\"daya\":81,\"packet_seq\":101,\"rssi_dbm\":-60,\"tx_duration_ms\":45.2,\"payload_bytes\":208,\"uptime_s\":7200,\"free_heap_bytes\":265000}"
 ```
 
 ### Service state
-
 ```powershell
 netstat -ano | findstr :1883
 netstat -ano | findstr :8010
@@ -367,6 +437,33 @@ netstat -ano | findstr :8010
 
 - Ensure route `POST /reset-data` is configured exactly as current code.
 - Verify access path is `http://127.0.0.1/esptest/public`.
+
+### Humidity value not shown on dashboard
+
+- Confirm payload includes `kelembapan` for both HTTP and MQTT.
+- Confirm API endpoint `/api/http-data` returns `201` for test payload with `kelembapan`.
+- Verify new data rows in `eksperimens` have non-null `kelembapan`.
+- Remember: old records created before this fix may contain `NULL` humidity values.
+
+### Warning list appears for missing fields
+
+- Open dashboard data quality panel and see which protocol/field has missing values.
+- Ensure both protocol payloads always include all required fields:
+  `device_id`, `suhu`, `kelembapan`, `timestamp_esp`, `daya`, `packet_seq`, `rssi_dbm`, `tx_duration_ms`, `payload_bytes`, `uptime_s`, `free_heap_bytes`.
+- If warnings persist, inspect latest MQTT worker logs and HTTP API validation responses.
+- Legacy rows created before telemetry migration can still trigger warnings until new data replaces them or data is reset.
+
+### Power Consumption Analysis not visible
+
+- Previous behavior could hide the section when power variance was exactly zero.
+- Current behavior treats zero-variance constant data as a valid statistical edge case, so the section is still rendered.
+- If values are all constant and equal, expected result is `t_value = 0`, `p_value = 1`, and not significant.
+
+### Power data still looks too constant
+
+- Ensure ESP32 firmware is re-flashed with the latest `ESP32_Firmware/src/main.cpp`.
+- Confirm payload includes telemetry fields (`rssi_dbm`, `tx_duration_ms`, `payload_bytes`) because these are used in dynamic power estimation.
+- Check dashboard warning list: if `std_daya` is very low (`< 0.5`) for many rows, firmware telemetry may still be stale/old.
 
 ### MQTT payload rejected (`Payload MQTT bukan JSON valid`)
 
@@ -401,6 +498,8 @@ MOSQUITTO_AUTO_START=false
 - `scripts/start_iot_stack.ps1`
 - `scripts/register_iot_autostart.ps1`
 - `resources/views/dashboard.blade.php`
+- `app/Http/Controllers/DashboardController.php`
+- `app/Http/Controllers/ApiController.php`
 - `ESP32_Firmware/src/main.cpp`
 
 ## Maintenance Policy

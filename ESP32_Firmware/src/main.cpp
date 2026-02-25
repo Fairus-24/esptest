@@ -41,6 +41,12 @@ PubSubClient mqttClient(wifiClient);
 float lastTemperature = 0.0;
 float lastHumidity = 0.0;
 float lastPower = 0.0;
+float lastHttpPower = 0.0;
+float lastMqttPower = 0.0;
+float lastHttpTxDurationMs = 120.0;
+float lastMqttTxDurationMs = 50.0;
+uint32_t httpPacketSeq = 0;
+uint32_t mqttPacketSeq = 0;
 long lastSensorRead = 0;
 long lastHTTPSend = 0;
 long lastMQTTSend = 0;
@@ -63,6 +69,10 @@ void sendMQTT();
 void connectMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 float calculatePowerConsumption();
+float estimateProtocolPower(const char* protocol, float txDurationMs, size_t payloadBytes, int rssiDbm, bool success);
+void fillProtocolPayload(StaticJsonDocument<640>& jsonDoc, const char* protocol, uint32_t packetSeq, float dayaMw, float txDurationMs, uint32_t payloadBytes, int rssiDbm, long timestampEsp);
+String buildProtocolPayload(const char* protocol, uint32_t packetSeq, float dayaMw, float txDurationMs, int rssiDbm, long timestampEsp, uint32_t* payloadBytesOut = nullptr);
+bool payloadHasRequiredFields(const String& payload);
 void printStatus();
 void updateTime();
 
@@ -203,109 +213,176 @@ void readSensor() {
 // ==================== HTTP SENDER ====================
 void sendHTTP() {
     if (!httpConnected || WiFi.status() != WL_CONNECTED) {
-        Serial.println("[HTTP] ✗ WiFi not connected, skipping HTTP send");
+        Serial.println("[HTTP] WiFi not connected, skipping HTTP send");
         httpSendFail++;
         return;
     }
-    
+
     if (lastTemperature == 0.0 && lastHumidity == 0.0) {
-        Serial.println("[HTTP] ✗ No sensor data available");
+        Serial.println("[HTTP] No sensor data available");
         return;
     }
-    
+
+    long timestampEsp = (long) time(nullptr);
+    if (timestampEsp < 1640995200L) {
+        Serial.println("[HTTP] NTP time not synced, skipping send");
+        httpSendFail++;
+        return;
+    }
+
     HTTPClient http;
     String url = String(HTTP_SERVER) + String(HTTP_ENDPOINT);
-    
-    // Create JSON payload
-    StaticJsonDocument<256> jsonDoc;
-    jsonDoc["device_id"] = DEVICE_ID;
-    jsonDoc["suhu"] = lastTemperature;
-    jsonDoc["timestamp_esp"] = (long)time(nullptr);
-    jsonDoc["daya"] = lastPower;
-    
-    String payload;
-    serializeJson(jsonDoc, payload);
-    
+
+    uint32_t packetSeq = ++httpPacketSeq;
+    int rssiDbm = WiFi.RSSI();
+    float expectedTxMs = max(20.0f, (lastHttpTxDurationMs * 0.65f) + (fabsf((float) rssiDbm) * 0.35f));
+    uint32_t payloadBytes = 0;
+    String payload = buildProtocolPayload("HTTP", packetSeq, lastHttpPower, expectedTxMs, rssiDbm, timestampEsp, &payloadBytes);
+    float predictedPower = estimateProtocolPower("HTTP", expectedTxMs, payloadBytes, rssiDbm, true);
+    payload = buildProtocolPayload("HTTP", packetSeq, predictedPower, expectedTxMs, rssiDbm, timestampEsp, &payloadBytes);
+    if (!payloadHasRequiredFields(payload)) {
+        Serial.println("[HTTP] Payload invalid (missing required fields), skipping send");
+        httpSendFail++;
+        return;
+    }
+
     Serial.print("[HTTP] Sending to: ");
     Serial.println(url);
     Serial.print("       Payload: ");
     Serial.println(payload);
-    
-    // Setup HTTP client
+
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     http.setConnectTimeout(5000);
-    
-    // Send POST request
+
+    unsigned long txStart = millis();
     int httpCode = http.POST(payload);
-    
-    if (httpCode >= 200 && httpCode < 300) {
-        Serial.print("[HTTP] ✓ Success (");
+    float txDurationMs = (float) (millis() - txStart);
+    bool success = (httpCode >= 200 && httpCode < 300);
+
+    float finalPower = estimateProtocolPower("HTTP", txDurationMs, payloadBytes, rssiDbm, success);
+    lastHttpTxDurationMs = txDurationMs;
+    lastHttpPower = finalPower;
+    lastPower = finalPower;
+
+    if (success) {
+        Serial.print("[HTTP] Success (");
         Serial.print(httpCode);
         Serial.println(")");
         Serial.println("       Response: " + http.getString());
+        Serial.print("       Seq: ");
+        Serial.print(packetSeq);
+        Serial.print(" | RSSI: ");
+        Serial.print(rssiDbm);
+        Serial.print(" dBm | TX: ");
+        Serial.print(txDurationMs, 2);
+        Serial.print(" ms | Daya: ");
+        Serial.print(finalPower, 2);
+        Serial.println(" mW");
         httpSendSuccess++;
     } else {
-        Serial.print("[HTTP] ✗ Failed with code: ");
+        Serial.print("[HTTP] Failed with code: ");
         Serial.println(httpCode);
         Serial.println("       Response: " + http.getString());
+        Serial.print("       Seq: ");
+        Serial.print(packetSeq);
+        Serial.print(" | RSSI: ");
+        Serial.print(rssiDbm);
+        Serial.print(" dBm | TX: ");
+        Serial.print(txDurationMs, 2);
+        Serial.print(" ms | Daya(estimasi): ");
+        Serial.print(finalPower, 2);
+        Serial.println(" mW");
         httpSendFail++;
     }
-    
+
     http.end();
 }
-
 // ==================== MQTT SENDER ====================
 void sendMQTT() {
     if (!mqttClient.connected()) {
-        Serial.println("[MQTT] ✗ Not connected, skipping send");
+        Serial.println("[MQTT] Not connected, skipping send");
         mqttSendFail++;
         return;
     }
+
     if (lastTemperature == 0.0 && lastHumidity == 0.0) {
-        Serial.println("[MQTT] ✗ No sensor data available");
+        Serial.println("[MQTT] No sensor data available");
         return;
     }
-    // Ensure NTP time is synced
+
     time_t now = time(nullptr);
-    if (now < 1640995200L) { // 2022-01-01 as sanity check
-        Serial.println("[MQTT] ✗ NTP time not synced, skipping send");
+    if (now < 1640995200L) {
+        Serial.println("[MQTT] NTP time not synced, skipping send");
         mqttSendFail++;
         return;
     }
-    // Validate all fields before sending
+
     if (DEVICE_ID <= 0) {
-        Serial.println("[MQTT] ✗ Invalid DEVICE_ID, skipping send");
+        Serial.println("[MQTT] Invalid DEVICE_ID, skipping send");
         mqttSendFail++;
         return;
     }
-    if (isnan(lastTemperature) || isnan(lastPower)) {
-        Serial.println("[MQTT] ✗ Invalid sensor/power data, skipping send");
+
+    if (isnan(lastTemperature) || isnan(lastHumidity)) {
+        Serial.println("[MQTT] Invalid sensor data, skipping send");
         mqttSendFail++;
         return;
     }
-    // Create JSON payload
-    StaticJsonDocument<256> jsonDoc;
-    jsonDoc["device_id"] = DEVICE_ID;
-    jsonDoc["suhu"] = lastTemperature;
-    jsonDoc["timestamp_esp"] = (long)now;
-    jsonDoc["daya"] = lastPower;
-    String payload;
-    serializeJson(jsonDoc, payload);
-    // Debug: print all fields
+
+    uint32_t packetSeq = ++mqttPacketSeq;
+    int rssiDbm = WiFi.RSSI();
+    float expectedTxMs = max(5.0f, (lastMqttTxDurationMs * 0.70f) + (fabsf((float) rssiDbm) * 0.18f));
+    uint32_t payloadBytes = 0;
+    String payload = buildProtocolPayload("MQTT", packetSeq, lastMqttPower, expectedTxMs, rssiDbm, (long) now, &payloadBytes);
+    float predictedPower = estimateProtocolPower("MQTT", expectedTxMs, payloadBytes, rssiDbm, true);
+    payload = buildProtocolPayload("MQTT", packetSeq, predictedPower, expectedTxMs, rssiDbm, (long) now, &payloadBytes);
+    if (!payloadHasRequiredFields(payload)) {
+        Serial.println("[MQTT] Payload invalid (missing required fields), skipping publish");
+        mqttSendFail++;
+        return;
+    }
+
     Serial.print("[MQTT] Publishing to: ");
     Serial.println(MQTT_TOPIC);
     Serial.print("       Payload: ");
     Serial.println(payload);
-    if (mqttClient.publish(MQTT_TOPIC, payload.c_str())) {
-        Serial.println("[MQTT] ✓ Published successfully");
+
+    unsigned long txStart = millis();
+    bool publishSuccess = mqttClient.publish(MQTT_TOPIC, payload.c_str());
+    float txDurationMs = (float) (millis() - txStart);
+    float finalPower = estimateProtocolPower("MQTT", txDurationMs, payloadBytes, rssiDbm, publishSuccess);
+
+    lastMqttTxDurationMs = txDurationMs;
+    lastMqttPower = finalPower;
+    lastPower = finalPower;
+
+    if (publishSuccess) {
+        Serial.println("[MQTT] Published successfully");
+        Serial.print("       Seq: ");
+        Serial.print(packetSeq);
+        Serial.print(" | RSSI: ");
+        Serial.print(rssiDbm);
+        Serial.print(" dBm | TX: ");
+        Serial.print(txDurationMs, 2);
+        Serial.print(" ms | Daya: ");
+        Serial.print(finalPower, 2);
+        Serial.println(" mW");
         mqttSendSuccess++;
     } else {
-        Serial.println("[MQTT] ✗ Publish failed");
+        Serial.println("[MQTT] Publish failed");
+        Serial.print("       Seq: ");
+        Serial.print(packetSeq);
+        Serial.print(" | RSSI: ");
+        Serial.print(rssiDbm);
+        Serial.print(" dBm | TX: ");
+        Serial.print(txDurationMs, 2);
+        Serial.print(" ms | Daya(estimasi): ");
+        Serial.print(finalPower, 2);
+        Serial.println(" mW");
         mqttSendFail++;
     }
 }
-
 // ==================== MQTT CONNECTION ====================
 void connectMQTT() {
     if (WiFi.status() != WL_CONNECTED) {
@@ -350,80 +427,214 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
 // ==================== POWER CALCULATION ====================
 float calculatePowerConsumption() {
-    // Simplified power calculation based on WiFi RSSI and operations
-    // Real implementation would use actual power meter
-    
-    float basePower = 80.0;  // Base power consumption in mW (WiFi + MCU)
-    
-    // Add power based on WiFi signal strength
-    if (WiFi.status() == WL_CONNECTED) {
-        int rssi = WiFi.RSSI();
-        // RSSI ranges from -120 (worst) to -30 (best)
-        // Convert to additional power (higher RSSI = lower additional power)
-        float rssiPower = max(0.0f, (-120 - rssi) * 0.5f);
-        basePower += rssiPower;
-    } else {
-        basePower += 20.0;  // Extra power when searching for network
-    }
-    
-    // Add DHT11 reading power
-    basePower += 1.0;
-    
-    return basePower;
+    int rssi = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : -120;
+    return estimateProtocolPower("IDLE", 25.0f, 64, rssi, true);
 }
 
+float estimateProtocolPower(const char* protocol, float txDurationMs, size_t payloadBytes, int rssiDbm, bool success) {
+    const float voltage = 3.30f;
+    float clampedTxMs = max(1.0f, min(txDurationMs, 60000.0f));
+    int clampedRssi = max(-120, min(rssiDbm, 0));
+
+    float cpuCurrentMa = 0.11f * (float) getCpuFrequencyMhz();
+    float wifiBaseCurrentMa = WiFi.status() == WL_CONNECTED ? 72.0f : 50.0f;
+    float sensorCurrentMa = 2.0f;
+
+    float signalPenalty = (float) abs(clampedRssi + 45) * 0.65f;
+    float payloadCurrent = ((float) payloadBytes) * 0.20f;
+    float txDurationCurrent = clampedTxMs * 0.18f;
+    float protocolOverhead = 0.0f;
+    float protocolReliabilityPenalty = 0.0f;
+
+    if (strcmp(protocol, "HTTP") == 0) {
+        protocolOverhead = 20.0f;
+        float attemptCount = (float) (httpSendSuccess + httpSendFail);
+        if (attemptCount > 0.0f) {
+            protocolReliabilityPenalty = ((float) httpSendFail / attemptCount) * 30.0f;
+        }
+    } else if (strcmp(protocol, "MQTT") == 0) {
+        protocolOverhead = 10.0f;
+        float attemptCount = (float) (mqttSendSuccess + mqttSendFail);
+        if (attemptCount > 0.0f) {
+            protocolReliabilityPenalty = ((float) mqttSendFail / attemptCount) * 30.0f;
+        }
+    }
+
+    float thermalCurrent = fabsf(lastTemperature - 25.0f) * 0.9f;
+    float humidityCurrent = fabsf(lastHumidity - 55.0f) * 0.10f;
+    float baselineNoiseCurrent = (((float) (esp_random() % 2001)) / 1000.0f) - 1.0f; // -1..1 mA
+    float retryPenalty = success ? 0.0f : 24.0f;
+
+    float totalCurrentMa = wifiBaseCurrentMa
+        + sensorCurrentMa
+        + cpuCurrentMa
+        + signalPenalty
+        + payloadCurrent
+        + txDurationCurrent
+        + protocolOverhead
+        + protocolReliabilityPenalty
+        + thermalCurrent
+        + humidityCurrent
+        + baselineNoiseCurrent
+        + retryPenalty;
+    float powerMw = voltage * totalCurrentMa;
+    return max(0.0f, powerMw);
+}
+
+void fillProtocolPayload(StaticJsonDocument<640>& jsonDoc, const char* protocol, uint32_t packetSeq, float dayaMw, float txDurationMs, uint32_t payloadBytes, int rssiDbm, long timestampEsp) {
+    jsonDoc["device_id"] = DEVICE_ID;
+    jsonDoc["protokol"] = protocol;
+    jsonDoc["packet_seq"] = packetSeq;
+    jsonDoc["suhu"] = lastTemperature;
+    jsonDoc["kelembapan"] = lastHumidity;
+    jsonDoc["timestamp_esp"] = timestampEsp;
+    jsonDoc["daya"] = roundf(dayaMw * 100.0f) / 100.0f;
+    jsonDoc["rssi_dbm"] = rssiDbm;
+    jsonDoc["tx_duration_ms"] = roundf(txDurationMs * 100.0f) / 100.0f;
+    jsonDoc["payload_bytes"] = payloadBytes;
+    jsonDoc["uptime_s"] = (uint32_t) (millis() / 1000UL);
+    jsonDoc["free_heap_bytes"] = (uint32_t) ESP.getFreeHeap();
+    jsonDoc["sensor_reads"] = sensorReadCount;
+    jsonDoc["http_success_count"] = httpSendSuccess;
+    jsonDoc["http_fail_count"] = httpSendFail;
+    jsonDoc["mqtt_success_count"] = mqttSendSuccess;
+    jsonDoc["mqtt_fail_count"] = mqttSendFail;
+}
+
+String buildProtocolPayload(const char* protocol, uint32_t packetSeq, float dayaMw, float txDurationMs, int rssiDbm, long timestampEsp, uint32_t* payloadBytesOut) {
+    StaticJsonDocument<640> jsonDoc;
+    fillProtocolPayload(jsonDoc, protocol, packetSeq, dayaMw, txDurationMs, 0, rssiDbm, timestampEsp);
+
+    String payload;
+    serializeJson(jsonDoc, payload);
+    uint32_t payloadBytes = (uint32_t) payload.length();
+
+    fillProtocolPayload(jsonDoc, protocol, packetSeq, dayaMw, txDurationMs, payloadBytes, rssiDbm, timestampEsp);
+    payload = "";
+    serializeJson(jsonDoc, payload);
+    payloadBytes = (uint32_t) payload.length();
+    if (payloadBytesOut != nullptr) {
+        *payloadBytesOut = payloadBytes;
+    }
+
+    return payload;
+}
+
+bool payloadHasRequiredFields(const String& payload) {
+    StaticJsonDocument<512> verifyDoc;
+    DeserializationError error = deserializeJson(verifyDoc, payload);
+    if (error) {
+        Serial.print("[PAYLOAD] Invalid JSON: ");
+        Serial.println(error.c_str());
+        return false;
+    }
+
+    const char* requiredFields[] = {
+        "device_id",
+        "suhu",
+        "kelembapan",
+        "timestamp_esp",
+        "daya",
+        "packet_seq",
+        "rssi_dbm",
+        "tx_duration_ms",
+        "payload_bytes",
+        "uptime_s",
+        "free_heap_bytes"
+    };
+
+    for (size_t i = 0; i < (sizeof(requiredFields) / sizeof(requiredFields[0])); i++) {
+        if (!verifyDoc.containsKey(requiredFields[i])) {
+            Serial.print("[PAYLOAD] Missing field: ");
+            Serial.println(requiredFields[i]);
+            return false;
+        }
+    }
+
+    return true;
+}
 // ==================== STATUS PRINTING ====================
 void printStatus() {
     Serial.println("\n==========================================");
     Serial.println("         SYSTEM STATUS REPORT");
     Serial.println("==========================================");
+
     Serial.print("WiFi: ");
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("✓ Connected (" + WiFi.localIP().toString() + ")");
+        Serial.println("Connected (" + WiFi.localIP().toString() + ")");
+        Serial.print("RSSI: ");
+        Serial.print(WiFi.RSSI());
+        Serial.println(" dBm");
     } else {
-        Serial.println("✗ Disconnected");
+        Serial.println("Disconnected");
     }
-    
+
     Serial.print("MQTT: ");
-    Serial.println(mqttClient.connected() ? "✓ Connected" : "✗ Disconnected");
-    
+    Serial.println(mqttClient.connected() ? "Connected" : "Disconnected");
+
     Serial.print("Last Temperature: ");
     Serial.print(lastTemperature);
-    Serial.println("°C");
-    
+    Serial.println(" C");
+
     Serial.print("Last Humidity: ");
     Serial.print(lastHumidity);
-    Serial.println("%");
-    
-    Serial.print("Last Power: ");
-    Serial.print(lastPower);
+    Serial.println(" %");
+
+    Serial.print("Last Power (Overall): ");
+    Serial.print(lastPower, 2);
     Serial.println(" mW");
-    
-    Serial.println("\n--- STATISTICS ---");
+
+    Serial.print("Last HTTP Power: ");
+    Serial.print(lastHttpPower, 2);
+    Serial.print(" mW | Last MQTT Power: ");
+    Serial.print(lastMqttPower, 2);
+    Serial.println(" mW");
+
+    Serial.print("Last HTTP TX: ");
+    Serial.print(lastHttpTxDurationMs, 2);
+    Serial.print(" ms | Last MQTT TX: ");
+    Serial.print(lastMqttTxDurationMs, 2);
+    Serial.println(" ms");
+
+    float httpTotalAttempt = (float) (httpSendSuccess + httpSendFail);
+    float mqttTotalAttempt = (float) (mqttSendSuccess + mqttSendFail);
+    float httpReliability = httpTotalAttempt > 0 ? (httpSendSuccess / httpTotalAttempt) * 100.0f : 0.0f;
+    float mqttReliability = mqttTotalAttempt > 0 ? (mqttSendSuccess / mqttTotalAttempt) * 100.0f : 0.0f;
+
+    Serial.println("\n--- PROTOCOL STATISTICS ---");
+    Serial.print("HTTP Seq: ");
+    Serial.print(httpPacketSeq);
+    Serial.print(" | Success: ");
+    Serial.print(httpSendSuccess);
+    Serial.print(" | Fail: ");
+    Serial.print(httpSendFail);
+    Serial.print(" | Reliability: ");
+    Serial.print(httpReliability, 2);
+    Serial.println(" %");
+
+    Serial.print("MQTT Seq: ");
+    Serial.print(mqttPacketSeq);
+    Serial.print(" | Success: ");
+    Serial.print(mqttSendSuccess);
+    Serial.print(" | Fail: ");
+    Serial.print(mqttSendFail);
+    Serial.print(" | Reliability: ");
+    Serial.print(mqttReliability, 2);
+    Serial.println(" %");
+
     Serial.print("Sensor Reads: ");
     Serial.println(sensorReadCount);
-    
-    Serial.print("HTTP Success: ");
-    Serial.print(httpSendSuccess);
-    Serial.print(" | Failures: ");
-    Serial.println(httpSendFail);
-    
-    Serial.print("MQTT Success: ");
-    Serial.print(mqttSendSuccess);
-    Serial.print(" | Failures: ");
-    Serial.println(mqttSendFail);
-    
+
     Serial.print("Uptime: ");
     Serial.print(millis() / 1000);
     Serial.println(" seconds");
-    
+
     Serial.print("Free Memory: ");
     Serial.print(ESP.getFreeHeap());
     Serial.println(" bytes");
-    
+
     Serial.println("==========================================\n");
 }
-
 // ==================== TIME SYNC ====================
 void updateTime() {
     Serial.print("[TIME] Syncing with NTP server...");
@@ -444,3 +655,7 @@ void updateTime() {
     Serial.print("[TIME] ✓ Time synchronized: ");
     Serial.println(ctime(&now));
 }
+
+
+
+

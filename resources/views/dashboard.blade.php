@@ -8,6 +8,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
@@ -17,16 +20,16 @@
         }
 
         :root {
-            --primary: #667eea;
-            --secondary: #764ba2;
-            --mqtt-blue: #0066ff;
-            --http-green: #00cc88;
-            --accent: #ff6b6b;
-            --bg-light: #f8f9fa;
-            --text-dark: #2c3e50;
-            --text-light: #7f8c8d;
-            --shadow: 0 10px 30px rgba(0,0,0,0.1);
-            --shadow-hover: 0 15px 40px rgba(0,0,0,0.15);
+            --primary: #1f4fd7;
+            --secondary: #0e8c63;
+            --mqtt-blue: #1654e6;
+            --http-green: #09a26b;
+            --accent: #db3f57;
+            --bg-light: #f4f7fb;
+            --text-dark: #111827;
+            --text-light: #667085;
+            --shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+            --shadow-hover: 0 22px 48px rgba(15, 23, 42, 0.14);
         }
 
         html {
@@ -34,9 +37,11 @@
         }
 
         body {
-            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            background-attachment: fixed;
+            font-family: 'Manrope', 'Segoe UI', sans-serif;
+            background:
+                radial-gradient(1100px 560px at 4% -8%, rgba(21, 94, 239, 0.22), transparent 60%),
+                radial-gradient(900px 500px at 96% 0%, rgba(16, 185, 129, 0.16), transparent 55%),
+                linear-gradient(165deg, #f2f6ff 0%, #f3fff9 45%, #f6f7fb 100%);
             min-height: 100vh;
             padding: 20px;
             color: var(--text-dark);
@@ -1160,6 +1165,344 @@
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 5px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.5); }
+
+        /* Consolidated UI overrides for cleaner mobile/tablet/desktop behavior */
+        .header-content.header-metric-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            padding: 16px;
+            background: linear-gradient(132deg, rgba(8, 27, 74, 0.78), rgba(17, 67, 112, 0.72));
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 20px;
+        }
+
+        .header-center-content {
+            grid-column: 1 / -1;
+            order: -1;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 18px 14px;
+            margin: 0;
+            text-align: center;
+            width: 100%;
+        }
+
+        .header-metric-card {
+            min-width: 0;
+            max-width: none;
+            border-radius: 14px;
+            padding: 14px 10px;
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .metric-value {
+            font-size: clamp(1.25rem, 2.4vw, 1.9rem);
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+            justify-content: center;
+            color: #fff;
+        }
+
+        .metric-detail {
+            line-height: 1.4;
+            color: #e2e8f0;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .suhu-card .metric-icon,
+        .suhu-card .metric-value,
+        .suhu-card .metric-unit {
+            color: #ff8a8a;
+        }
+
+        .kelembapan-card .metric-icon,
+        .kelembapan-card .metric-value,
+        .kelembapan-card .metric-unit {
+            color: #66e6b6;
+        }
+
+        .status-badge {
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+        }
+
+        .status-badge.is-online {
+            background: rgba(34, 197, 94, 0.22);
+            border-color: rgba(34, 197, 94, 0.45);
+        }
+
+        .status-badge.is-offline {
+            background: rgba(239, 68, 68, 0.22);
+            border-color: rgba(239, 68, 68, 0.45);
+        }
+
+        .section-title {
+            color: #0f172a;
+            text-transform: none;
+            letter-spacing: 0;
+            text-align: left;
+        }
+
+        .stats-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .stat-card {
+            border-radius: 14px;
+            padding: 20px 16px;
+            min-height: 140px;
+            background: rgba(255, 255, 255, 0.94);
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.09);
+        }
+
+        .stat-label {
+            font-size: 0.78rem;
+            line-height: 1.2;
+        }
+
+        .stat-value {
+            font-size: clamp(1.15rem, 2vw, 1.8rem);
+            line-height: 1.15;
+        }
+
+        .stat-unit {
+            font-size: 0.74rem;
+        }
+
+        .action-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 34px;
+        }
+
+        .reset-form {
+            margin: 0;
+        }
+
+        .reset-btn {
+            border: none;
+            border-radius: 12px;
+            padding: 10px 16px;
+            font-weight: 700;
+            color: #fff;
+            cursor: pointer;
+            background: linear-gradient(135deg, #dc2626, #e11d48);
+            box-shadow: 0 12px 24px rgba(220, 38, 38, 0.28);
+        }
+
+        .reset-status {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            background: rgba(16, 185, 129, 0.12);
+            color: #047857;
+            font-size: 0.82rem;
+            font-weight: 700;
+            border-radius: 10px;
+            padding: 8px 10px;
+        }
+
+        .inline-warning {
+            margin-bottom: 18px;
+            text-align: left;
+            border: 1px solid rgba(245, 158, 11, 0.32);
+            background: rgba(254, 243, 199, 0.62);
+            color: #92400e;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        .inline-warning ul {
+            margin: 8px 0 0 20px;
+            padding: 0;
+            font-weight: 600;
+        }
+
+        .inline-warning li {
+            margin: 2px 0;
+            line-height: 1.4;
+        }
+
+        .quality-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .quality-card {
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.72);
+            padding: 10px 12px;
+        }
+
+        .quality-card h4 {
+            font-size: 0.88rem;
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+
+        .quality-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 4px 0;
+            border-bottom: 1px dashed rgba(148, 163, 184, 0.32);
+            font-size: 0.8rem;
+        }
+
+        .quality-row:last-child {
+            border-bottom: none;
+        }
+
+        .quality-badge {
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 0.74rem;
+            font-weight: 800;
+        }
+
+        .quality-good {
+            color: #065f46;
+            background: rgba(16, 185, 129, 0.18);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+        }
+
+        .quality-bad {
+            color: #991b1b;
+            background: rgba(239, 68, 68, 0.14);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+        }
+
+        .chart-container,
+        .ttest-section {
+            background: rgba(255, 255, 255, 0.94);
+            border-radius: 16px;
+        }
+
+        .chart-wrapper {
+            min-height: 240px;
+            height: clamp(240px, 38vw, 360px);
+        }
+
+        .chart-wrapper canvas {
+            width: 100% !important;
+            height: 100% !important;
+            display: block !important;
+        }
+
+        .chart-toolbar {
+            row-gap: 8px;
+        }
+
+        .chart-toolbar-info {
+            font-size: 0.83rem;
+        }
+
+        .chart-hint {
+            font-size: 0.78rem;
+        }
+
+        .zoom-btn {
+            border-radius: 9px;
+            font-size: 0.83rem;
+        }
+
+        .footer {
+            color: #334155;
+            border-top-color: rgba(148, 163, 184, 0.34);
+        }
+
+        .footer-meta {
+            color: #64748b;
+        }
+
+        @media (max-width: 1200px) {
+            .stats-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 920px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .section-title {
+                text-align: center;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .header-content.header-metric-row {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+                padding: 10px 6px 12px 6px;
+            }
+
+            .header-center-content {
+                grid-column: 1 / -1;
+                order: -1;
+                margin: 0;
+                padding: 10px 8px;
+            }
+
+            .header-metric-card {
+                width: 100%;
+                margin: 0;
+                padding: 10px 8px;
+                font-size: 0.9em;
+                border-radius: 12px;
+            }
+
+            .header-center-content h1 {
+                font-size: 1.1em;
+                margin-bottom: 4px;
+            }
+
+            .header-center-content p {
+                font-size: 0.92em;
+                margin-bottom: 6px;
+            }
+
+            .action-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .quality-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .reset-btn,
+            .reset-status {
+                width: 100%;
+                justify-content: center;
+                text-align: center;
+            }
+
+            .chart-wrapper {
+                min-height: 220px;
+                height: 250px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1170,17 +1513,20 @@
                 <div class="header-metric-card suhu-card">
                     <div class="metric-icon"><i class="fas fa-thermometer-half"></i></div>
                     <div class="metric-label">Rata-rata Suhu</div>
-                    <div class="metric-value" id="avgSuhuValue">{{ number_format(($mqttAvgSuhu + $httpAvgSuhu)/2, 2) }}<span class="metric-unit">°C</span></div>
-                    <div class="metric-detail">MQTT: {{ number_format($mqttAvgSuhu, 2) }}°C<br>HTTP: {{ number_format($httpAvgSuhu, 2) }}°C</div>
+                    <div class="metric-value" id="avgSuhuValue">{{ number_format((float) ($avgSuhu ?? 0), 2) }}<span class="metric-unit">C</span></div>
+                    <div class="metric-detail" id="avgSuhuDetail">
+                        MQTT: {{ number_format((float) ($mqttAvgSuhu ?? 0), 2) }} C<br>
+                        HTTP: {{ number_format((float) ($httpAvgSuhu ?? 0), 2) }} C
+                    </div>
                 </div>
                 <div class="header-center-content">
                     <h1><i class="fas fa-chart-line"></i> IoT Research System</h1>
                     <p>Analisis Komparatif Protokol MQTT vs HTTP</p>
                     <div class="header-subtitle">
-                        <span class="header-badge" style="background:{{ $mqttConnected ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.2)' }}">
+                        <span id="mqttStatusBadge" class="header-badge status-badge {{ $mqttConnected ? 'is-online' : 'is-offline' }}">
                             <i class="fas fa-wifi"></i> MQTT {{ $mqttConnected ? 'Connected' : 'Disconnected' }}
                         </span>
-                        <span class="header-badge" style="background:{{ $httpConnected ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.2)' }}">
+                        <span id="httpStatusBadge" class="header-badge status-badge {{ $httpConnected ? 'is-online' : 'is-offline' }}">
                             <i class="fas fa-globe"></i> HTTP {{ $httpConnected ? 'Connected' : 'Disconnected' }}
                         </span>
                         <span class="header-badge"><i class="fas fa-microscope"></i> T-Test Active</span>
@@ -1189,163 +1535,14 @@
                 <div class="header-metric-card kelembapan-card">
                     <div class="metric-icon"><i class="fas fa-tint"></i></div>
                     <div class="metric-label">Rata-rata Kelembapan</div>
-                    <div class="metric-value" id="avgKelembapanValue">{{ number_format(($mqttAvgKelembapan + $httpAvgKelembapan)/2, 2) }}<span class="metric-unit">%</span></div>
-                    <div class="metric-detail">MQTT: {{ number_format($mqttAvgKelembapan, 2) }}%<br>HTTP: {{ number_format($httpAvgKelembapan, 2) }}%</div>
+                    <div class="metric-value" id="avgKelembapanValue">{{ number_format((float) ($avgKelembapan ?? 0), 2) }}<span class="metric-unit">%</span></div>
+                    <div class="metric-detail" id="avgKelembapanDetail">
+                        MQTT: {{ number_format((float) ($mqttAvgKelembapan ?? 0), 2) }}%<br>
+                        HTTP: {{ number_format((float) ($httpAvgKelembapan ?? 0), 2) }}%
+                    </div>
                 </div>
             </div>
         </div>
-        <style>
-        /* HEADER FLEX ROW, RESPONSIVE, MOBILE STACK */
-        .header-content.header-metric-row {
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            justify-content: center;
-            gap: 18px;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            background: rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            border: 1px solid rgba(255,255,255,0.2);
-            margin-bottom: 25px;
-            padding: 18px 6px;
-        }
-        .header-metric-card {
-            flex: 1 1 0;
-            min-width: 60px;
-            max-width: 120px;
-            background: rgba(255,255,255,0.18);
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-            border-radius: 16px;
-            padding: 10px 4px 8px 4px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            border: 1.5px solid rgba(255,255,255,0.22);
-            transition: box-shadow 0.3s;
-            height: 100%;
-        }
-        .header-center-content {
-            flex: 2 1 0;
-            min-width: 0;
-            margin: 0 8px;
-            text-align: center;
-            width: 100%;
-        }
-        .header-metric-card:hover {
-            box-shadow: 0 8px 32px rgba(0,0,0,0.13);
-        }
-        .metric-icon {
-            font-size: 1.2em;
-            margin-bottom: 4px;
-            color: var(--primary);
-            filter: drop-shadow(0 2px 8px rgba(102,126,234,0.12));
-        }
-        .kelembapan-card .metric-icon { color: #00cc88; }
-        .suhu-card .metric-icon { color: #ff6b6b; }
-        .metric-label {
-            font-size: 0.8em;
-            font-weight: 600;
-            color: var(--text-dark);
-            margin-bottom: 2px;
-        }
-        .metric-value {
-            font-size: 0.9em;
-            font-weight: bold;
-            color: var(--primary);
-            margin-bottom: 2px;
-            letter-spacing: -1px;
-            display: flex;
-            align-items: flex-end;
-        }
-        .kelembapan-card .metric-value { color: #00cc88; }
-        .suhu-card .metric-value { color: #ff6b6b; }
-        .metric-unit {
-            font-size: 0.7em;
-            margin-left: 4px;
-            font-weight: bold;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.12);
-        }
-        .suhu-card .metric-unit {
-            color: #ff6b6b !important;
-        }
-        .kelembapan-card .metric-unit {
-            color: #00cc88 !important;
-        }
-        }
-        .metric-detail {
-            font-size: 0.7em;
-            color: #fff !important;
-            margin-top: 1px;
-            text-align: center;
-            font-weight: 600;
-            text-shadow: 0 1px 6px rgba(0,0,0,0.18);
-        }
-        .header-center-content {
-            margin: 0 8px;
-            text-align: center;
-            width: 100%;
-        }
-        @media (max-width: 900px) {
-            .header-content.header-metric-row {
-                gap: 10px;
-                padding: 8px 2px 10px 2px;
-            }
-            .header-metric-card {
-                max-width: 90px;
-                min-width: 48px;
-                padding: 5px 2px 5px 2px;
-                font-size: 0.95em;
-                border-radius: 10px;
-            }
-            .header-center-content {
-                margin: 0 4px;
-            }
-        }
-        @media (max-width: 600px) {
-            .header-content.header-metric-row {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 10px;
-                padding: 6px 2px 10px 2px;
-            }
-            .header-metric-card {
-                flex: none;
-                max-width: 320px;
-                min-width: 80px;
-                width: 90vw;
-                margin: 0 auto;
-                padding: 4px 2px 4px 2px;
-                font-size: 0.90em;
-                border-radius: 10px;
-            }
-            .header-metric-card.suhu-card {
-                margin-bottom: 6px;
-            }
-            .header-metric-card.kelembapan-card {
-                margin-top: 6px;
-            }
-            .header-center-content {
-                flex: none;
-                margin: 0;
-                padding: 8px 2px 8px 2px;
-            }
-            .header-center-content h1 {
-                font-size: 1.1em;
-                margin-bottom: 4px;
-            }
-            .header-center-content p {
-                font-size: 0.92em;
-                margin-bottom: 6px;
-            }
-            .header-subtitle {
-                margin-bottom: 2px;
-            }
-        }
-        </style>
-
         <!-- Statistics Cards -->
         <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Real-Time Metrics</h2>
         <div class="stats-grid" id="statsGrid">
@@ -1355,7 +1552,6 @@
                 <span class="stat-value">{{ $summary['mqtt']['total_data'] }}</span>
                 <span class="stat-unit">data points</span>
             </div>
-            <!-- Card Suhu & Kelembapan MQTT dihapus, sudah di header -->
             <div class="stat-card mqtt-color">
                 <div class="stat-icon mqtt"><i class="fas fa-clock"></i></div>
                 <span class="stat-label">MQTT - Avg Latency</span>
@@ -1372,7 +1568,7 @@
                 <div class="stat-icon mqtt"><i class="fas fa-shield-alt"></i></div>
                 <span class="stat-label">MQTT - Reliability</span>
                 <span class="stat-value">{{ $reliability['mqtt_reliability'] }}%</span>
-                <span class="stat-unit">success rate</span>
+                <span class="stat-unit">seq {{ $reliability['mqtt_expected_packets'] > 0 ? ($reliability['mqtt_received_packets'] . '/' . $reliability['mqtt_expected_packets']) : '-' }} | complete {{ $reliability['mqtt_data_completeness'] }}% | tx {{ $reliability['mqtt_transmission_health'] ?? 0 }}%</span>
             </div>
             <div class="stat-card http-color">
                 <div class="stat-icon http"><i class="fas fa-server"></i></div>
@@ -1380,99 +1576,6 @@
                 <span class="stat-value">{{ $summary['http']['total_data'] }}</span>
                 <span class="stat-unit">data points</span>
             </div>
-            <!-- Card Suhu & Kelembapan HTTP dihapus, sudah di header -->
-                    <style>
-                    .header-content { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-                    .header-metric-card {
-                        background: rgba(255,255,255,0.18);
-                        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-                        border-radius: 18px;
-                        padding: 32px 28px 24px 28px;
-                        min-width: 220px;
-                        max-width: 260px;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        border: 1.5px solid rgba(255,255,255,0.22);
-                        transition: box-shadow 0.3s;
-                    }
-                    .header-metric-card:hover {
-                        box-shadow: 0 8px 32px rgba(0,0,0,0.13);
-                    }
-                    .metric-icon {
-                        font-size: 2.8em;
-                        margin-bottom: 10px;
-                        color: var(--primary);
-                        filter: drop-shadow(0 2px 8px rgba(102,126,234,0.12));
-                    }
-                    .kelembapan-card .metric-icon { color: #00cc88; }
-                    .suhu-card .metric-icon { color: #ff6b6b; }
-                    .metric-label {
-                        font-size: 1.1em;
-                        font-weight: 600;
-                        color: var(--text-dark);
-                        margin-bottom: 6px;
-                    }
-                    .metric-value {
-                        font-size: 2.2em;
-                        font-weight: bold;
-                        color: var(--primary);
-                        margin-bottom: 6px;
-                        letter-spacing: -1px;
-                        display: flex;
-                        align-items: flex-end;
-                    }
-                    .kelembapan-card .metric-value { color: #00cc88; }
-                    .suhu-card .metric-value { color: #ff6b6b; }
-                    .metric-unit {
-                        font-size: 0.6em;
-                        margin-left: 4px;
-                        font-weight: bold;
-                        text-shadow: 0 1px 4px rgba(0,0,0,0.12);
-                    }
-                    .suhu-card .metric-unit {
-                        color: #ff6b6b !important;
-                    }
-                    .kelembapan-card .metric-unit {
-                        color: #00cc88 !important;
-                    }
-                    .metric-detail {
-                        font-size: 0.95em;
-                        color: #fff !important;
-                        margin-top: 2px;
-                        text-align: center;
-                        font-weight: 600;
-                        text-shadow: 0 1px 6px rgba(0,0,0,0.18);
-                    }
-                    @media (max-width: 900px) {
-                        .header-content { flex-direction: column; gap: 18px; }
-                        .header-metric-card { min-width: 180px; max-width: 100%; padding: 22px 12px 16px 12px; }
-                    }
-                    </style>
-                <script>
-                // Animasi angka suhu & kelembapan di header
-                function animateHeaderMetric(id, target, unit) {
-                    const el = document.getElementById(id);
-                    if (!el) return;
-                    const start = 0;
-                    const end = parseFloat(target);
-                    const duration = 1200;
-                    const startTime = performance.now();
-                    function animate(now) {
-                        const elapsed = now - startTime;
-                        const progress = Math.min(elapsed / duration, 1);
-                        const value = start + (end - start) * (1 - Math.cos(progress * Math.PI)) / 2;
-                        el.innerHTML = value.toFixed(2) + '<span class="metric-unit">' + unit + '</span>';
-                        if (progress < 1) requestAnimationFrame(animate);
-                    }
-                    requestAnimationFrame(animate);
-                }
-                document.addEventListener('DOMContentLoaded', function() {
-                    animateHeaderMetric('avgSuhuValue', '{{ number_format(($mqttAvgSuhu + $httpAvgSuhu)/2, 2) }}', '°C');
-                    animateHeaderMetric('avgKelembapanValue', '{{ number_format(($mqttAvgKelembapan + $httpAvgKelembapan)/2, 2) }}', '%');
-                });
-                </script>
             <div class="stat-card http-color">
                 <div class="stat-icon http"><i class="fas fa-hourglass-end"></i></div>
                 <span class="stat-label">HTTP - Avg Latency</span>
@@ -1489,13 +1592,49 @@
                 <div class="stat-icon http"><i class="fas fa-check-circle"></i></div>
                 <span class="stat-label">HTTP - Reliability</span>
                 <span class="stat-value">{{ $reliability['http_reliability'] }}%</span>
-                <span class="stat-unit">success rate</span>
+                <span class="stat-unit">seq {{ $reliability['http_expected_packets'] > 0 ? ($reliability['http_received_packets'] . '/' . $reliability['http_expected_packets']) : '-' }} | complete {{ $reliability['http_data_completeness'] }}% | tx {{ $reliability['http_transmission_health'] ?? 0 }}%</span>
             </div>
-            <form id="resetEksperimenForm" method="POST" action="{{ route('reset.data') }}" style="margin-bottom: 20px;">
+        </div>
+        <div class="action-row">
+            <form id="resetEksperimenForm" class="reset-form" method="POST" action="{{ route('reset.data') }}">
                 @csrf
-                <button type="submit" style="background:#ff6b6b;color:white;padding:10px 24px;border:none;border-radius:8px;font-weight:bold;cursor:pointer;">Reset Data Eksperimen</button>
-                @if(session('status'))<span style="margin-left:20px;color:green;font-weight:bold;">{{ session('status') }}</span>@endif
+                <button type="submit" class="reset-btn"><i class="fas fa-trash-alt"></i> Reset Data Eksperimen</button>
             </form>
+            @if(session('status'))
+                <span id="resetStatusMessage" class="reset-status">{{ session('status') }}</span>
+            @endif
+        </div>
+        @if(!empty($dataWarnings))
+            <div id="dataQualityWarnings" class="inline-warning">
+                <i class="fas fa-triangle-exclamation"></i>
+                Warning kualitas data terdeteksi:
+                <ul>
+                    @foreach($dataWarnings as $warning)
+                        <li>{{ $warning }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+        <div id="protocolQualityPanel" class="quality-grid">
+            @foreach($fieldCompleteness as $protocol => $protocolMeta)
+                <div class="quality-card">
+                    <h4>{{ $protocol }} Field Completeness ({{ $protocolMeta['total'] }} data)</h4>
+                    @if($protocolMeta['total'] === 0)
+                        <div class="quality-row">
+                            <span>Belum ada data untuk validasi.</span>
+                        </div>
+                    @else
+                        @foreach($protocolMeta['fields'] as $fieldMeta)
+                            <div class="quality-row">
+                                <span>{{ $fieldMeta['label'] }}</span>
+                                <span class="quality-badge {{ $fieldMeta['missing'] > 0 ? 'quality-bad' : 'quality-good' }}">
+                                    {{ $fieldMeta['valid'] }}/{{ $fieldMeta['total'] }}
+                                </span>
+                            </div>
+                        @endforeach
+                    @endif
+                </div>
+            @endforeach
         </div>
 
         <!-- Charts Section -->
@@ -1525,6 +1664,7 @@
             <div class="chart-container">
                 <h3 class="chart-title"><i class="fas fa-battery-half"></i> Power Consumption Comparison</h3>
                 @if(count($powerChartData['labels']) > 0)
+                    <div class="chart-hint">Menampilkan urutan data terbaru per titik data agar variasi daya real-time terlihat jelas.</div>
                     <div class="chart-wrapper">
                         <canvas id="powerChart"></canvas>
                     </div>
@@ -1537,7 +1677,7 @@
                 @endif
             </div>
         @else
-            <div class="chart-container"><div class="no-data"><i class="fas fa-database"></i><p>📊 Belum ada data</p></div></div>
+            <div class="chart-container"><div class="no-data"><i class="fas fa-database"></i><p>Belum ada data</p></div></div>
         @endif
 
         <!-- T-Test Results -->
@@ -1551,22 +1691,22 @@
                         <div class="ttest-card mqtt-card">
                             <div class="ttest-card-header"><i class="fas fa-broadcast-tower"></i> MQTT Protocol</div>
                             <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['n'] }}</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['mean'] }} ms</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['std_dev'] }} ms</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['variance'] }}</span></div>
+                            <div class="ttest-row"><span class="ttest-label">Mean (mu)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['mean'] }} ms</span></div>
+                            <div class="ttest-row"><span class="ttest-label">Std Deviation (sigma)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['std_dev'] }} ms</span></div>
+                            <div class="ttest-row"><span class="ttest-label">Variance (sigma^2)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['variance'] }}</span></div>
                         </div>
                         <div class="ttest-card http-card">
                             <div class="ttest-card-header"><i class="fas fa-server"></i> HTTP Protocol</div>
                             <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['n'] }}</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['mean'] }} ms</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['std_dev'] }} ms</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['variance'] }}</span></div>
+                            <div class="ttest-row"><span class="ttest-label">Mean (mu)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['mean'] }} ms</span></div>
+                            <div class="ttest-row"><span class="ttest-label">Std Deviation (sigma)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['std_dev'] }} ms</span></div>
+                            <div class="ttest-row"><span class="ttest-label">Variance (sigma^2)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['variance'] }}</span></div>
                         </div>
                         <div class="ttest-card result-card">
                             <div class="ttest-card-header"><i class="fas fa-flask-vial"></i> T-Test Results</div>
                             <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $summary['ttest_latency']['t_value'] }}</span></div>
                             <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ $summary['ttest_latency']['df'] }}</span></div>
-                            <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $summary['ttest_latency']['critical_value'] }}</span></div>
+                            <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">+/-{{ $summary['ttest_latency']['critical_value'] }}</span></div>
                             <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $summary['ttest_latency']['p_value'] }}</span></div>
                             <span class="significance-badge @if($summary['ttest_latency']['is_significant']) significance-yes @else significance-no @endif">
                                 @if($summary['ttest_latency']['is_significant'])
@@ -1585,22 +1725,22 @@
                             <div class="ttest-card mqtt-card">
                                 <div class="ttest-card-header"><i class="fas fa-broadcast-tower"></i> MQTT Protocol</div>
                                 <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['n'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['mean'] }} mW</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['std_dev'] }} mW</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['variance'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Mean (mu)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['mean'] }} mW</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Std Deviation (sigma)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['std_dev'] }} mW</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Variance (sigma^2)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['variance'] }}</span></div>
                             </div>
                             <div class="ttest-card http-card">
                                 <div class="ttest-card-header"><i class="fas fa-server"></i> HTTP Protocol</div>
                                 <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['n'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['mean'] }} mW</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['std_dev'] }} mW</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['variance'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Mean (mu)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['mean'] }} mW</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Std Deviation (sigma)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['std_dev'] }} mW</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Variance (sigma^2)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['variance'] }}</span></div>
                             </div>
                             <div class="ttest-card result-card">
                                 <div class="ttest-card-header"><i class="fas fa-flask-vial"></i> T-Test Results</div>
                                 <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $summary['ttest_daya']['t_value'] }}</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ $summary['ttest_daya']['df'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $summary['ttest_daya']['critical_value'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">+/-{{ $summary['ttest_daya']['critical_value'] }}</span></div>
                                 <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $summary['ttest_daya']['p_value'] }}</span></div>
                                 <span class="significance-badge @if($summary['ttest_daya']['is_significant']) significance-yes @else significance-no @endif">
                                     @if($summary['ttest_daya']['is_significant'])
@@ -1611,6 +1751,11 @@
                                 </span>
                             </div>
                         </div>
+                    @else
+                        <div class="no-data">
+                            <i class="fas fa-circle-info"></i>
+                            <p>{{ $summary['ttest_daya']['message'] ?? 'Data daya belum cukup untuk analisis statistik.' }}</p>
+                        </div>
                     @endif
                 </div>
             </div>
@@ -1619,7 +1764,7 @@
         <!-- Footer -->
         <div class="footer">
             <p class="footer-text"><i class="fas fa-graduation-cap"></i> Sistem Penelitian - Analisis Komparatif MQTT vs HTTP</p>
-            <p class="footer-meta">🗄️ MySQL | 🚀 Laravel | 📊 Chart.js | 📐 T-Test Analysis</p>
+            <p class="footer-meta">MySQL | Laravel | Chart.js | T-Test Analysis</p>
         </div>
     </div>
 
@@ -1765,10 +1910,82 @@
                 },
                 powerData: {
                     labels: Array.isArray(powerData.labels) ? powerData.labels : [],
+                    time_labels: Array.isArray(powerData.time_labels) ? powerData.time_labels : [],
+                    full_time_labels: Array.isArray(powerData.full_time_labels) ? powerData.full_time_labels : [],
                     mqtt: Array.isArray(powerData.mqtt) ? powerData.mqtt : [],
                     http: Array.isArray(powerData.http) ? powerData.http : [],
+                    total_points: Number(powerData.total_points || (Array.isArray(powerData.labels) ? powerData.labels.length : 0)),
                 }
             };
+        }
+
+        function syncElementById(newDoc, elementId, useHtml = false) {
+            const currentElement = document.getElementById(elementId);
+            const nextElement = newDoc.getElementById(elementId);
+            if (!currentElement || !nextElement) return;
+
+            if (useHtml) {
+                if (currentElement.innerHTML !== nextElement.innerHTML) {
+                    currentElement.innerHTML = nextElement.innerHTML;
+                }
+                return;
+            }
+
+            if (currentElement.textContent !== nextElement.textContent) {
+                currentElement.textContent = nextElement.textContent;
+            }
+        }
+
+        function syncHeaderRealtimeData(newDoc) {
+            syncElementById(newDoc, 'avgSuhuValue', true);
+            syncElementById(newDoc, 'avgKelembapanValue', true);
+            syncElementById(newDoc, 'avgSuhuDetail', true);
+            syncElementById(newDoc, 'avgKelembapanDetail', true);
+
+            ['mqttStatusBadge', 'httpStatusBadge'].forEach((badgeId) => {
+                const currentBadge = document.getElementById(badgeId);
+                const nextBadge = newDoc.getElementById(badgeId);
+                if (!currentBadge || !nextBadge) return;
+
+                currentBadge.className = nextBadge.className;
+                currentBadge.innerHTML = nextBadge.innerHTML;
+            });
+
+            const currentStatus = document.getElementById('resetStatusMessage');
+            const nextStatus = newDoc.getElementById('resetStatusMessage');
+            if (currentStatus && nextStatus) {
+                currentStatus.textContent = nextStatus.textContent;
+            } else if (!currentStatus && nextStatus) {
+                const actionRow = document.querySelector('.action-row');
+                if (actionRow) {
+                    actionRow.insertAdjacentHTML('beforeend', nextStatus.outerHTML);
+                }
+            } else if (currentStatus && !nextStatus) {
+                currentStatus.remove();
+            }
+
+            const currentDataWarnings = document.getElementById('dataQualityWarnings');
+            const nextDataWarnings = newDoc.getElementById('dataQualityWarnings');
+            if (currentDataWarnings && nextDataWarnings) {
+                if (currentDataWarnings.innerHTML !== nextDataWarnings.innerHTML) {
+                    currentDataWarnings.innerHTML = nextDataWarnings.innerHTML;
+                }
+            } else if (!currentDataWarnings && nextDataWarnings) {
+                const actionRow = document.querySelector('.action-row');
+                if (actionRow) {
+                    actionRow.insertAdjacentHTML('afterend', nextDataWarnings.outerHTML);
+                }
+            } else if (currentDataWarnings && !nextDataWarnings) {
+                currentDataWarnings.remove();
+            }
+
+            const currentQualityPanel = document.getElementById('protocolQualityPanel');
+            const nextQualityPanel = newDoc.getElementById('protocolQualityPanel');
+            if (currentQualityPanel && nextQualityPanel) {
+                if (currentQualityPanel.innerHTML !== nextQualityPanel.innerHTML) {
+                    currentQualityPanel.innerHTML = nextQualityPanel.innerHTML;
+                }
+            }
         }
 
         function decorateLatencyDataset(dataset) {
@@ -1785,6 +2002,13 @@
         function getLatencyTimeLabel(pointIndex, useFull) {
             if (!latestLatencyData) return '-';
             const source = useFull ? latestLatencyData.full_time_labels : latestLatencyData.time_labels;
+            if (!Array.isArray(source)) return '-';
+            return source[pointIndex - 1] || '-';
+        }
+
+        function getPowerTimeLabel(pointIndex, useFull) {
+            if (!latestPowerData) return '-';
+            const source = useFull ? latestPowerData.full_time_labels : latestPowerData.time_labels;
             if (!Array.isArray(source)) return '-';
             return source[pointIndex - 1] || '-';
         }
@@ -1989,11 +2213,8 @@
             zoomResetBtn.addEventListener('click', function() {
                 markLatencyUserAction();
                 const end = latencyRuntimeState.totalPoints;
-                const span = clampValue(
-                    latencyRuntimeState.currentWindowSpan,
-                    latencyRuntimeState.minWindowPoints,
-                    latencyRuntimeState.maxWindowPoints
-                );
+                const span = latencyRuntimeState.minWindowPoints;
+                latencyRuntimeState.currentWindowSpan = span;
                 const start = Math.max(1, end - span + 1);
                 applyLatencyWindow(start, end, { animate: false });
             });
@@ -2174,7 +2395,27 @@
             const powerCtx = document.getElementById('powerChart');
             if (!powerCtx) return;
 
-            const hasData = powerData.labels.length > 0;
+            const totalPoints = Math.max(0, Number(powerData.total_points || (Array.isArray(powerData.labels) ? powerData.labels.length : 0)));
+            const toPowerPoints = function(series) {
+                if (!Array.isArray(series)) return [];
+                return series
+                    .map(function(value, index) {
+                        if (value === null || value === undefined || value === '') return null;
+                        const numericValue = Number(value);
+                        if (!Number.isFinite(numericValue)) return null;
+                        return {
+                            x: index + 1,
+                            y: numericValue,
+                        };
+                    })
+                    .filter(function(point) {
+                        return point !== null;
+                    });
+            };
+
+            const mqttPoints = toPowerPoints(powerData.mqtt);
+            const httpPoints = toPowerPoints(powerData.http);
+            const hasData = totalPoints > 0 && (mqttPoints.length > 0 || httpPoints.length > 0);
             if (!hasData) {
                 if (powerChartInstance) {
                     powerChartInstance.destroy();
@@ -2183,24 +2424,120 @@
                 return;
             }
 
+            const defaultWindow = Math.min(30, totalPoints);
+            const windowStart = Math.max(1, totalPoints - defaultWindow + 1);
+            const windowEnd = totalPoints;
+
             if (!powerChartInstance) {
                 powerChartInstance = new Chart(powerCtx.getContext('2d'), {
-                    type: 'bar',
+                    type: 'line',
                     data: {
-                        labels: powerData.labels,
                         datasets: [
-                            { label: 'MQTT', data: powerData.mqtt, backgroundColor: 'rgba(0, 102, 255, 0.8)', borderColor: '#0066ff', borderWidth: 2, borderRadius: 6, hoverBackgroundColor: 'rgba(0, 102, 255, 1)' },
-                            { label: 'HTTP', data: powerData.http, backgroundColor: 'rgba(0, 204, 136, 0.8)', borderColor: '#00cc88', borderWidth: 2, borderRadius: 6, hoverBackgroundColor: 'rgba(0, 204, 136, 1)' }
+                            {
+                                label: 'MQTT',
+                                data: mqttPoints,
+                                borderColor: '#0066ff',
+                                backgroundColor: 'rgba(0, 102, 255, 0.18)',
+                                pointBackgroundColor: '#0066ff',
+                                pointBorderColor: '#0066ff',
+                                borderWidth: 2,
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
+                                tension: 0.25,
+                                fill: false
+                            },
+                            {
+                                label: 'HTTP',
+                                data: httpPoints,
+                                borderColor: '#00cc88',
+                                backgroundColor: 'rgba(0, 204, 136, 0.18)',
+                                pointBackgroundColor: '#00cc88',
+                                pointBorderColor: '#00cc88',
+                                borderWidth: 2,
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
+                                tension: 0.25,
+                                fill: false
+                            }
                         ]
                     },
-                    options: { ...chartOptions, scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, x: { grid: { display: false } } } }
+                    options: {
+                        ...chartOptions,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(0,0,0,0.05)' },
+                                title: { display: true, text: 'Power (mW)' }
+                            },
+                            x: {
+                                type: 'linear',
+                                min: windowStart,
+                                max: windowEnd,
+                                grid: { display: false },
+                                title: { display: true, text: 'Urutan Data (WIB - Surabaya)' },
+                                ticks: {
+                                    autoSkip: true,
+                                    maxTicksLimit: 6,
+                                    callback: function(value) {
+                                        const pointIndex = Math.round(value);
+                                        const latestTotal = latestPowerData
+                                            ? Number(latestPowerData.total_points || 0)
+                                            : totalPoints;
+                                        if (pointIndex < 1 || pointIndex > latestTotal) return '';
+                                        return getPowerTimeLabel(pointIndex, false);
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true },
+                            tooltip: {
+                                backgroundColor: 'rgba(0,0,0,0.8)',
+                                padding: 12,
+                                cornerRadius: 8,
+                                titleFont: { size: 12, weight: 'bold' },
+                                bodyFont: { size: 11 },
+                                callbacks: {
+                                    title: function(items) {
+                                        const firstItem = items && items.length ? items[0] : null;
+                                        const parsedX = firstItem && firstItem.parsed ? firstItem.parsed.x : 0;
+                                        const pointIndex = Math.round(parsedX || 0);
+                                        return `Data #${pointIndex} | ${getPowerTimeLabel(pointIndex, true)}`;
+                                    },
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${context.parsed.y} mW`;
+                                    }
+                                }
+                            },
+                            zoom: {
+                                pan: {
+                                    enabled: true,
+                                    mode: 'x',
+                                    threshold: 6
+                                },
+                                zoom: {
+                                    mode: 'x',
+                                    wheel: { enabled: false },
+                                    pinch: { enabled: false },
+                                    drag: { enabled: false }
+                                },
+                                limits: {
+                                    x: { min: 1, max: totalPoints, minRange: Math.min(5, totalPoints) }
+                                }
+                            }
+                        },
+                        animation: false
+                    }
                 });
                 return;
             }
 
-            powerChartInstance.data.labels = powerData.labels;
-            powerChartInstance.data.datasets[0].data = powerData.mqtt;
-            powerChartInstance.data.datasets[1].data = powerData.http;
+            powerChartInstance.data.datasets[0].data = mqttPoints;
+            powerChartInstance.data.datasets[1].data = httpPoints;
+            powerChartInstance.options.scales.x.max = totalPoints;
+            powerChartInstance.options.scales.x.min = Math.max(1, totalPoints - Math.min(30, totalPoints) + 1);
+            powerChartInstance.options.plugins.zoom.limits.x.max = totalPoints;
+            powerChartInstance.options.plugins.zoom.limits.x.minRange = Math.min(5, totalPoints);
             powerChartInstance.update('none');
         }
 
@@ -2228,11 +2565,19 @@
                         }
                     }
 
+                    syncHeaderRealtimeData(newDoc);
+
                     // Update and animate stat values
                     document.querySelectorAll('.stat-value').forEach((el, index) => {
                         const newValue = newDoc.querySelectorAll('.stat-value')[index];
                         if (newValue && el.textContent !== newValue.textContent) {
                             animateValue(el, newValue.textContent.trim(), 800);
+                        }
+                    });
+                    document.querySelectorAll('.stat-unit').forEach((el, index) => {
+                        const newValue = newDoc.querySelectorAll('.stat-unit')[index];
+                        if (newValue && el.textContent !== newValue.textContent) {
+                            el.textContent = newValue.textContent;
                         }
                     });
 

@@ -75,8 +75,87 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
         return;
     }
 
-    if (!isset($data['device_id'], $data['suhu'], $data['timestamp_esp'], $data['daya'])) {
-        $log('[ERROR] Payload MQTT kurang field wajib (device_id, suhu, timestamp_esp, daya).');
+    if (!isset(
+        $data['device_id'],
+        $data['suhu'],
+        $data['kelembapan'],
+        $data['timestamp_esp'],
+        $data['daya'],
+        $data['packet_seq'],
+        $data['rssi_dbm'],
+        $data['tx_duration_ms'],
+        $data['payload_bytes'],
+        $data['uptime_s'],
+        $data['free_heap_bytes']
+    )) {
+        $log('[ERROR] Payload MQTT kurang field wajib (device_id, suhu, kelembapan, timestamp_esp, daya, packet_seq, rssi_dbm, tx_duration_ms, payload_bytes, uptime_s, free_heap_bytes).');
+        return;
+    }
+
+    if (
+        !is_numeric($data['suhu']) ||
+        !is_numeric($data['kelembapan']) ||
+        !is_numeric($data['daya']) ||
+        !is_numeric($data['timestamp_esp']) ||
+        !is_numeric($data['packet_seq']) ||
+        !is_numeric($data['rssi_dbm']) ||
+        !is_numeric($data['tx_duration_ms']) ||
+        !is_numeric($data['payload_bytes']) ||
+        !is_numeric($data['uptime_s']) ||
+        !is_numeric($data['free_heap_bytes'])
+    ) {
+        $log('[ERROR] Payload MQTT memiliki tipe field tidak valid (harus numerik).');
+        return;
+    }
+
+    $suhu = (float) $data['suhu'];
+    $kelembapan = (float) $data['kelembapan'];
+    $daya = (float) $data['daya'];
+    $timestampEspRaw = (int) $data['timestamp_esp'];
+    $packetSeq = (int) $data['packet_seq'];
+    $rssiDbm = (int) $data['rssi_dbm'];
+    $txDurationMs = (float) $data['tx_duration_ms'];
+    $payloadBytes = (int) $data['payload_bytes'];
+    $uptimeSeconds = (int) $data['uptime_s'];
+    $freeHeapBytes = (int) $data['free_heap_bytes'];
+
+    if ($kelembapan < 0 || $kelembapan > 100) {
+        $log('[ERROR] Payload MQTT kelembapan di luar rentang 0-100%.');
+        return;
+    }
+
+    if ($daya < 0) {
+        $log('[ERROR] Payload MQTT daya tidak boleh negatif.');
+        return;
+    }
+
+    if ($timestampEspRaw < 1000000000 || $timestampEspRaw > 4102444800) {
+        $log('[ERROR] Payload MQTT timestamp_esp di luar rentang valid.');
+        return;
+    }
+
+    if ($packetSeq < 1) {
+        $log('[ERROR] Payload MQTT packet_seq harus >= 1.');
+        return;
+    }
+
+    if ($rssiDbm < -120 || $rssiDbm > 0) {
+        $log('[ERROR] Payload MQTT rssi_dbm di luar rentang -120..0.');
+        return;
+    }
+
+    if ($txDurationMs < 0) {
+        $log('[ERROR] Payload MQTT tx_duration_ms tidak boleh negatif.');
+        return;
+    }
+
+    if ($payloadBytes < 1) {
+        $log('[ERROR] Payload MQTT payload_bytes harus >= 1.');
+        return;
+    }
+
+    if ($uptimeSeconds < 0 || $freeHeapBytes < 0) {
+        $log('[ERROR] Payload MQTT uptime_s/free_heap_bytes tidak boleh negatif.');
         return;
     }
 
@@ -91,21 +170,27 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
     }
 
     $timestampServer = Carbon::now('UTC');
-    $timestampEsp = Carbon::createFromTimestampUTC((int) $data['timestamp_esp']);
+    $timestampEsp = Carbon::createFromTimestampUTC($timestampEspRaw);
     $latencyMs = abs((float) $timestampServer->floatDiffInMilliseconds($timestampEsp));
 
     Eksperimen::query()->create([
         'device_id' => $deviceId,
         'protokol' => 'MQTT',
-        'suhu' => (float) $data['suhu'],
-        'kelembapan' => isset($data['kelembapan']) ? (float) $data['kelembapan'] : null,
+        'suhu' => $suhu,
+        'kelembapan' => $kelembapan,
         'timestamp_esp' => $timestampEsp,
         'timestamp_server' => $timestampServer,
         'latency_ms' => $latencyMs,
-        'daya_mw' => (float) $data['daya'],
+        'daya_mw' => $daya,
+        'packet_seq' => $packetSeq,
+        'rssi_dbm' => $rssiDbm,
+        'tx_duration_ms' => $txDurationMs,
+        'payload_bytes' => $payloadBytes,
+        'uptime_s' => $uptimeSeconds,
+        'free_heap_bytes' => $freeHeapBytes,
     ]);
 
-    $log('[DB] MQTT data saved.');
+    $log("[DB] MQTT data saved. device_id={$deviceId}, packet_seq={$packetSeq}, suhu={$suhu}, kelembapan={$kelembapan}, daya={$daya}, latency_ms={$latencyMs}, rssi_dbm={$rssiDbm}, tx_duration_ms={$txDurationMs}, payload_bytes={$payloadBytes}");
 };
 
 $log("[MQTT] Worker starting. Broker={$server}:{$port}, Topic={$topic}");

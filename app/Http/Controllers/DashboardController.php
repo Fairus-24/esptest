@@ -55,10 +55,108 @@ class DashboardController extends Controller
         $httpConnected = $httpLast && $now->diffInSeconds($httpLast) < 30;
 
         // Statistik suhu & kelembapan
-        $mqttAvgSuhu = $mqttData->avg('suhu') ?? 0;
-        $mqttAvgKelembapan = $mqttData->avg('kelembapan') ?? 0;
-        $httpAvgSuhu = $httpData->avg('suhu') ?? 0;
-        $httpAvgKelembapan = $httpData->avg('kelembapan') ?? 0;
+        $mqttAvgSuhu = $mqttData->whereNotNull('suhu')->avg('suhu');
+        $mqttAvgKelembapan = $mqttData->whereNotNull('kelembapan')->avg('kelembapan');
+        $httpAvgSuhu = $httpData->whereNotNull('suhu')->avg('suhu');
+        $httpAvgKelembapan = $httpData->whereNotNull('kelembapan')->avg('kelembapan');
+
+        $avgSuhu = collect([$mqttAvgSuhu, $httpAvgSuhu])
+            ->filter(static fn($value) => $value !== null)
+            ->avg() ?? 0;
+
+        $avgKelembapan = collect([$mqttAvgKelembapan, $httpAvgKelembapan])
+            ->filter(static fn($value) => $value !== null)
+            ->avg() ?? 0;
+
+        // Data quality checks: kedua protokol wajib mengirim field lengkap yang sama.
+        $requiredFields = [
+            'suhu' => 'Suhu',
+            'kelembapan' => 'Kelembapan',
+            'timestamp_esp' => 'Timestamp ESP',
+            'timestamp_server' => 'Timestamp Server',
+            'latency_ms' => 'Latency',
+            'daya_mw' => 'Daya',
+            'packet_seq' => 'Packet Sequence',
+            'rssi_dbm' => 'RSSI',
+            'tx_duration_ms' => 'TX Duration',
+            'payload_bytes' => 'Payload Bytes',
+            'uptime_s' => 'Uptime',
+            'free_heap_bytes' => 'Free Heap',
+        ];
+
+        $protocolDataMap = [
+            'MQTT' => $mqttData,
+            'HTTP' => $httpData,
+        ];
+        $mqttTotal = $mqttData->count();
+        $httpTotal = $httpData->count();
+
+        $fieldCompleteness = [];
+        $dataWarnings = [];
+
+        foreach ($protocolDataMap as $protocol => $protocolData) {
+            $qualityScope = $protocolData->whereNotNull('packet_seq');
+            if ($qualityScope->isEmpty()) {
+                $qualityScope = $protocolData;
+            }
+            $qualityScope = $qualityScope->sortByDesc('id')->take(200)->values();
+
+            $total = $qualityScope->count();
+            $fieldCompleteness[$protocol] = [
+                'total' => $total,
+                'fields' => [],
+            ];
+
+            if ($total === 0) {
+                $dataWarnings[] = "{$protocol}: belum ada data masuk.";
+                continue;
+            }
+
+            foreach ($requiredFields as $fieldKey => $fieldLabel) {
+                $missing = $qualityScope->whereNull($fieldKey)->count();
+                $valid = $total - $missing;
+
+                $fieldCompleteness[$protocol]['fields'][$fieldKey] = [
+                    'label' => $fieldLabel,
+                    'valid' => $valid,
+                    'missing' => $missing,
+                    'total' => $total,
+                ];
+
+                if ($missing > 0) {
+                    $dataWarnings[] = "{$protocol} {$fieldLabel}: {$missing}/{$total} data kosong.";
+                }
+            }
+        }
+
+        if ($mqttTotal !== $httpTotal) {
+            $dataWarnings[] = "Jumlah data tidak seimbang: MQTT {$mqttTotal} vs HTTP {$httpTotal}.";
+        }
+
+        if (($reliability['mqtt_missing_packets'] ?? 0) > 0) {
+            $dataWarnings[] = "MQTT packet loss terdeteksi: {$reliability['mqtt_missing_packets']} packet hilang (seq gap).";
+        }
+        if (($reliability['http_missing_packets'] ?? 0) > 0) {
+            $dataWarnings[] = "HTTP packet loss terdeteksi: {$reliability['http_missing_packets']} packet hilang (seq gap).";
+        }
+        if (($reliability['mqtt_expected_packets'] ?? 0) === 0 && $mqttTotal > 0) {
+            $dataWarnings[] = "MQTT belum memiliki telemetry packet_seq. Pastikan firmware ESP32 terbaru sudah terpasang.";
+        }
+        if (($reliability['http_expected_packets'] ?? 0) === 0 && $httpTotal > 0) {
+            $dataWarnings[] = "HTTP belum memiliki telemetry packet_seq. Pastikan firmware ESP32 terbaru sudah terpasang.";
+        }
+        if (($reliability['mqtt_transmission_health'] ?? 100) < 80 && $mqttTotal > 0) {
+            $dataWarnings[] = "MQTT transmission health rendah ({$reliability['mqtt_transmission_health']}%). Cek RSSI, broker, atau kestabilan jaringan.";
+        }
+        if (($reliability['http_transmission_health'] ?? 100) < 80 && $httpTotal > 0) {
+            $dataWarnings[] = "HTTP transmission health rendah ({$reliability['http_transmission_health']}%). Cek server API, endpoint, atau kestabilan jaringan.";
+        }
+        if (($summary['mqtt']['std_daya'] ?? 0) < 0.5 && ($summary['mqtt']['total_data'] ?? 0) >= 20) {
+            $dataWarnings[] = "Variasi daya MQTT sangat rendah (std < 0.5). Data cenderung konstan, cek perhitungan daya firmware.";
+        }
+        if (($summary['http']['std_daya'] ?? 0) < 0.5 && ($summary['http']['total_data'] ?? 0) >= 20) {
+            $dataWarnings[] = "Variasi daya HTTP sangat rendah (std < 0.5). Data cenderung konstan, cek perhitungan daya firmware.";
+        }
 
         // Prepare data untuk Chart.js - Latency Comparison (per data point, line chart)
         // X-axis dibuat berdasarkan urutan data supaya jumlah titik selalu sama dengan total data point.
@@ -85,6 +183,7 @@ class DashboardController extends Controller
                     'device_id' => (int) $point->device_id,
                     'device_name' => $deviceNames[$point->device_id] ?? ('Device ' . $point->device_id),
                     'latency_ms' => $point->latency_ms !== null ? (float) $point->latency_ms : null,
+                    'daya_mw' => $point->daya_mw !== null ? (float) $point->daya_mw : null,
                     'timestamp_sort' => $timestampSort,
                     'timestamp_display' => $timestampDisplay,
                 ];
@@ -133,26 +232,39 @@ class DashboardController extends Controller
 
         $latencyChartData['datasets'] = array_values($datasetsByKey);
         $latencyChartData['total_points'] = $sequence;
-        // Prepare data untuk Chart.js - Power Consumption Comparison (per device, rata-rata)
-        $devices = Device::all();
+        // Prepare data untuk Chart.js - Power Comparison (per data point, urutan realtime)
         $powerChartData = [
             'labels' => [],
+            'time_labels' => [],
+            'full_time_labels' => [],
             'mqtt' => [],
             'http' => [],
+            'total_points' => 0,
+            'display_timezone' => 'Asia/Jakarta',
         ];
-        foreach ($devices as $device) {
-            $powerChartData['labels'][] = $device->nama_device;
-            // Rata-rata daya per device untuk masing-masing protokol
-            $mqttAvg = Eksperimen::where('device_id', $device->id)->where('protokol', 'MQTT')->avg('daya_mw');
-            $httpAvg = Eksperimen::where('device_id', $device->id)->where('protokol', 'HTTP')->avg('daya_mw');
-            $powerChartData['mqtt'][] = $mqttAvg !== null ? round($mqttAvg, 2) : 0;
-            $powerChartData['http'][] = $httpAvg !== null ? round($httpAvg, 2) : 0;
+        $powerSequence = 0;
+        foreach ($latencyPoints as $point) {
+            $powerSequence++;
+            $timestampDisplay = $point['timestamp_display'];
+            $shortTime = $timestampDisplay ? $timestampDisplay->format('H:i:s') . ' WIB' : '-';
+            $fullTime = $timestampDisplay ? $timestampDisplay->format('d-m-Y H:i:s') . ' WIB' : '-';
+
+            $powerChartData['labels'][] = $powerSequence;
+            $powerChartData['time_labels'][] = $shortTime;
+            $powerChartData['full_time_labels'][] = $fullTime;
+            $powerChartData['mqtt'][] = $point['protocol'] === 'MQTT'
+                ? ($point['daya_mw'] !== null ? round($point['daya_mw'], 2) : null)
+                : null;
+            $powerChartData['http'][] = $point['protocol'] === 'HTTP'
+                ? ($point['daya_mw'] !== null ? round($point['daya_mw'], 2) : null)
+                : null;
         }
-        $mqttTotal = $mqttData->count();
-        $httpTotal = $httpData->count();
+        $powerChartData['total_points'] = $powerSequence;
+
         return view('dashboard', compact(
             'summary', 'reliability', 'latencyChartData', 'powerChartData', 'mqttTotal', 'httpTotal',
-            'mqttConnected', 'httpConnected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan'
+            'mqttConnected', 'httpConnected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan',
+            'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings'
         ));
     }
 }

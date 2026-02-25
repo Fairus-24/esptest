@@ -15,11 +15,23 @@ class Eksperimen extends Model
         'timestamp_server',
         'latency_ms',
         'daya_mw',
+        'packet_seq',
+        'rssi_dbm',
+        'tx_duration_ms',
+        'payload_bytes',
+        'uptime_s',
+        'free_heap_bytes',
     ];
 
     protected $casts = [
         'timestamp_esp' => 'datetime',
         'timestamp_server' => 'datetime',
+        'packet_seq' => 'integer',
+        'rssi_dbm' => 'integer',
+        'tx_duration_ms' => 'float',
+        'payload_bytes' => 'integer',
+        'uptime_s' => 'integer',
+        'free_heap_bytes' => 'integer',
     ];
 
     public function device()

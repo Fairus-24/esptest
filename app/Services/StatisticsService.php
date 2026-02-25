@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Collection;
 
 class StatisticsService
 {
+    private const RELIABILITY_WINDOW_SIZE = 300;
+
     /**
      * Dapatkan data MQTT
      */
@@ -104,32 +106,48 @@ class StatisticsService
         $pooledVariance = (($n1 - 1) * $var1 + ($n2 - 1) * $var2) / $df;
 
         // Hitung standard error
-        $standardErrorDenom = ($n1 > 0 ? 1/$n1 : 0) + ($n2 > 0 ? 1/$n2 : 0);
-        if ($pooledVariance == 0 || $standardErrorDenom == 0) {
+        $standardErrorDenom = ($n1 > 0 ? 1 / $n1 : 0) + ($n2 > 0 ? 1 / $n2 : 0);
+        if ($standardErrorDenom == 0) {
             return [
                 'valid' => false,
-                'message' => 'Standard error = 0, tidak bisa t-test',
+                'message' => 'Standard error denominator = 0, tidak bisa t-test',
             ];
         }
-        $standardError = sqrt($pooledVariance * $standardErrorDenom);
-        if ($standardError == 0) {
-            return [
-                'valid' => false,
-                'message' => 'Standard error = 0, tidak bisa t-test',
-            ];
-        }
+        $standardError = sqrt(max(0, $pooledVariance) * $standardErrorDenom);
 
-        // Hitung t-value
-        $tValue = ($mean1 - $mean2) / $standardError;
-
-        // Critical value untuk α=0.05 (two-tailed)
         $criticalValue = 1.96;
+        $note = null;
 
-        // Tentukan signifikansi
-        $isSignificant = abs($tValue) > $criticalValue;
+        if ($standardError == 0.0) {
+            // Edge case: variansi nol (nilai konstan).
+            $meanDiff = $mean1 - $mean2;
+            if (abs($meanDiff) < 0.000000001) {
+                $tValue = 0.0;
+                $pValue = 1.0;
+                $isSignificant = false;
+                $note = 'Variansi nol: nilai kedua grup konstan dan mean sama.';
+            } else {
+                $tValue = $meanDiff > 0 ? 999999.0 : -999999.0;
+                $pValue = 0.0;
+                $isSignificant = true;
+                $note = 'Variansi nol: nilai kedua grup konstan tetapi mean berbeda.';
+            }
+        } else {
+            // Hitung t-value normal
+            $tValue = ($mean1 - $mean2) / $standardError;
+            // Hitung p-value (approximate)
+            $pValue = $this->calculatePValue($tValue, $df);
+            // Tentukan signifikansi
+            $isSignificant = abs($tValue) > $criticalValue;
+        }
 
-        // Hitung p-value (approximate)
-        $pValue = $this->calculatePValue($tValue, $df);
+        $interpretation = $isSignificant
+            ? 'Ada perbedaan signifikan (p < 0.05)'
+            : 'Tidak ada perbedaan signifikan (p >= 0.05)';
+
+        if ($note !== null) {
+            $interpretation .= ' | ' . $note;
+        }
 
         return [
             'valid' => true,
@@ -150,12 +168,10 @@ class StatisticsService
             'critical_value' => $criticalValue,
             'is_significant' => $isSignificant,
             'p_value' => round($pValue, 4),
-            'interpretation' => $isSignificant 
-                ? 'Ada perbedaan signifikan (p < 0.05)' 
-                : 'Tidak ada perbedaan signifikan (p >= 0.05)',
+            'interpretation' => $interpretation,
+            'note' => $note,
         ];
     }
-
     /**
      * Approximate p-value dari t-value dan df
      * Menggunakan approximation yang sederhana
@@ -262,17 +278,210 @@ class StatisticsService
      */
     public function getReliability()
     {
-        $mqttData = $this->getMqttData();
-        $httpData = $this->getHttpData();
+        $mqttData = $this->getRecentProtocolData('MQTT');
+        $httpData = $this->getRecentProtocolData('HTTP');
 
-        $mqttReliability = $mqttData->count() > 0 ? 100 : 0;
-        $httpReliability = $httpData->count() > 0 ? 100 : 0;
+        $mqttSeqStats = $this->calculateSequenceReliability($mqttData);
+        $httpSeqStats = $this->calculateSequenceReliability($httpData);
+        $mqttQualityScope = $mqttSeqStats['has_sequence'] ? $mqttData->whereNotNull('packet_seq') : $mqttData;
+        $httpQualityScope = $httpSeqStats['has_sequence'] ? $httpData->whereNotNull('packet_seq') : $httpData;
+        $mqttCompleteness = $this->calculateRequiredFieldCompleteness($mqttQualityScope);
+        $httpCompleteness = $this->calculateRequiredFieldCompleteness($httpQualityScope);
+        $mqttTransmissionHealth = $this->calculateTransmissionHealth($mqttQualityScope, 'MQTT');
+        $httpTransmissionHealth = $this->calculateTransmissionHealth($httpQualityScope, 'HTTP');
+
+        $mqttReliability = $this->combineReliability(
+            $mqttSeqStats['rate'],
+            $mqttCompleteness,
+            $mqttTransmissionHealth,
+            $mqttSeqStats['has_sequence']
+        );
+        $httpReliability = $this->combineReliability(
+            $httpSeqStats['rate'],
+            $httpCompleteness,
+            $httpTransmissionHealth,
+            $httpSeqStats['has_sequence']
+        );
 
         return [
             'mqtt_reliability' => round($mqttReliability, 2),
             'http_reliability' => round($httpReliability, 2),
             'mqtt_total_sent' => $mqttData->count(),
             'http_total_sent' => $httpData->count(),
+            'reliability_window_limit' => self::RELIABILITY_WINDOW_SIZE,
+            'mqtt_window_size' => $mqttData->count(),
+            'http_window_size' => $httpData->count(),
+            'mqtt_sequence_reliability' => round($mqttSeqStats['rate'], 2),
+            'http_sequence_reliability' => round($httpSeqStats['rate'], 2),
+            'mqtt_data_completeness' => round($mqttCompleteness, 2),
+            'http_data_completeness' => round($httpCompleteness, 2),
+            'mqtt_transmission_health' => round($mqttTransmissionHealth, 2),
+            'http_transmission_health' => round($httpTransmissionHealth, 2),
+            'mqtt_expected_packets' => $mqttSeqStats['expected'],
+            'http_expected_packets' => $httpSeqStats['expected'],
+            'mqtt_received_packets' => $mqttSeqStats['received'],
+            'http_received_packets' => $httpSeqStats['received'],
+            'mqtt_missing_packets' => $mqttSeqStats['missing'],
+            'http_missing_packets' => $httpSeqStats['missing'],
         ];
     }
+
+    private function combineReliability(
+        float $sequenceRate,
+        float $completenessRate,
+        float $transmissionRate,
+        bool $hasSequence
+    ): float
+    {
+        if (!$hasSequence) {
+            return ($completenessRate * 0.6) + ($transmissionRate * 0.4);
+        }
+
+        // Sequence continuity lebih merepresentasikan packet loss,
+        // completeness menjaga kualitas payload,
+        // transmission health memberi bobot kestabilan latency + tx.
+        return ($sequenceRate * 0.55) + ($completenessRate * 0.25) + ($transmissionRate * 0.20);
+    }
+
+    private function getRecentProtocolData(string $protocol): Collection
+    {
+        return Eksperimen::query()
+            ->where('protokol', strtoupper($protocol))
+            ->orderByDesc('id')
+            ->limit(self::RELIABILITY_WINDOW_SIZE)
+            ->get()
+            ->sortBy('id')
+            ->values();
+    }
+
+    private function calculateRequiredFieldCompleteness(Collection $data): float
+    {
+        $total = $data->count();
+        if ($total === 0) {
+            return 0.0;
+        }
+
+        $requiredFields = [
+            'suhu',
+            'kelembapan',
+            'timestamp_esp',
+            'timestamp_server',
+            'latency_ms',
+            'daya_mw',
+            'packet_seq',
+            'rssi_dbm',
+            'tx_duration_ms',
+            'payload_bytes',
+            'uptime_s',
+            'free_heap_bytes',
+        ];
+
+        $valid = $data->filter(function ($row) use ($requiredFields) {
+            foreach ($requiredFields as $field) {
+                if (!isset($row->{$field})) {
+                    return false;
+                }
+            }
+
+            return true;
+        })->count();
+
+        return ($valid / $total) * 100;
+    }
+
+    private function calculateSequenceReliability(Collection $data): array
+    {
+        $withSequence = $data->filter(function ($row) {
+            return isset($row->packet_seq) && is_numeric($row->packet_seq);
+        });
+
+        if ($withSequence->isEmpty()) {
+            return [
+                'has_sequence' => false,
+                'rate' => 0.0,
+                'expected' => 0,
+                'received' => 0,
+                'missing' => 0,
+            ];
+        }
+
+        $expected = 0;
+        $received = 0;
+
+        foreach ($withSequence->groupBy('device_id') as $deviceRows) {
+            $seq = $deviceRows->pluck('packet_seq')
+                ->filter(fn($value) => is_numeric($value))
+                ->map(fn($value) => (int) $value)
+                ->unique()
+                ->sort()
+                ->values();
+
+            if ($seq->isEmpty()) {
+                continue;
+            }
+
+            $minSeq = (int) $seq->first();
+            $maxSeq = (int) $seq->last();
+            $expectedForDevice = max(1, $maxSeq - $minSeq + 1);
+            $receivedForDevice = min($expectedForDevice, $seq->count());
+
+            $expected += $expectedForDevice;
+            $received += $receivedForDevice;
+        }
+
+        if ($expected === 0) {
+            return [
+                'has_sequence' => false,
+                'rate' => 0.0,
+                'expected' => 0,
+                'received' => 0,
+                'missing' => 0,
+            ];
+        }
+
+        $missing = max(0, $expected - $received);
+        $rate = ($received / $expected) * 100;
+
+        return [
+            'has_sequence' => true,
+            'rate' => $rate,
+            'expected' => $expected,
+            'received' => $received,
+            'missing' => $missing,
+        ];
+    }
+
+    private function calculateTransmissionHealth(Collection $data, string $protocol): float
+    {
+        if ($data->isEmpty()) {
+            return 0.0;
+        }
+
+        $isMqtt = strtoupper($protocol) === 'MQTT';
+        $latencyTargetMs = $isMqtt ? 1500.0 : 3000.0;
+        $txTargetMs = $isMqtt ? 120.0 : 4500.0;
+
+        $scores = $data->filter(function ($row) {
+            return isset($row->latency_ms, $row->tx_duration_ms)
+                && is_numeric($row->latency_ms)
+                && is_numeric($row->tx_duration_ms);
+        })->map(function ($row) use ($latencyTargetMs, $txTargetMs) {
+            $latency = max(0.0, (float) $row->latency_ms);
+            $txDuration = max(0.0, (float) $row->tx_duration_ms);
+            $payloadBytes = isset($row->payload_bytes) && is_numeric($row->payload_bytes) ? (int) $row->payload_bytes : 0;
+
+            $latencyScore = 100.0 - min(100.0, ($latency / max(1.0, $latencyTargetMs)) * 100.0);
+            $txScore = 100.0 - min(100.0, ($txDuration / max(1.0, $txTargetMs)) * 100.0);
+            $payloadScore = $payloadBytes > 0 ? 100.0 : 0.0;
+
+            return ($latencyScore * 0.5) + ($txScore * 0.35) + ($payloadScore * 0.15);
+        });
+
+        if ($scores->isEmpty()) {
+            return 0.0;
+        }
+
+        return (float) $scores->avg();
+    }
 }
+
