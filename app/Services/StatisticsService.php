@@ -29,9 +29,9 @@ class StatisticsService
     public function calculateMean(Collection $data, string $column): float
     {
         if ($data->isEmpty()) {
-            return 0;
+            return 0.0;
         }
-        return $data->avg($column);
+        return (float) ($data->avg($column) ?? 0.0);
     }
 
     /**
@@ -48,7 +48,11 @@ class StatisticsService
             return pow($item->$column - $mean, 2);
         });
 
-        return $squaredDifferences->sum() / ($data->count() - 1); // Sample variance
+        $denominator = $data->count() - 1;
+        if ($denominator == 0) {
+            return 0;
+        }
+        return $squaredDifferences->sum() / $denominator; // Sample variance
     }
 
     /**
@@ -90,16 +94,33 @@ class StatisticsService
         $stdDev2 = sqrt($var2);
 
         // Hitung pooled variance
-        $pooledVariance = (($n1 - 1) * $var1 + ($n2 - 1) * $var2) / ($n1 + $n2 - 2);
+        $df = $n1 + $n2 - 2;
+        if ($df == 0) {
+            return [
+                'valid' => false,
+                'message' => 'Degrees of freedom = 0, tidak bisa t-test',
+            ];
+        }
+        $pooledVariance = (($n1 - 1) * $var1 + ($n2 - 1) * $var2) / $df;
 
         // Hitung standard error
-        $standardError = sqrt($pooledVariance * (1/$n1 + 1/$n2));
+        $standardErrorDenom = ($n1 > 0 ? 1/$n1 : 0) + ($n2 > 0 ? 1/$n2 : 0);
+        if ($pooledVariance == 0 || $standardErrorDenom == 0) {
+            return [
+                'valid' => false,
+                'message' => 'Standard error = 0, tidak bisa t-test',
+            ];
+        }
+        $standardError = sqrt($pooledVariance * $standardErrorDenom);
+        if ($standardError == 0) {
+            return [
+                'valid' => false,
+                'message' => 'Standard error = 0, tidak bisa t-test',
+            ];
+        }
 
         // Hitung t-value
         $tValue = ($mean1 - $mean2) / $standardError;
-
-        // Hitung degrees of freedom
-        $df = $n1 + $n2 - 2;
 
         // Critical value untuk α=0.05 (two-tailed)
         $criticalValue = 1.96;
@@ -161,9 +182,36 @@ class StatisticsService
     /**
      * Normal CDF approximation
      */
+    // Approximate error function (erf) for normalCDF
+    private function erf($x)
+    {
+        // Abramowitz and Stegun formula 7.1.26
+        $sign = ($x < 0) ? -1 : 1;
+        $x = abs($x);
+        $a1 =  0.254829592;
+        $a2 = -0.284496736;
+        $a3 =  1.421413741;
+        $a4 = -1.453152027;
+        $a5 =  1.061405429;
+        $p  =  0.3275911;
+        $t = 1.0 / (1.0 + $p * $x);
+        $y = 1.0 - (
+            (
+                (
+                    (
+                        (
+                            $a5 * $t + $a4
+                        ) * $t + $a3
+                    ) * $t + $a2
+                ) * $t + $a1
+            ) * $t * exp(-$x * $x)
+        );
+        return $sign * $y;
+    }
+
     private function normalCDF(float $z): float
     {
-        return (1 + erf($z / sqrt(2))) / 2;
+        return (1 + $this->erf($z / sqrt(2))) / 2;
     }
 
     /**
@@ -176,9 +224,10 @@ class StatisticsService
 
         // Statistik Latency
         $latencyTTest = $this->tTest($mqttData, $httpData, 'latency_ms');
-
         // Statistik Daya
         $dayaTTest = $this->tTest($mqttData, $httpData, 'daya_mw');
+        // Statistik Kelembapan (optional t-test)
+        // $kelembapanTTest = $this->tTest($mqttData, $httpData, 'kelembapan');
 
         return [
             'mqtt' => [
@@ -186,19 +235,24 @@ class StatisticsService
                 'avg_latency_ms' => round($this->calculateMean($mqttData, 'latency_ms'), 2),
                 'avg_daya_mw' => round($this->calculateMean($mqttData, 'daya_mw'), 2),
                 'avg_suhu' => round($this->calculateMean($mqttData, 'suhu'), 2),
+                'avg_kelembapan' => round($this->calculateMean($mqttData, 'kelembapan'), 2),
                 'std_latency' => round($this->calculateStdDev($mqttData, 'latency_ms'), 2),
                 'std_daya' => round($this->calculateStdDev($mqttData, 'daya_mw'), 2),
+                'std_kelembapan' => round($this->calculateStdDev($mqttData, 'kelembapan'), 2),
             ],
             'http' => [
                 'total_data' => $httpData->count(),
                 'avg_latency_ms' => round($this->calculateMean($httpData, 'latency_ms'), 2),
                 'avg_daya_mw' => round($this->calculateMean($httpData, 'daya_mw'), 2),
                 'avg_suhu' => round($this->calculateMean($httpData, 'suhu'), 2),
+                'avg_kelembapan' => round($this->calculateMean($httpData, 'kelembapan'), 2),
                 'std_latency' => round($this->calculateStdDev($httpData, 'latency_ms'), 2),
                 'std_daya' => round($this->calculateStdDev($httpData, 'daya_mw'), 2),
+                'std_kelembapan' => round($this->calculateStdDev($httpData, 'kelembapan'), 2),
             ],
             'ttest_latency' => $latencyTTest,
             'ttest_daya' => $dayaTTest,
+            // 'ttest_kelembapan' => $kelembapanTTest,
         ];
     }
 

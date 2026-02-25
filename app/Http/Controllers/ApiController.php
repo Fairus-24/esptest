@@ -34,7 +34,7 @@ class ApiController extends Controller
             $timestampEsp = \DateTime::createFromFormat('U', $validated['timestamp_esp'])->setTimezone(new \DateTimeZone('UTC'));
             
             // Hitung latency dalam milliseconds
-            $latencyMs = $timestampServer->diffInMilliseconds($timestampEsp);
+            $latencyMs = abs((float) $timestampServer->diffInMilliseconds($timestampEsp));
 
             $eksperimen = Eksperimen::create([
                 'device_id' => $validated['device_id'],

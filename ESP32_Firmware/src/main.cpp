@@ -1,30 +1,31 @@
-#include <Arduino.h>
+
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "DHT.h"
-#include <time.h>
-#include <EEPROM.h>
+#include <DHT.h>
+
 
 // ==================== CONFIGURATION ====================
 // WiFi Settings
-const char* WIFI_SSID = "YOUR_SSID";
-const char* WIFI_PASSWORD = "YOUR_PASSWORD";
+const char* WIFI_SSID = "Free";
+const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
-const char* HTTP_SERVER = "http://192.168.1.100:8000";  // Change to your server IP
-const char* HTTP_ENDPOINT = "/api/http-data";
-const char* MQTT_SERVER = "192.168.1.100";
+const char* HTTP_SERVER = "http://192.168.0.100";  // Apache front, proxied to PHP 8.4 server
+const char* HTTP_ENDPOINT = "/esptest/public/api/http-data";
+const char* MQTT_SERVER = "192.168.0.100";  // Same subnet as ESP32
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";
 const char* MQTT_PASSWORD = "esp32";
 
+
 // Device Settings
+#define DHTPIN 4
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
 const int DEVICE_ID = 1;
-const int DHT_PIN = 4;
-const int DHT_TYPE = DHT22;
 
 // Timing Settings
 const unsigned long INTERVAL_SENSOR = 5000;    // Read sensor every 5 seconds
@@ -35,7 +36,6 @@ const unsigned long WIFI_TIMEOUT = 10000;      // WiFi connection timeout
 // ==================== GLOBAL VARIABLES ====================
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
-DHT dht(DHT_PIN, DHT_TYPE);
 
 // Data storage
 float lastTemperature = 0.0;
@@ -53,6 +53,7 @@ unsigned long httpSendSuccess = 0;
 unsigned long httpSendFail = 0;
 unsigned long mqttSendSuccess = 0;
 unsigned long mqttSendFail = 0;
+unsigned long lastMQTTAttempt = 0;  // Prevent MQTT connection spam
 
 // ==================== FUNCTION DECLARATIONS ====================
 void setupWiFi();
@@ -75,13 +76,10 @@ void setup() {
     Serial.println("  ESP32 IoT Data Logger - MQTT vs HTTP");
     Serial.println("==========================================");
     
-    // Initialize EEPROM for statistics
-    EEPROM.begin(256);
-    
-    // Initialize DHT22
-    Serial.println("[INIT] Initializing DHT22 sensor...");
+    // Initialize DHT11
+    Serial.println("[INIT] Initializing DHT11 sensor...");
     dht.begin();
-    delay(2000);  // DHT22 needs time to stabilize
+    delay(1000);  // DHT11 needs time to stabilize
     
     // Connect to WiFi
     setupWiFi();
@@ -107,7 +105,11 @@ void loop() {
     
     // MQTT connection handling
     if (!mqttClient.connected()) {
-        connectMQTT();
+        // Only attempt connection every 10 seconds (prevent spam)
+        if (millis() - lastMQTTAttempt > 10000) {
+            connectMQTT();
+            lastMQTTAttempt = millis();
+        }
     } else {
         mqttClient.loop();
     }
@@ -176,19 +178,19 @@ void setupWiFi() {
 void readSensor() {
     float humidity = dht.readHumidity();
     float temperature = dht.readTemperature();
-    
-    // Check for errors
     if (isnan(humidity) || isnan(temperature)) {
-        Serial.println("[SENSOR] ✗ Failed to read from DHT22!");
+        Serial.println("[SENSOR] ✗ Failed to read from DHT11!");
+        Serial.println("         GPIO 4: Check connection & pull-up resistor (4.7kΩ)");
+        Serial.print("         Raw values - T: ");
+        Serial.print(temperature);
+        Serial.print(", H: ");
+        Serial.println(humidity);
         return;
     }
-    
     lastTemperature = temperature;
     lastHumidity = humidity;
     lastPower = calculatePowerConsumption();
-    
     sensorReadCount++;
-    
     Serial.print("[SENSOR] ✓ T: ");
     Serial.print(temperature, 2);
     Serial.print("°C | H: ");
@@ -237,8 +239,10 @@ void sendHTTP() {
     // Send POST request
     int httpCode = http.POST(payload);
     
-    if (httpCode == 201) {
-        Serial.println("[HTTP] ✓ Success (201 Created)");
+    if (httpCode >= 200 && httpCode < 300) {
+        Serial.print("[HTTP] ✓ Success (");
+        Serial.print(httpCode);
+        Serial.println(")");
         Serial.println("       Response: " + http.getString());
         httpSendSuccess++;
     } else {
@@ -258,27 +262,41 @@ void sendMQTT() {
         mqttSendFail++;
         return;
     }
-    
     if (lastTemperature == 0.0 && lastHumidity == 0.0) {
         Serial.println("[MQTT] ✗ No sensor data available");
         return;
     }
-    
+    // Ensure NTP time is synced
+    time_t now = time(nullptr);
+    if (now < 1640995200L) { // 2022-01-01 as sanity check
+        Serial.println("[MQTT] ✗ NTP time not synced, skipping send");
+        mqttSendFail++;
+        return;
+    }
+    // Validate all fields before sending
+    if (DEVICE_ID <= 0) {
+        Serial.println("[MQTT] ✗ Invalid DEVICE_ID, skipping send");
+        mqttSendFail++;
+        return;
+    }
+    if (isnan(lastTemperature) || isnan(lastPower)) {
+        Serial.println("[MQTT] ✗ Invalid sensor/power data, skipping send");
+        mqttSendFail++;
+        return;
+    }
     // Create JSON payload
     StaticJsonDocument<256> jsonDoc;
     jsonDoc["device_id"] = DEVICE_ID;
     jsonDoc["suhu"] = lastTemperature;
-    jsonDoc["timestamp_esp"] = (long)time(nullptr);
+    jsonDoc["timestamp_esp"] = (long)now;
     jsonDoc["daya"] = lastPower;
-    
     String payload;
     serializeJson(jsonDoc, payload);
-    
+    // Debug: print all fields
     Serial.print("[MQTT] Publishing to: ");
     Serial.println(MQTT_TOPIC);
     Serial.print("       Payload: ");
     Serial.println(payload);
-    
     if (mqttClient.publish(MQTT_TOPIC, payload.c_str())) {
         Serial.println("[MQTT] ✓ Published successfully");
         mqttSendSuccess++;
@@ -348,8 +366,8 @@ float calculatePowerConsumption() {
         basePower += 20.0;  // Extra power when searching for network
     }
     
-    // Add DHT22 reading power
-    basePower += 2.0;
+    // Add DHT11 reading power
+    basePower += 1.0;
     
     return basePower;
 }

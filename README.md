@@ -118,7 +118,7 @@ Sistem penelitian lengkap untuk membandingkan protokol MQTT dan HTTP pada ESP32 
 cd c:\xampp\htdocs\esptest
 
 # Jika menggunakan Git
-git clone <repository> esptest
+git clone https://github.com/Fairus-24/esptest.git esptest
 cd esptest
 
 # Jika sudah ada folder, pastikan di dalam folder tersebut

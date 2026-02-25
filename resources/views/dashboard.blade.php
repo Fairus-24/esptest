@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Analisis Komparatif MQTT vs HTTP</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
@@ -254,6 +257,62 @@
 
         .chart-title i {
             font-size: 1.3em;
+        }
+
+        .chart-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .chart-toolbar-info {
+            font-size: 0.9em;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .zoom-btn {
+            border: 1px solid #d9e1ef;
+            background: #f5f8ff;
+            color: #24334f;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 38px;
+        }
+
+        .zoom-btn:hover {
+            background: #e9f0ff;
+            border-color: #b8c8ea;
+        }
+
+        .zoom-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            background: #f4f4f4;
+            border-color: #e0e0e0;
+        }
+
+        .zoom-btn.zoom-reset {
+            min-width: 70px;
+            font-weight: 600;
+        }
+
+        .chart-hint {
+            font-size: 0.85em;
+            color: #6f7d95;
+            margin-bottom: 12px;
         }
 
         .chart-wrapper {
@@ -1107,16 +1166,185 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <div class="header-content">
-                <h1><i class="fas fa-chart-line"></i> IoT Research System</h1>
-                <p>Analisis Komparatif Protokol MQTT vs HTTP</p>
-                <div class="header-subtitle">
-                    <span class="header-badge"><i class="fas fa-wifi"></i> MQTT Ready</span>
-                    <span class="header-badge"><i class="fas fa-globe"></i> HTTP Ready</span>
-                    <span class="header-badge"><i class="fas fa-microscope"></i> T-Test Active</span>
+            <div class="header-content header-metric-row">
+                <div class="header-metric-card suhu-card">
+                    <div class="metric-icon"><i class="fas fa-thermometer-half"></i></div>
+                    <div class="metric-label">Rata-rata Suhu</div>
+                    <div class="metric-value" id="avgSuhuValue">{{ number_format(($mqttAvgSuhu + $httpAvgSuhu)/2, 2) }}<span class="metric-unit">°C</span></div>
+                    <div class="metric-detail">MQTT: {{ number_format($mqttAvgSuhu, 2) }}°C<br>HTTP: {{ number_format($httpAvgSuhu, 2) }}°C</div>
+                </div>
+                <div class="header-center-content">
+                    <h1><i class="fas fa-chart-line"></i> IoT Research System</h1>
+                    <p>Analisis Komparatif Protokol MQTT vs HTTP</p>
+                    <div class="header-subtitle">
+                        <span class="header-badge" style="background:{{ $mqttConnected ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.2)' }}">
+                            <i class="fas fa-wifi"></i> MQTT {{ $mqttConnected ? 'Connected' : 'Disconnected' }}
+                        </span>
+                        <span class="header-badge" style="background:{{ $httpConnected ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.2)' }}">
+                            <i class="fas fa-globe"></i> HTTP {{ $httpConnected ? 'Connected' : 'Disconnected' }}
+                        </span>
+                        <span class="header-badge"><i class="fas fa-microscope"></i> T-Test Active</span>
+                    </div>
+                </div>
+                <div class="header-metric-card kelembapan-card">
+                    <div class="metric-icon"><i class="fas fa-tint"></i></div>
+                    <div class="metric-label">Rata-rata Kelembapan</div>
+                    <div class="metric-value" id="avgKelembapanValue">{{ number_format(($mqttAvgKelembapan + $httpAvgKelembapan)/2, 2) }}<span class="metric-unit">%</span></div>
+                    <div class="metric-detail">MQTT: {{ number_format($mqttAvgKelembapan, 2) }}%<br>HTTP: {{ number_format($httpAvgKelembapan, 2) }}%</div>
                 </div>
             </div>
         </div>
+        <style>
+        /* HEADER FLEX ROW, RESPONSIVE, MOBILE STACK */
+        .header-content.header-metric-row {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 25px;
+            padding: 18px 6px;
+        }
+        .header-metric-card {
+            flex: 1 1 0;
+            min-width: 60px;
+            max-width: 120px;
+            background: rgba(255,255,255,0.18);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            border-radius: 16px;
+            padding: 10px 4px 8px 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1.5px solid rgba(255,255,255,0.22);
+            transition: box-shadow 0.3s;
+            height: 100%;
+        }
+        .header-center-content {
+            flex: 2 1 0;
+            min-width: 0;
+            margin: 0 8px;
+            text-align: center;
+            width: 100%;
+        }
+        .header-metric-card:hover {
+            box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+        }
+        .metric-icon {
+            font-size: 1.2em;
+            margin-bottom: 4px;
+            color: var(--primary);
+            filter: drop-shadow(0 2px 8px rgba(102,126,234,0.12));
+        }
+        .kelembapan-card .metric-icon { color: #00cc88; }
+        .suhu-card .metric-icon { color: #ff6b6b; }
+        .metric-label {
+            font-size: 0.8em;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 2px;
+        }
+        .metric-value {
+            font-size: 0.9em;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 2px;
+            letter-spacing: -1px;
+            display: flex;
+            align-items: flex-end;
+        }
+        .kelembapan-card .metric-value { color: #00cc88; }
+        .suhu-card .metric-value { color: #ff6b6b; }
+        .metric-unit {
+            font-size: 0.7em;
+            margin-left: 4px;
+            font-weight: bold;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.12);
+        }
+        .suhu-card .metric-unit {
+            color: #ff6b6b !important;
+        }
+        .kelembapan-card .metric-unit {
+            color: #00cc88 !important;
+        }
+        }
+        .metric-detail {
+            font-size: 0.7em;
+            color: #fff !important;
+            margin-top: 1px;
+            text-align: center;
+            font-weight: 600;
+            text-shadow: 0 1px 6px rgba(0,0,0,0.18);
+        }
+        .header-center-content {
+            margin: 0 8px;
+            text-align: center;
+            width: 100%;
+        }
+        @media (max-width: 900px) {
+            .header-content.header-metric-row {
+                gap: 10px;
+                padding: 8px 2px 10px 2px;
+            }
+            .header-metric-card {
+                max-width: 90px;
+                min-width: 48px;
+                padding: 5px 2px 5px 2px;
+                font-size: 0.95em;
+                border-radius: 10px;
+            }
+            .header-center-content {
+                margin: 0 4px;
+            }
+        }
+        @media (max-width: 600px) {
+            .header-content.header-metric-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+                padding: 6px 2px 10px 2px;
+            }
+            .header-metric-card {
+                flex: none;
+                max-width: 320px;
+                min-width: 80px;
+                width: 90vw;
+                margin: 0 auto;
+                padding: 4px 2px 4px 2px;
+                font-size: 0.90em;
+                border-radius: 10px;
+            }
+            .header-metric-card.suhu-card {
+                margin-bottom: 6px;
+            }
+            .header-metric-card.kelembapan-card {
+                margin-top: 6px;
+            }
+            .header-center-content {
+                flex: none;
+                margin: 0;
+                padding: 8px 2px 8px 2px;
+            }
+            .header-center-content h1 {
+                font-size: 1.1em;
+                margin-bottom: 4px;
+            }
+            .header-center-content p {
+                font-size: 0.92em;
+                margin-bottom: 6px;
+            }
+            .header-subtitle {
+                margin-bottom: 2px;
+            }
+        }
+        </style>
 
         <!-- Statistics Cards -->
         <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Real-Time Metrics</h2>
@@ -1127,6 +1355,7 @@
                 <span class="stat-value">{{ $summary['mqtt']['total_data'] }}</span>
                 <span class="stat-unit">data points</span>
             </div>
+            <!-- Card Suhu & Kelembapan MQTT dihapus, sudah di header -->
             <div class="stat-card mqtt-color">
                 <div class="stat-icon mqtt"><i class="fas fa-clock"></i></div>
                 <span class="stat-label">MQTT - Avg Latency</span>
@@ -1151,6 +1380,99 @@
                 <span class="stat-value">{{ $summary['http']['total_data'] }}</span>
                 <span class="stat-unit">data points</span>
             </div>
+            <!-- Card Suhu & Kelembapan HTTP dihapus, sudah di header -->
+                    <style>
+                    .header-content { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+                    .header-metric-card {
+                        background: rgba(255,255,255,0.18);
+                        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+                        border-radius: 18px;
+                        padding: 32px 28px 24px 28px;
+                        min-width: 220px;
+                        max-width: 260px;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        border: 1.5px solid rgba(255,255,255,0.22);
+                        transition: box-shadow 0.3s;
+                    }
+                    .header-metric-card:hover {
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+                    }
+                    .metric-icon {
+                        font-size: 2.8em;
+                        margin-bottom: 10px;
+                        color: var(--primary);
+                        filter: drop-shadow(0 2px 8px rgba(102,126,234,0.12));
+                    }
+                    .kelembapan-card .metric-icon { color: #00cc88; }
+                    .suhu-card .metric-icon { color: #ff6b6b; }
+                    .metric-label {
+                        font-size: 1.1em;
+                        font-weight: 600;
+                        color: var(--text-dark);
+                        margin-bottom: 6px;
+                    }
+                    .metric-value {
+                        font-size: 2.2em;
+                        font-weight: bold;
+                        color: var(--primary);
+                        margin-bottom: 6px;
+                        letter-spacing: -1px;
+                        display: flex;
+                        align-items: flex-end;
+                    }
+                    .kelembapan-card .metric-value { color: #00cc88; }
+                    .suhu-card .metric-value { color: #ff6b6b; }
+                    .metric-unit {
+                        font-size: 0.6em;
+                        margin-left: 4px;
+                        font-weight: bold;
+                        text-shadow: 0 1px 4px rgba(0,0,0,0.12);
+                    }
+                    .suhu-card .metric-unit {
+                        color: #ff6b6b !important;
+                    }
+                    .kelembapan-card .metric-unit {
+                        color: #00cc88 !important;
+                    }
+                    .metric-detail {
+                        font-size: 0.95em;
+                        color: #fff !important;
+                        margin-top: 2px;
+                        text-align: center;
+                        font-weight: 600;
+                        text-shadow: 0 1px 6px rgba(0,0,0,0.18);
+                    }
+                    @media (max-width: 900px) {
+                        .header-content { flex-direction: column; gap: 18px; }
+                        .header-metric-card { min-width: 180px; max-width: 100%; padding: 22px 12px 16px 12px; }
+                    }
+                    </style>
+                <script>
+                // Animasi angka suhu & kelembapan di header
+                function animateHeaderMetric(id, target, unit) {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const start = 0;
+                    const end = parseFloat(target);
+                    const duration = 1200;
+                    const startTime = performance.now();
+                    function animate(now) {
+                        const elapsed = now - startTime;
+                        const progress = Math.min(elapsed / duration, 1);
+                        const value = start + (end - start) * (1 - Math.cos(progress * Math.PI)) / 2;
+                        el.innerHTML = value.toFixed(2) + '<span class="metric-unit">' + unit + '</span>';
+                        if (progress < 1) requestAnimationFrame(animate);
+                    }
+                    requestAnimationFrame(animate);
+                }
+                document.addEventListener('DOMContentLoaded', function() {
+                    animateHeaderMetric('avgSuhuValue', '{{ number_format(($mqttAvgSuhu + $httpAvgSuhu)/2, 2) }}', '°C');
+                    animateHeaderMetric('avgKelembapanValue', '{{ number_format(($mqttAvgKelembapan + $httpAvgKelembapan)/2, 2) }}', '%');
+                });
+                </script>
             <div class="stat-card http-color">
                 <div class="stat-icon http"><i class="fas fa-hourglass-end"></i></div>
                 <span class="stat-label">HTTP - Avg Latency</span>
@@ -1169,6 +1491,11 @@
                 <span class="stat-value">{{ $reliability['http_reliability'] }}%</span>
                 <span class="stat-unit">success rate</span>
             </div>
+            <form id="resetEksperimenForm" method="POST" action="{{ route('reset.data') }}" style="margin-bottom: 20px;">
+                @csrf
+                <button type="submit" style="background:#ff6b6b;color:white;padding:10px 24px;border:none;border-radius:8px;font-weight:bold;cursor:pointer;">Reset Data Eksperimen</button>
+                @if(session('status'))<span style="margin-left:20px;color:green;font-weight:bold;">{{ session('status') }}</span>@endif
+            </form>
         </div>
 
         <!-- Charts Section -->
@@ -1177,12 +1504,19 @@
             <div class="chart-container">
                 <h3 class="chart-title"><i class="fas fa-stopwatch"></i> Latency Comparison</h3>
                 @if(count($latencyChartData['labels']) > 0)
+                    <div class="chart-toolbar">
+                        <div class="chart-toolbar-info" id="latencyToolbarInfo">
+                            Total data point: {{ $latencyChartData['total_points'] }} | View: {{ min(10, $latencyChartData['total_points']) }}-{{ min(30, $latencyChartData['total_points']) }} data
+                        </div>
+                        <div class="zoom-controls">
+                            <button type="button" id="latencyZoomOut" class="zoom-btn" aria-label="Zoom Out">-</button>
+                            <button type="button" id="latencyZoomIn" class="zoom-btn" aria-label="Zoom In">+</button>
+                            <button type="button" id="latencyZoomReset" class="zoom-btn zoom-reset" aria-label="Reset Zoom">Reset</button>
+                        </div>
+                    </div>
+                    <div class="chart-hint">Geser kiri/kanan untuk melihat data lain. Zoom hanya lewat tombol supaya tetap rapi.</div>
                     <div class="chart-wrapper">
                         <canvas id="latencyChart"></canvas>
-                    </div>
-                    <div class="legend">
-                        <div class="legend-item"><div class="legend-color mqtt-legend"></div><span>MQTT Protocol</span></div>
-                        <div class="legend-item"><div class="legend-color http-legend"></div><span>HTTP Protocol</span></div>
                     </div>
                 @else
                     <div class="no-data"><i class="fas fa-chart-line"></i><p>Belum ada data</p></div>
@@ -1289,9 +1623,25 @@
         </div>
     </div>
 
+    <script id="latency-chart-data-json" type="application/json">@json($latencyChartData)</script>
+    <script id="power-chart-data-json" type="application/json">@json($powerChartData)</script>
+
     <script>
         let latencyChartInstance = null;
         let powerChartInstance = null;
+        let latestLatencyData = null;
+        let latestPowerData = null;
+
+        const latencyRuntimeState = {
+            totalPoints: 0,
+            minWindowPoints: 1,
+            maxWindowPoints: 1,
+            currentWindowSpan: 10,
+            lastUserActionAt: Date.now(),
+            idleAutoFollowMs: 5000,
+            controlsBound: false,
+            autoFollowFrameId: null,
+        };
 
         const chartOptions = {
             responsive: true,
@@ -1387,52 +1737,496 @@
             });
         }
 
-        function initCharts() {
-            const latencyData = @json($latencyChartData);
-            if (latencyData.labels.length > 0) {
-                const latencyCtx = document.getElementById('latencyChart');
-                if (latencyCtx) {
-                    if (latencyChartInstance) latencyChartInstance.destroy();
-                    latencyChartInstance = new Chart(latencyCtx.getContext('2d'), {
-                        type: 'bar',
-                        data: {
-                            labels: latencyData.labels,
-                            datasets: [
-                                { label: 'MQTT', data: latencyData.mqtt, backgroundColor: 'rgba(0, 102, 255, 0.8)', borderColor: '#0066ff', borderWidth: 2, borderRadius: 6, hoverBackgroundColor: 'rgba(0, 102, 255, 1)' },
-                                { label: 'HTTP', data: latencyData.http, backgroundColor: 'rgba(0, 204, 136, 0.8)', borderColor: '#00cc88', borderWidth: 2, borderRadius: 6, hoverBackgroundColor: 'rgba(0, 204, 136, 1)' }
-                            ]
-                        },
-                        options: { ...chartOptions, scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, x: { grid: { display: false } } } }
-                    });
-                }
-            }
+        function parseChartDataFromDocument(doc, elementId) {
+            const sourceDoc = doc || document;
+            const sourceElement = sourceDoc.getElementById(elementId);
+            if (!sourceElement) return null;
 
-            const powerData = @json($powerChartData);
-            if (powerData.labels.length > 0) {
-                const powerCtx = document.getElementById('powerChart');
-                if (powerCtx) {
-                    if (powerChartInstance) powerChartInstance.destroy();
-                    powerChartInstance = new Chart(powerCtx.getContext('2d'), {
-                        type: 'bar',
-                        data: {
-                            labels: powerData.labels,
-                            datasets: [
-                                { label: 'MQTT', data: powerData.mqtt, backgroundColor: 'rgba(0, 102, 255, 0.8)', borderColor: '#0066ff', borderWidth: 2, borderRadius: 6, hoverBackgroundColor: 'rgba(0, 102, 255, 1)' },
-                                { label: 'HTTP', data: powerData.http, backgroundColor: 'rgba(0, 204, 136, 0.8)', borderColor: '#00cc88', borderWidth: 2, borderRadius: 6, hoverBackgroundColor: 'rgba(0, 204, 136, 1)' }
-                            ]
-                        },
-                        options: { ...chartOptions, scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, x: { grid: { display: false } } } }
-                    });
-                }
+            try {
+                return JSON.parse(sourceElement.textContent || '{}');
+            } catch (error) {
+                console.log('Failed to parse chart JSON:', error);
+                return null;
             }
         }
 
+        function getChartPayload(doc) {
+            const payloadDoc = doc || document;
+            const latencyData = parseChartDataFromDocument(payloadDoc, 'latency-chart-data-json') || {};
+            const powerData = parseChartDataFromDocument(payloadDoc, 'power-chart-data-json') || {};
+
+            return {
+                latencyData: {
+                    labels: Array.isArray(latencyData.labels) ? latencyData.labels : [],
+                    time_labels: Array.isArray(latencyData.time_labels) ? latencyData.time_labels : [],
+                    full_time_labels: Array.isArray(latencyData.full_time_labels) ? latencyData.full_time_labels : [],
+                    datasets: Array.isArray(latencyData.datasets) ? latencyData.datasets : [],
+                    total_points: Number(latencyData.total_points || (Array.isArray(latencyData.labels) ? latencyData.labels.length : 0)),
+                },
+                powerData: {
+                    labels: Array.isArray(powerData.labels) ? powerData.labels : [],
+                    mqtt: Array.isArray(powerData.mqtt) ? powerData.mqtt : [],
+                    http: Array.isArray(powerData.http) ? powerData.http : [],
+                }
+            };
+        }
+
+        function decorateLatencyDataset(dataset) {
+            return {
+                ...dataset,
+                data: Array.isArray(dataset.data) ? dataset.data : [],
+                tension: 0.3,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                fill: false,
+            };
+        }
+
+        function getLatencyTimeLabel(pointIndex, useFull) {
+            if (!latestLatencyData) return '-';
+            const source = useFull ? latestLatencyData.full_time_labels : latestLatencyData.time_labels;
+            if (!Array.isArray(source)) return '-';
+            return source[pointIndex - 1] || '-';
+        }
+
+        function updateLatencyToolbarInfo() {
+            const toolbarInfo = document.getElementById('latencyToolbarInfo');
+            if (!toolbarInfo) return;
+
+            const total = latencyRuntimeState.totalPoints;
+            const minView = Math.min(10, total);
+            const maxView = Math.min(30, total);
+            toolbarInfo.textContent = `Total data point: ${total} | View: ${minView}-${maxView} data`;
+        }
+
+        function markLatencyUserAction() {
+            latencyRuntimeState.lastUserActionAt = Date.now();
+            if (latencyRuntimeState.autoFollowFrameId) {
+                cancelAnimationFrame(latencyRuntimeState.autoFollowFrameId);
+                latencyRuntimeState.autoFollowFrameId = null;
+            }
+        }
+
+        function isLatencyIdle() {
+            return (Date.now() - latencyRuntimeState.lastUserActionAt) >= latencyRuntimeState.idleAutoFollowMs;
+        }
+
+        function clampValue(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        function buildLatencyWindow(start, end) {
+            const totalPoints = latencyRuntimeState.totalPoints;
+            if (totalPoints <= 0) {
+                return { start: 0, end: 0, span: 0 };
+            }
+
+            const minWindowPoints = Math.min(latencyRuntimeState.minWindowPoints, totalPoints);
+            const maxWindowPoints = Math.min(latencyRuntimeState.maxWindowPoints, totalPoints);
+
+            let normalizedStart = Math.round(Number(start));
+            let normalizedEnd = Math.round(Number(end));
+
+            if (!Number.isFinite(normalizedStart) || !Number.isFinite(normalizedEnd)) {
+                normalizedEnd = totalPoints;
+                normalizedStart = Math.max(1, normalizedEnd - minWindowPoints + 1);
+            }
+
+            if (normalizedStart > normalizedEnd) {
+                const temp = normalizedStart;
+                normalizedStart = normalizedEnd;
+                normalizedEnd = temp;
+            }
+
+            const currentSpan = Math.max(1, normalizedEnd - normalizedStart + 1);
+            const targetSpan = clampValue(currentSpan, minWindowPoints, maxWindowPoints);
+            const center = normalizedStart + (currentSpan - 1) / 2;
+
+            normalizedStart = Math.round(center - (targetSpan - 1) / 2);
+            normalizedEnd = normalizedStart + targetSpan - 1;
+
+            if (normalizedStart < 1) {
+                normalizedEnd += 1 - normalizedStart;
+                normalizedStart = 1;
+            }
+
+            if (normalizedEnd > totalPoints) {
+                normalizedStart -= normalizedEnd - totalPoints;
+                normalizedEnd = totalPoints;
+            }
+
+            normalizedStart = clampValue(normalizedStart, 1, totalPoints);
+            normalizedEnd = clampValue(normalizedEnd, normalizedStart, totalPoints);
+
+            return {
+                start: normalizedStart,
+                end: normalizedEnd,
+                span: normalizedEnd - normalizedStart + 1,
+            };
+        }
+
+        function updateLatencyZoomButtons(span) {
+            const zoomInBtn = document.getElementById('latencyZoomIn');
+            const zoomOutBtn = document.getElementById('latencyZoomOut');
+
+            if (zoomInBtn) zoomInBtn.disabled = span <= latencyRuntimeState.minWindowPoints;
+            if (zoomOutBtn) zoomOutBtn.disabled = span >= latencyRuntimeState.maxWindowPoints;
+        }
+
+        function animateLatencyWindow(currentWindow, targetWindow, durationMs) {
+            if (!latencyChartInstance || !latencyChartInstance.scales || !latencyChartInstance.scales.x) return;
+
+            if (latencyRuntimeState.autoFollowFrameId) {
+                cancelAnimationFrame(latencyRuntimeState.autoFollowFrameId);
+                latencyRuntimeState.autoFollowFrameId = null;
+            }
+
+            const xScale = latencyChartInstance.scales.x;
+            const animationDuration = durationMs || 700;
+            const startTime = performance.now();
+            const easeOutCubic = (progress) => 1 - Math.pow(1 - progress, 3);
+
+            const step = (now) => {
+                if (!latencyChartInstance || !latencyChartInstance.scales || !latencyChartInstance.scales.x) {
+                    latencyRuntimeState.autoFollowFrameId = null;
+                    return;
+                }
+
+                const progress = Math.min((now - startTime) / animationDuration, 1);
+                const eased = easeOutCubic(progress);
+
+                const currentMin = currentWindow.start + (targetWindow.start - currentWindow.start) * eased;
+                const currentMax = currentWindow.end + (targetWindow.end - currentWindow.end) * eased;
+
+                xScale.options.min = currentMin;
+                xScale.options.max = currentMax;
+                latencyChartInstance.update('none');
+
+                if (progress < 1) {
+                    latencyRuntimeState.autoFollowFrameId = requestAnimationFrame(step);
+                    return;
+                }
+
+                xScale.options.min = targetWindow.start;
+                xScale.options.max = targetWindow.end;
+                latencyChartInstance.update('none');
+                latencyRuntimeState.currentWindowSpan = targetWindow.span;
+                updateLatencyZoomButtons(targetWindow.span);
+                latencyRuntimeState.autoFollowFrameId = null;
+            };
+
+            latencyRuntimeState.autoFollowFrameId = requestAnimationFrame(step);
+        }
+
+        function applyLatencyWindow(start, end, options) {
+            if (!latencyChartInstance || !latencyChartInstance.scales || !latencyChartInstance.scales.x) return null;
+
+            const applyOptions = options || {};
+            const animate = applyOptions.animate === true;
+            const targetWindow = buildLatencyWindow(start, end);
+            const xScale = latencyChartInstance.scales.x;
+            const currentWindow = buildLatencyWindow(xScale.min, xScale.max);
+
+            if (currentWindow.start === targetWindow.start && currentWindow.end === targetWindow.end) {
+                latencyRuntimeState.currentWindowSpan = targetWindow.span;
+                updateLatencyZoomButtons(targetWindow.span);
+                return targetWindow;
+            }
+
+            if (animate) {
+                animateLatencyWindow(currentWindow, targetWindow, applyOptions.durationMs || 700);
+                return targetWindow;
+            }
+
+            if (latencyRuntimeState.autoFollowFrameId) {
+                cancelAnimationFrame(latencyRuntimeState.autoFollowFrameId);
+                latencyRuntimeState.autoFollowFrameId = null;
+            }
+
+            xScale.options.min = targetWindow.start;
+            xScale.options.max = targetWindow.end;
+            latencyChartInstance.update('none');
+
+            latencyRuntimeState.currentWindowSpan = targetWindow.span;
+            updateLatencyZoomButtons(targetWindow.span);
+            return targetWindow;
+        }
+
+        function zoomLatencyByStep(direction) {
+            if (!latencyChartInstance || !latencyChartInstance.scales || !latencyChartInstance.scales.x) return;
+
+            const current = buildLatencyWindow(latencyChartInstance.scales.x.min, latencyChartInstance.scales.x.max);
+            const step = 2;
+            const targetSpan = direction === 'in'
+                ? Math.max(latencyRuntimeState.minWindowPoints, current.span - step)
+                : Math.min(latencyRuntimeState.maxWindowPoints, current.span + step);
+
+            const center = current.start + (current.span - 1) / 2;
+            const start = Math.round(center - (targetSpan - 1) / 2);
+            const end = start + targetSpan - 1;
+
+            applyLatencyWindow(start, end, { animate: false });
+        }
+
+        function bindLatencyControls() {
+            if (latencyRuntimeState.controlsBound) return;
+
+            const zoomInBtn = document.getElementById('latencyZoomIn');
+            const zoomOutBtn = document.getElementById('latencyZoomOut');
+            const zoomResetBtn = document.getElementById('latencyZoomReset');
+            if (!zoomInBtn || !zoomOutBtn || !zoomResetBtn) return;
+
+            zoomInBtn.addEventListener('click', function() {
+                markLatencyUserAction();
+                zoomLatencyByStep('in');
+            });
+
+            zoomOutBtn.addEventListener('click', function() {
+                markLatencyUserAction();
+                zoomLatencyByStep('out');
+            });
+
+            zoomResetBtn.addEventListener('click', function() {
+                markLatencyUserAction();
+                const end = latencyRuntimeState.totalPoints;
+                const span = clampValue(
+                    latencyRuntimeState.currentWindowSpan,
+                    latencyRuntimeState.minWindowPoints,
+                    latencyRuntimeState.maxWindowPoints
+                );
+                const start = Math.max(1, end - span + 1);
+                applyLatencyWindow(start, end, { animate: false });
+            });
+
+            latencyRuntimeState.controlsBound = true;
+        }
+
+        function bindLatencyCanvasInteractions(canvas) {
+            if (!canvas || canvas.dataset.latencyInteractionsBound === '1') return;
+
+            ['mousedown', 'touchstart', 'pointerdown'].forEach(function(eventName) {
+                canvas.addEventListener(eventName, markLatencyUserAction, { passive: true });
+            });
+
+            canvas.dataset.latencyInteractionsBound = '1';
+        }
+
+        function refreshLatencyChart(latencyData, options) {
+            const refreshOptions = options || {};
+            const initialLoad = refreshOptions.initialLoad === true;
+            const latencyCtx = document.getElementById('latencyChart');
+            if (!latencyCtx) return;
+
+            latestLatencyData = latencyData;
+            const totalPoints = Math.max(0, Number(latencyData.total_points || (latencyData.labels ? latencyData.labels.length : 0)));
+            latencyRuntimeState.totalPoints = totalPoints;
+
+            const defaultWindowPoints = Math.max(1, Math.min(10, Math.max(totalPoints, 1)));
+            latencyRuntimeState.minWindowPoints = totalPoints > 0 ? Math.min(defaultWindowPoints, totalPoints) : 1;
+            latencyRuntimeState.maxWindowPoints = totalPoints > 0
+                ? Math.min(totalPoints, Math.max(latencyRuntimeState.minWindowPoints, 30))
+                : 1;
+
+            if (!Number.isFinite(latencyRuntimeState.currentWindowSpan) || latencyRuntimeState.currentWindowSpan <= 0 || initialLoad) {
+                latencyRuntimeState.currentWindowSpan = latencyRuntimeState.minWindowPoints;
+            }
+
+            latencyRuntimeState.currentWindowSpan = clampValue(
+                latencyRuntimeState.currentWindowSpan,
+                latencyRuntimeState.minWindowPoints,
+                latencyRuntimeState.maxWindowPoints
+            );
+            updateLatencyToolbarInfo();
+
+            if (totalPoints === 0 || !Array.isArray(latencyData.datasets) || latencyData.datasets.length === 0) {
+                if (latencyChartInstance) {
+                    latencyChartInstance.destroy();
+                    latencyChartInstance = null;
+                }
+                return;
+            }
+
+            const previousWindow = latencyChartInstance && latencyChartInstance.scales && latencyChartInstance.scales.x
+                ? buildLatencyWindow(latencyChartInstance.scales.x.min, latencyChartInstance.scales.x.max)
+                : null;
+
+            const decoratedDatasets = latencyData.datasets.map(decorateLatencyDataset);
+
+            if (!latencyChartInstance) {
+                const initialEnd = totalPoints;
+                const initialStart = Math.max(1, initialEnd - latencyRuntimeState.currentWindowSpan + 1);
+
+                latencyChartInstance = new Chart(latencyCtx.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        datasets: decoratedDatasets
+                    },
+                    options: {
+                        ...chartOptions,
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, title: { display: true, text: 'Latency (ms)' } },
+                            x: {
+                                type: 'linear',
+                                grid: { display: false },
+                                title: { display: true, text: 'Urutan Data (WIB - Surabaya)' },
+                                min: initialStart,
+                                max: initialEnd,
+                                ticks: {
+                                    autoSkip: true,
+                                    maxTicksLimit: 6,
+                                    callback: function(value) {
+                                        const pointIndex = Math.round(value);
+                                        if (pointIndex < 1 || pointIndex > latencyRuntimeState.totalPoints) return '';
+                                        return getLatencyTimeLabel(pointIndex, false);
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true },
+                            tooltip: {
+                                backgroundColor: 'rgba(0,0,0,0.8)',
+                                padding: 12,
+                                cornerRadius: 8,
+                                titleFont: { size: 12, weight: 'bold' },
+                                bodyFont: { size: 11 },
+                                callbacks: {
+                                    title: function(items) {
+                                        const firstItem = items && items.length ? items[0] : null;
+                                        const parsedX = firstItem && firstItem.parsed ? firstItem.parsed.x : 0;
+                                        const pointIndex = Math.round(parsedX || 0);
+                                        return `Data #${pointIndex} | ${getLatencyTimeLabel(pointIndex, true)}`;
+                                    },
+                                    label: function(context) {
+                                        const device = context.raw && context.raw.device ? context.raw.device : '';
+                                        return `${context.dataset.label}: ${context.parsed.y} ms (${device})`;
+                                    }
+                                }
+                            },
+                            zoom: {
+                                pan: {
+                                    enabled: true,
+                                    mode: 'x',
+                                    threshold: 6,
+                                    onPanStart: function() {
+                                        markLatencyUserAction();
+                                    },
+                                    onPanComplete: function({chart}) {
+                                        markLatencyUserAction();
+                                        applyLatencyWindow(chart.scales.x.min, chart.scales.x.max, { animate: false });
+                                    }
+                                },
+                                zoom: {
+                                    mode: 'x',
+                                    wheel: { enabled: false },
+                                    pinch: { enabled: false },
+                                    drag: { enabled: false }
+                                },
+                                limits: {
+                                    x: { min: 1, max: totalPoints, minRange: latencyRuntimeState.minWindowPoints }
+                                }
+                            }
+                        },
+                        animation: false
+                    }
+                });
+
+                bindLatencyControls();
+                bindLatencyCanvasInteractions(latencyCtx);
+                applyLatencyWindow(initialStart, initialEnd, { animate: false });
+                return;
+            }
+
+            latencyChartInstance.data.datasets = decoratedDatasets;
+            latencyChartInstance.options.scales.x.max = totalPoints;
+            latencyChartInstance.options.plugins.zoom.limits.x.max = totalPoints;
+            latencyChartInstance.options.plugins.zoom.limits.x.minRange = latencyRuntimeState.minWindowPoints;
+            latencyChartInstance.update('none');
+
+            const preservedSpan = previousWindow ? previousWindow.span : latencyRuntimeState.currentWindowSpan;
+            latencyRuntimeState.currentWindowSpan = clampValue(
+                preservedSpan,
+                latencyRuntimeState.minWindowPoints,
+                latencyRuntimeState.maxWindowPoints
+            );
+
+            const shouldFollowLatest = initialLoad || isLatencyIdle();
+            if (shouldFollowLatest) {
+                const followEnd = totalPoints;
+                const followStart = Math.max(1, followEnd - latencyRuntimeState.currentWindowSpan + 1);
+                applyLatencyWindow(followStart, followEnd, { animate: !initialLoad, durationMs: 650 });
+            } else if (previousWindow) {
+                const preservedStart = previousWindow.start;
+                const preservedEnd = preservedStart + latencyRuntimeState.currentWindowSpan - 1;
+                applyLatencyWindow(preservedStart, preservedEnd, { animate: false });
+            } else {
+                const fallbackEnd = totalPoints;
+                const fallbackStart = Math.max(1, fallbackEnd - latencyRuntimeState.currentWindowSpan + 1);
+                applyLatencyWindow(fallbackStart, fallbackEnd, { animate: false });
+            }
+
+            bindLatencyControls();
+            bindLatencyCanvasInteractions(latencyCtx);
+        }
+
+        function refreshPowerChart(powerData) {
+            latestPowerData = powerData;
+            const powerCtx = document.getElementById('powerChart');
+            if (!powerCtx) return;
+
+            const hasData = powerData.labels.length > 0;
+            if (!hasData) {
+                if (powerChartInstance) {
+                    powerChartInstance.destroy();
+                    powerChartInstance = null;
+                }
+                return;
+            }
+
+            if (!powerChartInstance) {
+                powerChartInstance = new Chart(powerCtx.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: powerData.labels,
+                        datasets: [
+                            { label: 'MQTT', data: powerData.mqtt, backgroundColor: 'rgba(0, 102, 255, 0.8)', borderColor: '#0066ff', borderWidth: 2, borderRadius: 6, hoverBackgroundColor: 'rgba(0, 102, 255, 1)' },
+                            { label: 'HTTP', data: powerData.http, backgroundColor: 'rgba(0, 204, 136, 0.8)', borderColor: '#00cc88', borderWidth: 2, borderRadius: 6, hoverBackgroundColor: 'rgba(0, 204, 136, 1)' }
+                        ]
+                    },
+                    options: { ...chartOptions, scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }, x: { grid: { display: false } } } }
+                });
+                return;
+            }
+
+            powerChartInstance.data.labels = powerData.labels;
+            powerChartInstance.data.datasets[0].data = powerData.mqtt;
+            powerChartInstance.data.datasets[1].data = powerData.http;
+            powerChartInstance.update('none');
+        }
+
+        function initCharts(doc, options) {
+            const payload = getChartPayload(doc || document);
+            refreshLatencyChart(payload.latencyData, options || { initialLoad: true });
+            refreshPowerChart(payload.powerData);
+        }
+
         function autoRefreshData() {
-            fetch(window.location.href)
+            fetch(window.location.href, { cache: 'no-store' })
                 .then(response => response.text())
                 .then(html => {
                     const parser = new DOMParser();
                     const newDoc = parser.parseFromString(html, 'text/html');
+
+                    // Keep CSRF token on reset form in sync with latest session token.
+                    const currentResetForm = document.getElementById('resetEksperimenForm');
+                    const freshResetForm = newDoc.getElementById('resetEksperimenForm');
+                    if (currentResetForm && freshResetForm) {
+                        const currentTokenInput = currentResetForm.querySelector('input[name="_token"]');
+                        const freshTokenInput = freshResetForm.querySelector('input[name="_token"]');
+                        if (currentTokenInput && freshTokenInput && freshTokenInput.value) {
+                            currentTokenInput.value = freshTokenInput.value;
+                        }
+                    }
 
                     // Update and animate stat values
                     document.querySelectorAll('.stat-value').forEach((el, index) => {
@@ -1459,13 +2253,25 @@
                         }
                     });
 
-                    // Charts only animate on initial load, not on refresh
+                    const currentHasLatencyChart = !!document.getElementById('latencyChart');
+                    const nextHasLatencyChart = !!newDoc.getElementById('latencyChart');
+                    const currentHasPowerChart = !!document.getElementById('powerChart');
+                    const nextHasPowerChart = !!newDoc.getElementById('powerChart');
+
+                    // Jika struktur berubah (misal habis reset jadi no-data), reload sekali agar DOM sinkron.
+                    if (currentHasLatencyChart !== nextHasLatencyChart || currentHasPowerChart !== nextHasPowerChart) {
+                        window.location.reload();
+                        return;
+                    }
+
+                    // Refresh chart data terbaru; jika user idle akan auto-follow halus ke paling kanan.
+                    initCharts(newDoc, { initialLoad: false });
                 })
                 .catch(err => console.log('Auto-refresh failed:', err));
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            initCharts();
+            initCharts(document, { initialLoad: true });
             
             // Animate all stat values immediately on load
             document.querySelectorAll('.stat-value').forEach(el => {

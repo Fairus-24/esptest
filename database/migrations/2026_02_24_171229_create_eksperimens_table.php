@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('device_id')->constrained();
             $table->enum('protokol', ['MQTT', 'HTTP']);
             $table->float('suhu');
+            $table->float('kelembapan')->nullable();
             $table->timestamp('timestamp_esp')->nullable();
             $table->timestamp('timestamp_server')->useCurrent();
             $table->float('latency_ms');

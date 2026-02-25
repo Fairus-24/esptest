@@ -10,6 +10,7 @@ class Eksperimen extends Model
         'device_id',
         'protokol',
         'suhu',
+        'kelembapan',
         'timestamp_esp',
         'timestamp_server',
         'latency_ms',
@@ -24,5 +25,10 @@ class Eksperimen extends Model
     public function device()
     {
         return $this->belongsTo(Device::class);
+    }
+
+    public function getLatencyMsAttribute($value): float
+    {
+        return abs((float) $value);
     }
 }

@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Services\LaravelHttpAutoStarter;
+use App\Services\MosquittoAutoStarter;
+use App\Services\MqttWorkerAutoStarter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +22,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        if ($this->app->runningInConsole() || $this->app->runningUnitTests()) {
+            return;
+        }
+
+        app(LaravelHttpAutoStarter::class)->ensureRunning();
+        app(MosquittoAutoStarter::class)->ensureRunning();
+        app(MqttWorkerAutoStarter::class)->ensureRunning();
     }
 }
