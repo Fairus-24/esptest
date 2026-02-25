@@ -130,9 +130,30 @@ function Start-DetachedProcess {
         return $false
     }
 
+    $resolvedArguments = @()
+    foreach ($arg in $ArgumentList) {
+        if ($null -eq $arg) {
+            $resolvedArguments += '""'
+            continue
+        }
+
+        $escaped = [string]$arg
+        if ($escaped.Contains('"')) {
+            $escaped = $escaped.Replace('"', '\"')
+        }
+
+        if ($escaped -eq '' -or $escaped -match '\s') {
+            $resolvedArguments += ('"' + $escaped + '"')
+        } else {
+            $resolvedArguments += $escaped
+        }
+    }
+
+    $argumentLine = $resolvedArguments -join ' '
+
     Start-Process `
         -FilePath $FilePath `
-        -ArgumentList $ArgumentList `
+        -ArgumentList $argumentLine `
         -WorkingDirectory $WorkingDirectory `
         -WindowStyle Hidden `
         -RedirectStandardOutput $StdOutPath `

@@ -11,17 +11,40 @@ if (-not (Test-Path $scriptPath -PathType Leaf)) {
     throw "Startup script not found: $scriptPath"
 }
 
+function Invoke-QuietCmd {
+    param([string]$Command)
+
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    cmd.exe /c $Command > $null 2> $null
+    $exitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previous
+
+    return $exitCode
+}
+
 $taskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
 $registered = $false
 
 if (-not $ForceStartupFolder) {
+    $bootTaskName = "$TaskName`_boot"
+    $bootCreateCommand = "schtasks /Create /TN `"$bootTaskName`" /SC ONSTART /RU SYSTEM /TR `"$taskCommand`" /F"
+    $bootRunCommand = "schtasks /Run /TN `"$bootTaskName`""
+
+    if ((Invoke-QuietCmd -Command $bootCreateCommand) -eq 0) {
+        Invoke-QuietCmd -Command $bootRunCommand | Out-Null
+        Write-Output "Task '$bootTaskName' (ONSTART/SYSTEM) berhasil dibuat."
+        $registered = $true
+    }
+}
+
+if (-not $registered -and -not $ForceStartupFolder) {
     $createCommand = "schtasks /Create /TN `"$TaskName`" /SC ONLOGON /TR `"$taskCommand`" /F"
     $runCommand = "schtasks /Run /TN `"$TaskName`""
 
-    cmd.exe /c $createCommand | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        cmd.exe /c $runCommand | Out-Null
-        Write-Output "Task '$TaskName' berhasil dibuat dan dijalankan."
+    if ((Invoke-QuietCmd -Command $createCommand) -eq 0) {
+        Invoke-QuietCmd -Command $runCommand | Out-Null
+        Write-Output "Task '$TaskName' (ONLOGON) berhasil dibuat dan dijalankan."
         $registered = $true
     }
 }
