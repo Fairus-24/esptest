@@ -79,6 +79,7 @@ The project has been updated with the following behavior:
 20. ESP32 payload generation now uses payload-byte-aware power estimation (two-pass build), so sent `daya` is closer to actual transmission conditions.
 21. ESP32 validates required fields before sending/publishing to ensure HTTP and MQTT always carry the same complete core telemetry fields.
 22. Protocol payloads include detailed telemetry (`rssi_dbm`, `tx_duration_ms`, `payload_bytes`, `uptime_s`, `free_heap_bytes`) plus send counters for deeper diagnostics.
+23. On mobile, `Statistical Analysis` cards are centered and aligned consistently with tablet layout.
 
 ## Tech Stack
 
@@ -347,6 +348,7 @@ Other dashboard behavior:
 - reliability card now includes sequence continuity (`received/expected`), payload completeness, and transmission-health score
 - power chart now plots realtime power per data point (windowed view) instead of static per-device averages
 - power statistical section remains visible even when variance is zero (constant dataset case)
+- statistical cards remain centered on mobile, matching tablet alignment/flow
 
 ## Reliability Formula (Current)
 

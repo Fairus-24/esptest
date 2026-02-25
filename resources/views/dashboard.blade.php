@@ -1502,6 +1502,46 @@
                 min-height: 220px;
                 height: 250px;
             }
+
+            /* Keep Statistical Analysis layout centered and consistent with tablet */
+            .ttest-section {
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .ttest-title,
+            .ttest-subsection h3 {
+                text-align: center;
+                justify-content: center;
+            }
+
+            .ttest-grid {
+                grid-template-columns: 1fr;
+                justify-items: center;
+                gap: 16px;
+            }
+
+            .ttest-card {
+                width: 100%;
+                max-width: 560px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .ttest-row {
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+            }
+
+            .ttest-label {
+                margin-bottom: 0;
+                text-align: left;
+            }
+
+            .ttest-value {
+                text-align: right;
+            }
         }
     </style>
 </head>
