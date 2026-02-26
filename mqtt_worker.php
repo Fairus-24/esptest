@@ -147,6 +147,9 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
     $payloadBytes = (int) $data['payload_bytes'];
     $uptimeSeconds = (int) $data['uptime_s'];
     $freeHeapBytes = (int) $data['free_heap_bytes'];
+    $sensorAgeMs = null;
+    $sensorReadSeq = null;
+    $sendTickMs = null;
 
     if ($kelembapan < 0 || $kelembapan > 100) {
         $log('[ERROR] Payload MQTT kelembapan di luar rentang 0-100%.');
@@ -188,6 +191,30 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
         return;
     }
 
+    if (array_key_exists('sensor_age_ms', $data)) {
+        if (!is_numeric($data['sensor_age_ms']) || (int) $data['sensor_age_ms'] < 0) {
+            $log('[ERROR] Payload MQTT sensor_age_ms harus numerik dan >= 0.');
+            return;
+        }
+        $sensorAgeMs = (int) $data['sensor_age_ms'];
+    }
+
+    if (array_key_exists('sensor_read_seq', $data)) {
+        if (!is_numeric($data['sensor_read_seq']) || (int) $data['sensor_read_seq'] < 0) {
+            $log('[ERROR] Payload MQTT sensor_read_seq harus numerik dan >= 0.');
+            return;
+        }
+        $sensorReadSeq = (int) $data['sensor_read_seq'];
+    }
+
+    if (array_key_exists('send_tick_ms', $data)) {
+        if (!is_numeric($data['send_tick_ms']) || (int) $data['send_tick_ms'] < 0) {
+            $log('[ERROR] Payload MQTT send_tick_ms harus numerik dan >= 0.');
+            return;
+        }
+        $sendTickMs = (int) $data['send_tick_ms'];
+    }
+
     $deviceId = (int) $data['device_id'];
     if (!array_key_exists($deviceId, $knownDeviceIds)) {
         $knownDeviceIds[$deviceId] = Device::query()->whereKey($deviceId)->exists();
@@ -217,9 +244,12 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
         'payload_bytes' => $payloadBytes,
         'uptime_s' => $uptimeSeconds,
         'free_heap_bytes' => $freeHeapBytes,
+        'sensor_age_ms' => $sensorAgeMs,
+        'sensor_read_seq' => $sensorReadSeq,
+        'send_tick_ms' => $sendTickMs,
     ]);
 
-    $log("[DB] MQTT data saved. device_id={$deviceId}, packet_seq={$packetSeq}, suhu={$suhu}, kelembapan={$kelembapan}, daya={$daya}, latency_ms={$latencyMs}, rssi_dbm={$rssiDbm}, tx_duration_ms={$txDurationMs}, payload_bytes={$payloadBytes}");
+    $log("[DB] MQTT data saved. device_id={$deviceId}, packet_seq={$packetSeq}, suhu={$suhu}, kelembapan={$kelembapan}, daya={$daya}, latency_ms={$latencyMs}, rssi_dbm={$rssiDbm}, tx_duration_ms={$txDurationMs}, payload_bytes={$payloadBytes}, sensor_age_ms=" . ($sensorAgeMs ?? '-') . ", sensor_read_seq=" . ($sensorReadSeq ?? '-') . ", send_tick_ms=" . ($sendTickMs ?? '-'));
 };
 
 $log('[MQTT] Worker starting. Broker candidates=' . implode(', ', $brokerHosts) . ", Port={$port}, Topic={$topic}");

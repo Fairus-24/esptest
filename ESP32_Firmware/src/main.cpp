@@ -71,8 +71,29 @@ void connectMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 float calculatePowerConsumption();
 float estimateProtocolPower(const char* protocol, float txDurationMs, size_t payloadBytes, int rssiDbm, bool success);
-void fillProtocolPayload(StaticJsonDocument<640>& jsonDoc, const char* protocol, uint32_t packetSeq, float dayaMw, float txDurationMs, uint32_t payloadBytes, int rssiDbm, long timestampEsp);
-String buildProtocolPayload(const char* protocol, uint32_t packetSeq, float dayaMw, float txDurationMs, int rssiDbm, long timestampEsp, uint32_t* payloadBytesOut = nullptr);
+void fillProtocolPayload(
+    StaticJsonDocument<768>& jsonDoc,
+    const char* protocol,
+    uint32_t packetSeq,
+    float dayaMw,
+    float txDurationMs,
+    uint32_t payloadBytes,
+    int rssiDbm,
+    long timestampEsp,
+    uint32_t sensorAgeMs,
+    uint32_t sensorReadSeq
+);
+String buildProtocolPayload(
+    const char* protocol,
+    uint32_t packetSeq,
+    float dayaMw,
+    float txDurationMs,
+    int rssiDbm,
+    long timestampEsp,
+    uint32_t sensorAgeMs,
+    uint32_t sensorReadSeq,
+    uint32_t* payloadBytesOut = nullptr
+);
 bool payloadHasRequiredFields(const String& payload);
 void printStatus();
 void updateTime();
@@ -269,10 +290,14 @@ void sendHTTP() {
     uint32_t packetSeq = ++httpPacketSeq;
     int rssiDbm = WiFi.RSSI();
     float expectedTxMs = max(20.0f, (lastHttpTxDurationMs * 0.65f) + (fabsf((float) rssiDbm) * 0.35f));
+    uint32_t sensorAgeMs = (lastSensorRead > 0 && millis() >= (unsigned long) lastSensorRead)
+        ? (uint32_t) (millis() - (unsigned long) lastSensorRead)
+        : 0U;
+    uint32_t sensorReadSeq = (uint32_t) sensorReadCount;
     uint32_t payloadBytes = 0;
-    String payload = buildProtocolPayload("HTTP", packetSeq, lastHttpPower, expectedTxMs, rssiDbm, timestampEsp, &payloadBytes);
+    String payload = buildProtocolPayload("HTTP", packetSeq, lastHttpPower, expectedTxMs, rssiDbm, timestampEsp, sensorAgeMs, sensorReadSeq, &payloadBytes);
     float predictedPower = estimateProtocolPower("HTTP", expectedTxMs, payloadBytes, rssiDbm, true);
-    payload = buildProtocolPayload("HTTP", packetSeq, predictedPower, expectedTxMs, rssiDbm, timestampEsp, &payloadBytes);
+    payload = buildProtocolPayload("HTTP", packetSeq, predictedPower, expectedTxMs, rssiDbm, timestampEsp, sensorAgeMs, sensorReadSeq, &payloadBytes);
     if (!payloadHasRequiredFields(payload)) {
         Serial.println("[HTTP] Payload invalid (missing required fields), skipping send");
         httpSendFail++;
@@ -366,10 +391,14 @@ void sendMQTT() {
     uint32_t packetSeq = ++mqttPacketSeq;
     int rssiDbm = WiFi.RSSI();
     float expectedTxMs = max(5.0f, (lastMqttTxDurationMs * 0.70f) + (fabsf((float) rssiDbm) * 0.18f));
+    uint32_t sensorAgeMs = (lastSensorRead > 0 && millis() >= (unsigned long) lastSensorRead)
+        ? (uint32_t) (millis() - (unsigned long) lastSensorRead)
+        : 0U;
+    uint32_t sensorReadSeq = (uint32_t) sensorReadCount;
     uint32_t payloadBytes = 0;
-    String payload = buildProtocolPayload("MQTT", packetSeq, lastMqttPower, expectedTxMs, rssiDbm, (long) now, &payloadBytes);
+    String payload = buildProtocolPayload("MQTT", packetSeq, lastMqttPower, expectedTxMs, rssiDbm, (long) now, sensorAgeMs, sensorReadSeq, &payloadBytes);
     float predictedPower = estimateProtocolPower("MQTT", expectedTxMs, payloadBytes, rssiDbm, true);
-    payload = buildProtocolPayload("MQTT", packetSeq, predictedPower, expectedTxMs, rssiDbm, (long) now, &payloadBytes);
+    payload = buildProtocolPayload("MQTT", packetSeq, predictedPower, expectedTxMs, rssiDbm, (long) now, sensorAgeMs, sensorReadSeq, &payloadBytes);
     if (!payloadHasRequiredFields(payload)) {
         Serial.println("[MQTT] Payload invalid (missing required fields), skipping publish");
         mqttSendFail++;
@@ -519,7 +548,18 @@ float estimateProtocolPower(const char* protocol, float txDurationMs, size_t pay
     return max(0.0f, powerMw);
 }
 
-void fillProtocolPayload(StaticJsonDocument<640>& jsonDoc, const char* protocol, uint32_t packetSeq, float dayaMw, float txDurationMs, uint32_t payloadBytes, int rssiDbm, long timestampEsp) {
+void fillProtocolPayload(
+    StaticJsonDocument<768>& jsonDoc,
+    const char* protocol,
+    uint32_t packetSeq,
+    float dayaMw,
+    float txDurationMs,
+    uint32_t payloadBytes,
+    int rssiDbm,
+    long timestampEsp,
+    uint32_t sensorAgeMs,
+    uint32_t sensorReadSeq
+) {
     jsonDoc["device_id"] = DEVICE_ID;
     jsonDoc["protokol"] = protocol;
     jsonDoc["packet_seq"] = packetSeq;
@@ -532,6 +572,9 @@ void fillProtocolPayload(StaticJsonDocument<640>& jsonDoc, const char* protocol,
     jsonDoc["payload_bytes"] = payloadBytes;
     jsonDoc["uptime_s"] = (uint32_t) (millis() / 1000UL);
     jsonDoc["free_heap_bytes"] = (uint32_t) ESP.getFreeHeap();
+    jsonDoc["sensor_age_ms"] = sensorAgeMs;
+    jsonDoc["sensor_read_seq"] = sensorReadSeq;
+    jsonDoc["send_tick_ms"] = (uint32_t) millis();
     jsonDoc["sensor_reads"] = sensorReadCount;
     jsonDoc["http_success_count"] = httpSendSuccess;
     jsonDoc["http_fail_count"] = httpSendFail;
@@ -539,15 +582,25 @@ void fillProtocolPayload(StaticJsonDocument<640>& jsonDoc, const char* protocol,
     jsonDoc["mqtt_fail_count"] = mqttSendFail;
 }
 
-String buildProtocolPayload(const char* protocol, uint32_t packetSeq, float dayaMw, float txDurationMs, int rssiDbm, long timestampEsp, uint32_t* payloadBytesOut) {
-    StaticJsonDocument<640> jsonDoc;
-    fillProtocolPayload(jsonDoc, protocol, packetSeq, dayaMw, txDurationMs, 0, rssiDbm, timestampEsp);
+String buildProtocolPayload(
+    const char* protocol,
+    uint32_t packetSeq,
+    float dayaMw,
+    float txDurationMs,
+    int rssiDbm,
+    long timestampEsp,
+    uint32_t sensorAgeMs,
+    uint32_t sensorReadSeq,
+    uint32_t* payloadBytesOut
+) {
+    StaticJsonDocument<768> jsonDoc;
+    fillProtocolPayload(jsonDoc, protocol, packetSeq, dayaMw, txDurationMs, 0, rssiDbm, timestampEsp, sensorAgeMs, sensorReadSeq);
 
     String payload;
     serializeJson(jsonDoc, payload);
     uint32_t payloadBytes = (uint32_t) payload.length();
 
-    fillProtocolPayload(jsonDoc, protocol, packetSeq, dayaMw, txDurationMs, payloadBytes, rssiDbm, timestampEsp);
+    fillProtocolPayload(jsonDoc, protocol, packetSeq, dayaMw, txDurationMs, payloadBytes, rssiDbm, timestampEsp, sensorAgeMs, sensorReadSeq);
     payload = "";
     serializeJson(jsonDoc, payload);
     payloadBytes = (uint32_t) payload.length();
@@ -693,5 +746,3 @@ void updateTime() {
     Serial.print("[TIME] ✓ Time synchronized: ");
     Serial.println(ctime(&now));
 }
-
-

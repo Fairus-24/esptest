@@ -68,6 +68,91 @@ class DashboardController extends Controller
             ->filter(static fn($value) => $value !== null)
             ->avg() ?? 0;
 
+        $displayTimezone = 'Asia/Jakarta'; // Surabaya timezone (WIB)
+
+        $formatToWib = static function ($value) use ($displayTimezone): string {
+            if (!$value) {
+                return '-';
+            }
+
+            try {
+                return (clone $value)->setTimezone($displayTimezone)->format('d-m-Y H:i:s') . ' WIB';
+            } catch (\Throwable) {
+                return '-';
+            }
+        };
+
+        $latestMqtt = $mqttData->sortByDesc('id')->first();
+        $latestHttp = $httpData->sortByDesc('id')->first();
+
+        $buildProtocolDetail = static function ($row, string $protocol) use ($formatToWib) {
+            if (!$row) {
+                return [
+                    'protocol' => $protocol,
+                    'available' => false,
+                ];
+            }
+
+            return [
+                'protocol' => $protocol,
+                'available' => true,
+                'id' => (int) $row->id,
+                'packet_seq' => $row->packet_seq !== null ? (int) $row->packet_seq : null,
+                'suhu' => $row->suhu !== null ? round((float) $row->suhu, 2) : null,
+                'kelembapan' => $row->kelembapan !== null ? round((float) $row->kelembapan, 2) : null,
+                'latency_ms' => $row->latency_ms !== null ? round((float) $row->latency_ms, 2) : null,
+                'daya_mw' => $row->daya_mw !== null ? round((float) $row->daya_mw, 2) : null,
+                'rssi_dbm' => $row->rssi_dbm !== null ? (int) $row->rssi_dbm : null,
+                'tx_duration_ms' => $row->tx_duration_ms !== null ? round((float) $row->tx_duration_ms, 2) : null,
+                'payload_bytes' => $row->payload_bytes !== null ? (int) $row->payload_bytes : null,
+                'uptime_s' => $row->uptime_s !== null ? (int) $row->uptime_s : null,
+                'free_heap_bytes' => $row->free_heap_bytes !== null ? (int) $row->free_heap_bytes : null,
+                'sensor_age_ms' => $row->sensor_age_ms !== null ? (int) $row->sensor_age_ms : null,
+                'sensor_read_seq' => $row->sensor_read_seq !== null ? (int) $row->sensor_read_seq : null,
+                'send_tick_ms' => $row->send_tick_ms !== null ? (int) $row->send_tick_ms : null,
+                'timestamp_esp' => $formatToWib($row->timestamp_esp),
+                'timestamp_server' => $formatToWib($row->timestamp_server ?? $row->created_at),
+            ];
+        };
+
+        $protocolDiagnostics = [
+            'mqtt' => $buildProtocolDetail($latestMqtt, 'MQTT'),
+            'http' => $buildProtocolDetail($latestHttp, 'HTTP'),
+            'delta' => null,
+            'pair_available' => false,
+            'sensor_sync_note' => null,
+        ];
+
+        if ($latestMqtt && $latestHttp) {
+            $mqttServerTs = $latestMqtt->timestamp_server ?? $latestMqtt->created_at;
+            $httpServerTs = $latestHttp->timestamp_server ?? $latestHttp->created_at;
+            $serverGapMs = ($mqttServerTs && $httpServerTs)
+                ? abs((float) $mqttServerTs->floatDiffInMilliseconds($httpServerTs))
+                : null;
+
+            $deltaSuhu = ((float) $latestMqtt->suhu) - ((float) $latestHttp->suhu);
+            $deltaKelembapan = ((float) $latestMqtt->kelembapan) - ((float) $latestHttp->kelembapan);
+
+            $protocolDiagnostics['delta'] = [
+                'suhu' => round($deltaSuhu, 2),
+                'kelembapan' => round($deltaKelembapan, 2),
+                'latency_ms' => round(((float) $latestMqtt->latency_ms) - ((float) $latestHttp->latency_ms), 2),
+                'daya_mw' => round(((float) $latestMqtt->daya_mw) - ((float) $latestHttp->daya_mw), 2),
+                'tx_duration_ms' => round(((float) $latestMqtt->tx_duration_ms) - ((float) $latestHttp->tx_duration_ms), 2),
+                'payload_bytes' => ((int) $latestMqtt->payload_bytes) - ((int) $latestHttp->payload_bytes),
+                'rssi_dbm' => ((int) $latestMqtt->rssi_dbm) - ((int) $latestHttp->rssi_dbm),
+                'sensor_age_ms' => ((int) ($latestMqtt->sensor_age_ms ?? 0)) - ((int) ($latestHttp->sensor_age_ms ?? 0)),
+                'server_gap_ms' => $serverGapMs !== null ? round($serverGapMs, 2) : null,
+            ];
+            $protocolDiagnostics['pair_available'] = true;
+
+            if (abs($deltaSuhu) < 0.01 && abs($deltaKelembapan) < 0.01) {
+                $protocolDiagnostics['sensor_sync_note'] = 'Nilai suhu/kelembapan identik pada sampel terbaru. Ini normal karena firmware memakai snapshot sensor yang sama untuk HTTP dan MQTT.';
+            } else {
+                $protocolDiagnostics['sensor_sync_note'] = 'Nilai suhu/kelembapan berbeda di sampel terbaru. Ini bisa terjadi karena timing kirim protokol tidak persis bersamaan.';
+            }
+        }
+
         // Data quality checks: kedua protokol wajib mengirim field lengkap yang sama.
         $requiredFields = [
             'suhu' => 'Suhu',
@@ -82,6 +167,9 @@ class DashboardController extends Controller
             'payload_bytes' => 'Payload Bytes',
             'uptime_s' => 'Uptime',
             'free_heap_bytes' => 'Free Heap',
+            'sensor_age_ms' => 'Sensor Age',
+            'sensor_read_seq' => 'Sensor Read Seq',
+            'send_tick_ms' => 'Send Tick',
         ];
 
         $protocolDataMap = [
@@ -189,7 +277,6 @@ class DashboardController extends Controller
             'display_timezone' => 'Asia/Jakarta',
         ];
 
-        $displayTimezone = 'Asia/Jakarta'; // Surabaya timezone (WIB)
         $deviceNames = Device::pluck('nama_device', 'id');
         $latencyPoints = $mqttData
             ->merge($httpData)
@@ -284,7 +371,7 @@ class DashboardController extends Controller
         return view('dashboard', compact(
             'summary', 'reliability', 'latencyChartData', 'powerChartData', 'mqttTotal', 'httpTotal',
             'mqttConnected', 'httpConnected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan',
-            'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings'
+            'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings', 'protocolDiagnostics'
         ));
     }
 

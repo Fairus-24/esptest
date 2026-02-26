@@ -87,6 +87,18 @@ The project has been updated with the following behavior:
 28. MQTT worker and Mosquitto auto-start now support broker host fallback (`MQTT_FALLBACK_HOSTS`) so telemetry keeps flowing when primary LAN IP changes.
 29. Dashboard now shows explicit host-mismatch warnings when `MQTT_HOST` is unreachable while local broker is reachable (or when `MOSQUITTO_ONLY_LOCAL=true` conflicts with a non-local host).
 30. ESP32 firmware now warns when `SERVER_HOST` points to the ESP32 IP itself, and aborts HTTP/MQTT sends to prevent silent misrouting.
+31. Dashboard palette/contrast was repaired so header and footer text, badges, and meta labels remain clearly readable on all viewport sizes.
+32. Section titles now render with white text/icons, while chart titles use black text with blue icons for clearer hierarchy.
+33. T-test subsection headings now include symbols/icons for `Latency Analysis` and `Power Consumption Analysis`.
+34. `T-Test Results` cards now use a non-blue statistical accent palette (amber/orange) to visually separate hypothesis-test results from protocol cards.
+35. Quality cards now collapse without leaving stretched blank panels when adjacent cards are still expanded.
+36. Quality card headers now include protocol-specific icons plus a quality symbol for faster protocol identification.
+37. Dashboard background is now unified across desktop, tablet, and mobile using one consistent gradient theme.
+38. Project favicon assets were added (`project-favicon.svg`, `project-favicon.png`) and a valid `favicon.ico` fallback was generated.
+39. Dashboard `<head>` now includes complete icon/meta tags (SVG/PNG/ICO favicon, theme color, application name).
+40. Power Consumption chart now includes the same toolbar as Latency chart (`+`, `-`, `Reset`, bounded zoom, pan, and idle auto-follow).
+41. Core sensor fields (`suhu`, `kelembapan`) are intentionally shared from the same ESP32 sensor snapshot for MQTT and HTTP, so values can be identical on the same sampling window.
+42. Protocol detail telemetry now includes `sensor_age_ms`, `sensor_read_seq`, and `send_tick_ms`, and dashboard adds a `Protocol Payload Diagnostics` panel with MQTT-vs-HTTP delta metrics.
 
 ## Tech Stack
 
@@ -421,6 +433,9 @@ How ESP32 fills each payload field:
 | `payload_bytes` | final serialized JSON payload length |
 | `uptime_s` | `millis()/1000` |
 | `free_heap_bytes` | `ESP.getFreeHeap()` |
+| `sensor_age_ms` | age of the current sensor snapshot when protocol send starts (`millis() - lastSensorRead`) |
+| `sensor_read_seq` | latest sensor read counter used by this payload |
+| `send_tick_ms` | ESP32 monotonic send tick (`millis()`) to trace protocol timing order |
 | `sensor_reads` | local counter (diagnostic) |
 | `http_success_count`/`http_fail_count` | local HTTP counters (diagnostic) |
 | `mqtt_success_count`/`mqtt_fail_count` | local MQTT counters (diagnostic) |
@@ -505,6 +520,9 @@ Sample payload:
   "payload_bytes": 212,
   "uptime_s": 8451,
   "free_heap_bytes": 271232,
+  "sensor_age_ms": 1310,
+  "sensor_read_seq": 412,
+  "send_tick_ms": 9876543,
   "sensor_reads": 412,
   "http_success_count": 120,
   "http_fail_count": 2,
@@ -527,6 +545,9 @@ Validation rules:
 - `payload_bytes`: required integer (`>= 1`).
 - `uptime_s`: required integer (`>= 0`).
 - `free_heap_bytes`: required integer (`>= 0`).
+- `sensor_age_ms`: optional integer (`>= 0`) for protocol timing detail.
+- `sensor_read_seq`: optional integer (`>= 0`) for sensor snapshot trace.
+- `send_tick_ms`: optional integer (`>= 0`) for ESP32 monotonic send ordering.
 
 ### POST `/reset-data`
 
@@ -542,11 +563,11 @@ Dashboard entry route (served via Apache path `/esptest/public` in this setup).
 
 ## Dashboard Behavior
 
-The latency chart now behaves as follows:
+Latency and power charts now behave as follows:
 
 1. Windowed data view (clear readability).
 2. Horizontal pan to explore old/new points.
-3. Button-only zoom controls with limits.
+3. Button-only zoom controls with limits (`+`, `-`, `Reset`) on both chart cards.
 4. Auto-refresh every 5 seconds.
 5. Smooth auto-follow to latest data when user is idle.
 6. Time labels displayed as WIB (`Asia/Jakarta`).
@@ -574,6 +595,17 @@ Other dashboard behavior:
 - statistical cards remain centered on mobile, matching tablet alignment/flow
 - when `Statistical Analysis` appears for the first time during auto-refresh, the page reloads once to sync the full section
 - t-test labels use standard statistical symbols (mu, sigma, sigma^2, plus-minus)
+- header/footer now use high-contrast palette tokens so text is not washed out against gradients or translucent backgrounds
+- section headings use white typography/icons and chart headings use black text with blue icons
+- T-test subsection `h3` titles now include icons for faster visual scanning
+- T-test result cards use amber/orange accents (not blue) for clearer semantic distinction
+- quality card grid uses non-stretch alignment so minimized cards keep compact height
+- quality card header includes quality icon + protocol icon (`MQTT`/`HTTP`)
+- dashboard background is now the same gradient theme on desktop/tablet/mobile
+- favicon setup now includes project SVG + PNG icons with a non-empty ICO fallback for browser compatibility
+- favicon/meta tags are configured in `<head>` for consistent browser tab identity
+- protocol diagnostics panel now shows latest payload detail per protocol (MQTT + HTTP) and signed delta values for key fields
+- dashboard now explicitly explains when suhu/kelembapan are identical because both protocols use the same sensor snapshot window
 
 ## Reliability Formula (Current)
 
@@ -613,6 +645,9 @@ Reliability is computed per protocol from the latest `300` records:
 - `payload_bytes`
 - `uptime_s`
 - `free_heap_bytes`
+- `sensor_age_ms` (optional protocol timing detail)
+- `sensor_read_seq` (optional sensor snapshot counter)
+- `send_tick_ms` (optional ESP32 send-order tick)
 - timestamps
 
 ## Quick Verification Checklist
@@ -638,6 +673,9 @@ $body = @{
   payload_bytes = 210
   uptime_s = 7200
   free_heap_bytes = 265000
+  sensor_age_ms = 1200
+  sensor_read_seq = 321
+  send_tick_ms = 1234567
 } | ConvertTo-Json -Compress
 
 Invoke-RestMethod -Method Post `
@@ -649,7 +687,7 @@ Invoke-RestMethod -Method Post `
 ### MQTT ingest
 
 ```powershell
-mosquitto_pub -h 127.0.0.1 -p 1883 -u esp32 -P esp32 -t iot/esp32/suhu -m "{\"device_id\":1,\"suhu\":27.9,\"kelembapan\":60.4,\"timestamp_esp\":1772021517,\"daya\":81,\"packet_seq\":101,\"rssi_dbm\":-60,\"tx_duration_ms\":45.2,\"payload_bytes\":208,\"uptime_s\":7200,\"free_heap_bytes\":265000}"
+mosquitto_pub -h 127.0.0.1 -p 1883 -u esp32 -P esp32 -t iot/esp32/suhu -m "{\"device_id\":1,\"suhu\":27.9,\"kelembapan\":60.4,\"timestamp_esp\":1772021517,\"daya\":81,\"packet_seq\":101,\"rssi_dbm\":-60,\"tx_duration_ms\":45.2,\"payload_bytes\":208,\"uptime_s\":7200,\"free_heap_bytes\":265000,\"sensor_age_ms\":980,\"sensor_read_seq\":444,\"send_tick_ms\":9876543}"
 ```
 
 ### Service state
@@ -672,7 +710,10 @@ SELECT protokol,
        SUM(CASE WHEN tx_duration_ms IS NULL THEN 1 ELSE 0 END) AS miss_tx_duration,
        SUM(CASE WHEN payload_bytes IS NULL THEN 1 ELSE 0 END) AS miss_payload_bytes,
        SUM(CASE WHEN uptime_s IS NULL THEN 1 ELSE 0 END) AS miss_uptime,
-       SUM(CASE WHEN free_heap_bytes IS NULL THEN 1 ELSE 0 END) AS miss_free_heap
+       SUM(CASE WHEN free_heap_bytes IS NULL THEN 1 ELSE 0 END) AS miss_free_heap,
+       SUM(CASE WHEN sensor_age_ms IS NULL THEN 1 ELSE 0 END) AS miss_sensor_age,
+       SUM(CASE WHEN sensor_read_seq IS NULL THEN 1 ELSE 0 END) AS miss_sensor_read_seq,
+       SUM(CASE WHEN send_tick_ms IS NULL THEN 1 ELSE 0 END) AS miss_send_tick
 FROM eksperimens
 GROUP BY protokol;
 ```
@@ -691,11 +732,19 @@ GROUP BY protokol;
 - Verify new data rows in `eksperimens` have non-null `kelembapan`.
 - Remember: old records created before this fix may contain `NULL` humidity values.
 
+### Temperature/Humidity look identical between MQTT and HTTP
+
+- This is expected when both protocol sends use the same latest sensor snapshot on ESP32.
+- Use dashboard `Protocol Payload Diagnostics` to inspect actual transport differences:
+  latency, tx duration, payload bytes, RSSI, sensor age, packet sequence, and server timestamp gap.
+
 ### Warning list appears for missing fields
 
 - Open dashboard data quality panel and see which protocol/field has missing values.
-- Ensure both protocol payloads always include all required fields:
+- Ensure both protocol payloads always include all core required fields:
   `device_id`, `suhu`, `kelembapan`, `timestamp_esp`, `daya`, `packet_seq`, `rssi_dbm`, `tx_duration_ms`, `payload_bytes`, `uptime_s`, `free_heap_bytes`.
+- For full diagnostics parity, also send:
+  `sensor_age_ms`, `sensor_read_seq`, `send_tick_ms`.
 - If warnings persist, inspect latest MQTT worker logs and HTTP API validation responses.
 - Legacy rows created before telemetry migration can still trigger warnings until new data replaces them or data is reset.
 
@@ -780,4 +829,14 @@ For research and educational use.
 
 ---
 
-Last updated: 2026-02-25
+Last updated: 2026-02-26
+
+## UI Footer Redesign (2026)
+
+The dashboard footer was redesigned for a more modern, professional look:
+- Removed card-like border, shadow, and rounded corners
+- Uses a clean, minimal bar with subtle top border and transparent background
+- Technology badges (MySQL, Laravel, Chart.js, T-Test) remain, but with softer colors and improved spacing
+- All changes are in the inline CSS of `resources/views/dashboard.blade.php`
+
+If you do not see the new style, clear your browser cache or do a hard refresh (Ctrl+F5).

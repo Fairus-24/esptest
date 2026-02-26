@@ -1,0 +1,13 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="IoT MQTT HTTP">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#1f4fd7"/>
+      <stop offset="1" stop-color="#0e8c63"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
+  <circle cx="32" cy="24" r="5" fill="#ffffff"/>
+  <path d="M14 44 C20 34, 44 34, 50 44" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M20 20 A12 12 0 0 1 44 20" fill="none" stroke="#cfe3ff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M24 20 A8 8 0 0 1 40 20" fill="none" stroke="#cfe3ff" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

@@ -25,7 +25,10 @@ class ApiController extends Controller
      *   "tx_duration_ms": 95.2,
      *   "payload_bytes": 212,
      *   "uptime_s": 8451,
-     *   "free_heap_bytes": 271232
+     *   "free_heap_bytes": 271232,
+     *   "sensor_age_ms": 1530,          // optional telemetry detail
+     *   "sensor_read_seq": 991,         // optional telemetry detail
+     *   "send_tick_ms": 9876543         // optional telemetry detail
      * }
      */
     public function storeHttp(Request $request)
@@ -43,6 +46,9 @@ class ApiController extends Controller
                 'payload_bytes' => 'required|integer|min:1',
                 'uptime_s' => 'required|integer|min:0',
                 'free_heap_bytes' => 'required|integer|min:0',
+                'sensor_age_ms' => 'nullable|integer|min:0',
+                'sensor_read_seq' => 'nullable|integer|min:0',
+                'send_tick_ms' => 'nullable|integer|min:0',
             ]);
 
             $timestampServer = Carbon::now('UTC');
@@ -66,6 +72,9 @@ class ApiController extends Controller
                 'payload_bytes' => $validated['payload_bytes'],
                 'uptime_s' => $validated['uptime_s'],
                 'free_heap_bytes' => $validated['free_heap_bytes'],
+                'sensor_age_ms' => array_key_exists('sensor_age_ms', $validated) ? $validated['sensor_age_ms'] : null,
+                'sensor_read_seq' => array_key_exists('sensor_read_seq', $validated) ? $validated['sensor_read_seq'] : null,
+                'send_tick_ms' => array_key_exists('send_tick_ms', $validated) ? $validated['send_tick_ms'] : null,
             ]);
 
             return response()->json([
@@ -84,6 +93,9 @@ class ApiController extends Controller
                     'payload_bytes' => $validated['payload_bytes'],
                     'uptime_s' => $validated['uptime_s'],
                     'free_heap_bytes' => $validated['free_heap_bytes'],
+                    'sensor_age_ms' => $validated['sensor_age_ms'] ?? null,
+                    'sensor_read_seq' => $validated['sensor_read_seq'] ?? null,
+                    'send_tick_ms' => $validated['send_tick_ms'] ?? null,
                 ],
             ], 201);
 

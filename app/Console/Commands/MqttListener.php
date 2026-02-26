@@ -123,6 +123,9 @@ class MqttListener extends Command
             $payloadBytes = (int) $data['payload_bytes'];
             $uptimeSeconds = (int) $data['uptime_s'];
             $freeHeapBytes = (int) $data['free_heap_bytes'];
+            $sensorAgeMs = null;
+            $sensorReadSeq = null;
+            $sendTickMs = null;
             $timestampEsp = \DateTime::createFromFormat('U', $data['timestamp_esp']);
             if ($timestampEsp === false) {
                 $this->warn("⚠ Invalid timestamp_esp in payload");
@@ -140,6 +143,30 @@ class MqttListener extends Command
                 $this->warn("⚠ Invalid telemetry values (packet_seq/rssi_dbm/tx_duration_ms/payload_bytes/uptime_s/free_heap_bytes)");
                 return;
             }
+            if (array_key_exists('sensor_age_ms', $data)) {
+                if (!is_numeric($data['sensor_age_ms']) || (int) $data['sensor_age_ms'] < 0) {
+                    $this->warn("Warning: Invalid sensor_age_ms (must be numeric >= 0)");
+                    return;
+                }
+                $sensorAgeMs = (int) $data['sensor_age_ms'];
+            }
+
+            if (array_key_exists('sensor_read_seq', $data)) {
+                if (!is_numeric($data['sensor_read_seq']) || (int) $data['sensor_read_seq'] < 0) {
+                    $this->warn("Warning: Invalid sensor_read_seq (must be numeric >= 0)");
+                    return;
+                }
+                $sensorReadSeq = (int) $data['sensor_read_seq'];
+            }
+
+            if (array_key_exists('send_tick_ms', $data)) {
+                if (!is_numeric($data['send_tick_ms']) || (int) $data['send_tick_ms'] < 0) {
+                    $this->warn("Warning: Invalid send_tick_ms (must be numeric >= 0)");
+                    return;
+                }
+                $sendTickMs = (int) $data['send_tick_ms'];
+            }
+
             // Verify device exists
             $device = Device::find($deviceId);
             if (!$device) {
@@ -165,9 +192,12 @@ class MqttListener extends Command
                 'payload_bytes' => $payloadBytes,
                 'uptime_s' => $uptimeSeconds,
                 'free_heap_bytes' => $freeHeapBytes,
+                'sensor_age_ms' => $sensorAgeMs,
+                'sensor_read_seq' => $sensorReadSeq,
+                'send_tick_ms' => $sendTickMs,
             ]);
             $timeStr = $timestampServer->format('H:i:s');
-            $this->line("[{$timeStr}] ✓ MQTT Data Received - Device: {$deviceId} | Seq: {$packetSeq} | Suhu: {$suhu}°C | Kelembapan: {$kelembapan}% | Daya: {$daya}mW | RSSI: {$rssiDbm}dBm | TX: {$txDurationMs}ms | Latency: {$latencyMs}ms");
+            $this->line("[{$timeStr}] ✓ MQTT Data Received - Device: {$deviceId} | Seq: {$packetSeq} | Suhu: {$suhu}°C | Kelembapan: {$kelembapan}% | Daya: {$daya}mW | RSSI: {$rssiDbm}dBm | TX: {$txDurationMs}ms | Latency: {$latencyMs}ms | SensorAge: " . ($sensorAgeMs ?? '-') . "ms | SensorSeq: " . ($sensorReadSeq ?? '-') . " | SendTick: " . ($sendTickMs ?? '-'));
         } catch (\Exception $e) {
             $this->error("✗ Error processing message: " . $e->getMessage());
         }

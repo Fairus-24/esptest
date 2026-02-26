@@ -21,6 +21,9 @@ class Eksperimen extends Model
         'payload_bytes',
         'uptime_s',
         'free_heap_bytes',
+        'sensor_age_ms',
+        'sensor_read_seq',
+        'send_tick_ms',
     ];
 
     protected $casts = [
@@ -32,6 +35,9 @@ class Eksperimen extends Model
         'payload_bytes' => 'integer',
         'uptime_s' => 'integer',
         'free_heap_bytes' => 'integer',
+        'sensor_age_ms' => 'integer',
+        'sensor_read_seq' => 'integer',
+        'send_tick_ms' => 'integer',
     ];
 
     public function device()

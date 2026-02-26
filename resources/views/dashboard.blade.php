@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Analisis Komparatif MQTT vs HTTP</title>
+    <link rel="icon" type="image/svg+xml" href="project-favicon.svg?v=20260226">
+    <link rel="icon" type="image/png" sizes="32x32" href="project-favicon.png?v=20260226">
+    <link rel="icon" type="image/x-icon" href="favicon.ico?v=20260226">
+    <link rel="shortcut icon" type="image/png" href="project-favicon.png?v=20260226">
+    <link rel="apple-touch-icon" sizes="180x180" href="project-favicon.png?v=20260226">
+    <meta name="theme-color" content="#1f4fd7">
+    <meta name="application-name" content="IoT Research Dashboard">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -25,9 +32,13 @@
             --mqtt-blue: #1654e6;
             --http-green: #09a26b;
             --accent: #db3f57;
+            --ttest-accent: #b45309;
             --bg-light: #f4f7fb;
             --text-dark: #111827;
             --text-light: #667085;
+            --dashboard-bg-main: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            --dashboard-bg-desktop: var(--dashboard-bg-main);
+            --dashboard-bg-mobile: var(--dashboard-bg-main);
             --shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
             --shadow-hover: 0 22px 48px rgba(15, 23, 42, 0.14);
         }
@@ -38,10 +49,10 @@
 
         body {
             font-family: 'Manrope', 'Segoe UI', sans-serif;
-            background:
-                radial-gradient(1100px 560px at 4% -8%, rgba(21, 94, 239, 0.22), transparent 60%),
-                radial-gradient(900px 500px at 96% 0%, rgba(16, 185, 129, 0.16), transparent 55%),
-                linear-gradient(165deg, #f2f6ff 0%, #f3fff9 45%, #f6f7fb 100%);
+            background: var(--dashboard-bg-desktop);
+            background-attachment: fixed;
+            background-size: cover;
+            background-repeat: no-repeat;
             min-height: 100vh;
             padding: 20px;
             color: var(--text-dark);
@@ -401,6 +412,22 @@
             padding-bottom: 12px;
             border-bottom: 2px solid var(--bg-light);
             font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ttest-subsection h3 i {
+            color: var(--ttest-accent);
+            font-size: 0.95em;
+        }
+
+        .ttest-subsection h3 .latency-icon {
+            color: #d97706;
+        }
+
+        .ttest-subsection h3 .power-icon {
+            color: #ea580c;
         }
 
         .ttest-grid {
@@ -512,12 +539,17 @@
         }
 
         .ttest-card.result-card {
-            border-left-color: var(--primary);
-            background: linear-gradient(135deg, rgba(102,126,234,0.05), rgba(118,75,162,0.05));
+            border-left-color: var(--ttest-accent);
+            border-color: rgba(180, 83, 9, 0.28);
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.18), rgba(249, 115, 22, 0.12));
         }
 
         .ttest-card.result-card .ttest-card-header {
-            color: var(--primary);
+            color: var(--ttest-accent);
+        }
+
+        .ttest-card.result-card .ttest-header-title i {
+            color: #c2410c;
         }
 
         .ttest-row {
@@ -647,7 +679,7 @@
         @media (max-width: 768px) {
             body {
                 padding: 12px;
-                background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+                background: var(--dashboard-bg-mobile);
                 background-attachment: fixed;
             }
 
@@ -1341,10 +1373,23 @@
         }
 
         .section-title {
-            color: #0f172a;
+            color: #ffffff;
             text-transform: none;
             letter-spacing: 0;
             text-align: left;
+            text-shadow: 0 2px 10px rgba(15, 23, 42, 0.22);
+        }
+
+        .section-title i {
+            color: #ffffff;
+        }
+
+        .chart-title {
+            color: #0f172a;
+        }
+
+        .chart-title i {
+            color: var(--mqtt-blue);
         }
 
         .stats-grid {
@@ -1439,6 +1484,7 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
             margin-bottom: 18px;
+            align-items: start;
         }
 
         .quality-card {
@@ -1447,6 +1493,7 @@
             background: rgba(255, 255, 255, 0.72);
             overflow: hidden;
             padding: 0;
+            align-self: start;
         }
 
         .quality-details {
@@ -1477,6 +1524,61 @@
             color: #0f172a;
             margin: 0;
             flex: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .quality-title-main {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .quality-title-count {
+            color: #475569;
+            font-weight: 700;
+            font-size: 0.78rem;
+            flex-shrink: 0;
+        }
+
+        .quality-main-icon {
+            color: #7c3aed;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        .quality-protocol-icon {
+            font-size: 0.82rem;
+            flex-shrink: 0;
+        }
+
+        .quality-protocol-mqtt {
+            color: var(--mqtt-blue);
+        }
+
+        .quality-protocol-http {
+            color: var(--http-green);
+        }
+
+        @media (max-width: 480px) {
+            .quality-summary h4 {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+
+            .quality-title-main {
+                white-space: normal;
+                overflow: visible;
+                text-overflow: clip;
+            }
         }
 
         .quality-summary-meta {
@@ -1550,6 +1652,110 @@
             border: 1px solid rgba(239, 68, 68, 0.35);
         }
 
+        .protocol-diagnostics {
+            margin: 18px 0 24px;
+            padding: 16px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(148, 163, 184, 0.24);
+        }
+
+        .protocol-diagnostics h3 {
+            margin: 0 0 12px;
+            font-size: 1.02rem;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .protocol-sync-note {
+            margin: 0 0 12px;
+            padding: 9px 11px;
+            border-radius: 10px;
+            background: rgba(219, 234, 254, 0.65);
+            border: 1px solid rgba(59, 130, 246, 0.28);
+            color: #1e3a8a;
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        .protocol-diagnostics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .protocol-diagnostic-card {
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 12px;
+        }
+
+        .protocol-diagnostic-card.mqtt {
+            border-left: 4px solid var(--mqtt-blue);
+        }
+
+        .protocol-diagnostic-card.http {
+            border-left: 4px solid var(--http-green);
+        }
+
+        .protocol-diagnostic-card.delta {
+            grid-column: 1 / -1;
+            border-left: 4px solid #7c3aed;
+        }
+
+        .protocol-diagnostic-card h4 {
+            margin: 0 0 8px;
+            font-size: 0.9rem;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .protocol-diagnostic-list {
+            margin: 0;
+            display: grid;
+            gap: 5px;
+        }
+
+        .protocol-diagnostic-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.78rem;
+            border-bottom: 1px dashed rgba(148, 163, 184, 0.28);
+            padding-bottom: 4px;
+        }
+
+        .protocol-diagnostic-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .protocol-diagnostic-row .label {
+            color: #475569;
+            font-weight: 600;
+        }
+
+        .protocol-diagnostic-row .value {
+            color: #0f172a;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        @media (max-width: 900px) {
+            .protocol-diagnostics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .protocol-diagnostic-card.delta {
+                grid-column: auto;
+            }
+        }
+
         .chart-container,
         .ttest-section {
             background: rgba(255, 255, 255, 0.94);
@@ -1584,13 +1790,170 @@
             font-size: 0.83rem;
         }
 
+        /* High-contrast palette repair for header/footer readability */
+        .header-content.header-metric-row {
+            background: linear-gradient(136deg, rgba(13, 37, 84, 0.94), rgba(13, 86, 116, 0.92));
+            border-color: rgba(255, 255, 255, 0.34);
+        }
+
+        .header-center-content {
+            background: rgba(2, 6, 23, 0.28);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .header-center-content h1,
+        .header-center-content p {
+            color: #f8fafc;
+            text-shadow: none;
+        }
+
+        .header-subtitle {
+            opacity: 1;
+        }
+
+        .header-badge {
+            color: #f8fafc;
+            background: rgba(15, 23, 42, 0.38);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+        }
+
+        .header-badge i {
+            color: inherit;
+        }
+
+        .metric-label {
+            color: #e2e8f0;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .metric-detail {
+            color: #e5edf7;
+        }
+
+        .suhu-card .metric-icon,
+        .suhu-card .metric-value,
+        .suhu-card .metric-unit {
+            color: #fca5a5;
+        }
+
+        .kelembapan-card .metric-icon,
+        .kelembapan-card .metric-value,
+        .kelembapan-card .metric-unit {
+            color: #86efac;
+        }
+
+        .status-badge.is-online {
+            background: rgba(22, 163, 74, 0.3);
+            border-color: rgba(134, 239, 172, 0.66);
+        }
+
+        .status-badge.is-offline {
+            background: rgba(220, 38, 38, 0.3);
+            border-color: rgba(252, 165, 165, 0.64);
+        }
+
         .footer {
-            color: #334155;
-            border-top-color: rgba(148, 163, 184, 0.34);
+            margin-top: 48px;
+            padding-top: 28px;
+            padding-bottom: 18px;
+            text-align: center;
+            color: var(--text-dark);
+            background: transparent;
+            font-size: 1.05em;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            box-shadow: none;
+            border-radius: 0;
+            transition: background 0.3s;
+            position: relative;
+        }
+
+        .footer::before {
+            content: "";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: #fff;
+            opacity: 0.85;
+            border-radius: 1px;
+        }
+
+        .footer-text {
+            font-size: 1.13em;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #fff !important;
+            letter-spacing: 0.01em;
+            position: relative;
+        }
+
+        .footer-text i {
+            color: #fff !important;
+        }
+
+        .footer-text::after {
+            content: "";
+            display: block;
+            margin: 10px auto 0 auto;
+            width: 90%;
+            max-width: 340px;
+            border-bottom: 1.5px solid rgba(255,255,255,0.22);
+            border-radius: 1px;
+        }
         }
 
         .footer-meta {
-            color: #64748b;
+            margin-top: 2px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            font-size: 0.98em;
+            opacity: 0.85;
+        }
+
+        .footer-pill {
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.98em;
+            font-weight: 500;
+            border-radius: 20px;
+            padding: 4px 16px 4px 12px;
+            background: rgba(241,245,249,0.85);
+            color: #334155;
+            border: 1px solid rgba(148,163,184,0.18);
+            margin: 0 2px 6px 2px;
+            box-shadow: 0 1px 4px rgba(15,23,42,0.04);
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .footer-pill-db {
+            background: #e6f9f0;
+            color: #0e8c63;
+            border-color: #b6e7d2;
+        }
+        .footer-pill-laravel {
+            background: #eaf0fb;
+            color: #1f4fd7;
+            border-color: #b6c7e7;
+        }
+        .footer-pill-chart {
+            background: #eaf6fb;
+            color: #1654e6;
+            border-color: #b6d3e7;
+        }
+        .footer-pill-ttest {
+            background: #fbeaea;
+            color: #db3f57;
+            border-color: #e7b6b6;
+        }
+        .footer-pill i {
+            margin-right: 7px;
+            font-size: 1.08em;
         }
 
         @media (max-width: 1200px) {
@@ -1717,6 +2080,9 @@
                     <div class="metric-detail" id="avgSuhuDetail">
                         MQTT: {{ number_format((float) ($mqttAvgSuhu ?? 0), 2) }} C<br>
                         HTTP: {{ number_format((float) ($httpAvgSuhu ?? 0), 2) }} C
+                        @if(($protocolDiagnostics['pair_available'] ?? false) && isset($protocolDiagnostics['delta']))
+                            <br>Delta (MQTT-HTTP): {{ sprintf('%+.2f', (float) ($protocolDiagnostics['delta']['suhu'] ?? 0)) }} C
+                        @endif
                     </div>
                 </div>
                 <div class="header-center-content">
@@ -1739,6 +2105,9 @@
                     <div class="metric-detail" id="avgKelembapanDetail">
                         MQTT: {{ number_format((float) ($mqttAvgKelembapan ?? 0), 2) }}%<br>
                         HTTP: {{ number_format((float) ($httpAvgKelembapan ?? 0), 2) }}%
+                        @if(($protocolDiagnostics['pair_available'] ?? false) && isset($protocolDiagnostics['delta']))
+                            <br>Delta (MQTT-HTTP): {{ sprintf('%+.2f', (float) ($protocolDiagnostics['delta']['kelembapan'] ?? 0)) }}%
+                        @endif
                     </div>
                 </div>
             </div>
@@ -1815,10 +2184,88 @@
                 </ul>
             </div>
         @endif
+        <div id="protocolDiagnosticsPanel" class="protocol-diagnostics">
+            <h3><i class="fas fa-wave-square"></i> Protocol Payload Diagnostics (Latest Data)</h3>
+            @if(!empty($protocolDiagnostics['sensor_sync_note']))
+                <p class="protocol-sync-note">{{ $protocolDiagnostics['sensor_sync_note'] }}</p>
+            @endif
+            @php
+                $diagnosticCards = [
+                    'mqtt' => $protocolDiagnostics['mqtt'] ?? ['protocol' => 'MQTT', 'available' => false],
+                    'http' => $protocolDiagnostics['http'] ?? ['protocol' => 'HTTP', 'available' => false],
+                ];
+                $protocolDelta = $protocolDiagnostics['delta'] ?? null;
+            @endphp
+            <div class="protocol-diagnostics-grid">
+                @foreach($diagnosticCards as $diagnosticCard)
+                    @php
+                        $cardProtocol = strtoupper((string) ($diagnosticCard['protocol'] ?? 'UNKNOWN'));
+                        $cardClass = strtolower($cardProtocol);
+                        $cardIcon = $cardProtocol === 'MQTT' ? 'fa-broadcast-tower' : 'fa-server';
+                        $rows = [
+                            ['label' => 'Data ID', 'value' => $diagnosticCard['id'] ?? '-'],
+                            ['label' => 'Packet Seq', 'value' => $diagnosticCard['packet_seq'] ?? '-'],
+                            ['label' => 'Timestamp ESP', 'value' => $diagnosticCard['timestamp_esp'] ?? '-'],
+                            ['label' => 'Timestamp Server', 'value' => $diagnosticCard['timestamp_server'] ?? '-'],
+                            ['label' => 'Suhu', 'value' => isset($diagnosticCard['suhu']) ? number_format((float) $diagnosticCard['suhu'], 2) . ' C' : '-'],
+                            ['label' => 'Kelembapan', 'value' => isset($diagnosticCard['kelembapan']) ? number_format((float) $diagnosticCard['kelembapan'], 2) . ' %' : '-'],
+                            ['label' => 'Latency', 'value' => isset($diagnosticCard['latency_ms']) ? number_format((float) $diagnosticCard['latency_ms'], 2) . ' ms' : '-'],
+                            ['label' => 'Daya', 'value' => isset($diagnosticCard['daya_mw']) ? number_format((float) $diagnosticCard['daya_mw'], 2) . ' mW' : '-'],
+                            ['label' => 'RSSI', 'value' => isset($diagnosticCard['rssi_dbm']) ? $diagnosticCard['rssi_dbm'] . ' dBm' : '-'],
+                            ['label' => 'TX Duration', 'value' => isset($diagnosticCard['tx_duration_ms']) ? number_format((float) $diagnosticCard['tx_duration_ms'], 2) . ' ms' : '-'],
+                            ['label' => 'Payload', 'value' => isset($diagnosticCard['payload_bytes']) ? number_format((int) $diagnosticCard['payload_bytes']) . ' bytes' : '-'],
+                            ['label' => 'Sensor Age', 'value' => isset($diagnosticCard['sensor_age_ms']) ? number_format((int) $diagnosticCard['sensor_age_ms']) . ' ms' : '-'],
+                            ['label' => 'Sensor Read Seq', 'value' => isset($diagnosticCard['sensor_read_seq']) ? number_format((int) $diagnosticCard['sensor_read_seq']) : '-'],
+                            ['label' => 'Send Tick', 'value' => isset($diagnosticCard['send_tick_ms']) ? number_format((int) $diagnosticCard['send_tick_ms']) . ' ms' : '-'],
+                            ['label' => 'Uptime', 'value' => isset($diagnosticCard['uptime_s']) ? number_format((int) $diagnosticCard['uptime_s']) . ' s' : '-'],
+                            ['label' => 'Free Heap', 'value' => isset($diagnosticCard['free_heap_bytes']) ? number_format((int) $diagnosticCard['free_heap_bytes']) . ' bytes' : '-'],
+                        ];
+                    @endphp
+                    <article class="protocol-diagnostic-card {{ $cardClass }}">
+                        <h4><i class="fas {{ $cardIcon }}"></i> {{ $cardProtocol }} Latest Payload</h4>
+                        <div class="protocol-diagnostic-list">
+                            @if(!($diagnosticCard['available'] ?? false))
+                                <div class="protocol-diagnostic-row">
+                                    <span class="label">Status</span>
+                                    <span class="value">Belum ada data</span>
+                                </div>
+                            @else
+                                @foreach($rows as $row)
+                                    <div class="protocol-diagnostic-row">
+                                        <span class="label">{{ $row['label'] }}</span>
+                                        <span class="value">{{ $row['value'] }}</span>
+                                    </div>
+                                @endforeach
+                            @endif
+                        </div>
+                    </article>
+                @endforeach
+                <article class="protocol-diagnostic-card delta">
+                    <h4><i class="fas fa-code-compare"></i> Delta MQTT - HTTP</h4>
+                    <div class="protocol-diagnostic-list">
+                        @if($protocolDiagnostics['pair_available'] ?? false)
+                            <div class="protocol-diagnostic-row"><span class="label">Suhu</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['suhu'] ?? 0)) }} C</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Kelembapan</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['kelembapan'] ?? 0)) }} %</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Latency</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['latency_ms'] ?? 0)) }} ms</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Daya</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['daya_mw'] ?? 0)) }} mW</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">TX Duration</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['tx_duration_ms'] ?? 0)) }} ms</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Payload</span><span class="value">{{ (($protocolDelta['payload_bytes'] ?? 0) >= 0 ? '+' : '') . ($protocolDelta['payload_bytes'] ?? 0) }} bytes</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">RSSI</span><span class="value">{{ (($protocolDelta['rssi_dbm'] ?? 0) >= 0 ? '+' : '') . ($protocolDelta['rssi_dbm'] ?? 0) }} dBm</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Sensor Age</span><span class="value">{{ (($protocolDelta['sensor_age_ms'] ?? 0) >= 0 ? '+' : '') . ($protocolDelta['sensor_age_ms'] ?? 0) }} ms</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Server Timestamp Gap</span><span class="value">{{ isset($protocolDelta['server_gap_ms']) ? number_format((float) $protocolDelta['server_gap_ms'], 2) . ' ms' : '-' }}</span></div>
+                        @else
+                            <div class="protocol-diagnostic-row"><span class="label">Status</span><span class="value">Belum cukup data MQTT + HTTP untuk dihitung.</span></div>
+                        @endif
+                    </div>
+                </article>
+            </div>
+        </div>
         <div id="protocolQualityPanel" class="quality-grid">
             @foreach($fieldCompleteness as $protocol => $protocolMeta)
                 @php
                     $hasQualityIssue = false;
+                    $isMqttProtocol = strtoupper((string) $protocol) === 'MQTT';
+                    $protocolIconClass = $isMqttProtocol ? 'fa-broadcast-tower quality-protocol-mqtt' : 'fa-server quality-protocol-http';
                     if (($protocolMeta['total'] ?? 0) > 0 && isset($protocolMeta['fields']) && is_array($protocolMeta['fields'])) {
                         foreach ($protocolMeta['fields'] as $fieldMeta) {
                             if (($fieldMeta['missing'] ?? 0) > 0) {
@@ -1831,7 +2278,14 @@
                 <div class="quality-card">
                     <details class="quality-details" data-protocol="{{ $protocol }}" open>
                         <summary class="quality-summary">
-                            <h4>{{ $protocol }} Field Completeness ({{ $protocolMeta['total'] }} data)</h4>
+                            <h4>
+                                <span class="quality-title-main">
+                                    <i class="fas fa-shield-halved quality-main-icon" aria-hidden="true"></i>
+                                    <i class="fas {{ $protocolIconClass }} quality-protocol-icon" aria-hidden="true"></i>
+                                    {{ $protocol }} Field Completeness
+                                </span>
+                                <span class="quality-title-count">({{ $protocolMeta['total'] }} data)</span>
+                            </h4>
                             <span class="quality-summary-meta">
                                 <span class="quality-dot {{ $hasQualityIssue ? 'quality-dot-bad' : 'quality-dot-good' }}" aria-label="{{ $hasQualityIssue ? 'Status warning' : 'Status aman' }}"></span>
                                 <span class="quality-toggle"><i class="fas fa-chevron-down"></i></span>
@@ -1885,7 +2339,17 @@
             <div class="chart-container">
                 <h3 class="chart-title"><i class="fas fa-battery-half"></i> Power Consumption Comparison</h3>
                 @if(count($powerChartData['labels']) > 0)
-                    <div class="chart-hint">Menampilkan urutan data terbaru per titik data agar variasi daya real-time terlihat jelas.</div>
+                    <div class="chart-toolbar">
+                        <div class="chart-toolbar-info" id="powerToolbarInfo">
+                            Total data point: {{ $powerChartData['total_points'] }} | View: {{ min(10, $powerChartData['total_points']) }}-{{ min(30, $powerChartData['total_points']) }} data
+                        </div>
+                        <div class="zoom-controls">
+                            <button type="button" id="powerZoomOut" class="zoom-btn" aria-label="Zoom Out">-</button>
+                            <button type="button" id="powerZoomIn" class="zoom-btn" aria-label="Zoom In">+</button>
+                            <button type="button" id="powerZoomReset" class="zoom-btn zoom-reset" aria-label="Reset Zoom">Reset</button>
+                        </div>
+                    </div>
+                    <div class="chart-hint">Geser kiri/kanan untuk melihat data lain. Zoom hanya lewat tombol supaya tetap rapi.</div>
                     <div class="chart-wrapper">
                         <canvas id="powerChart"></canvas>
                     </div>
@@ -1904,7 +2368,7 @@
                 <div class="ttest-section">
                     <h2 class="ttest-title"><i class="fas fa-calculator"></i> Independent Sample T-Test Results</h2>
                     <div class="ttest-subsection">
-                        <h3>Latency Analysis</h3>
+                        <h3><i class="fas fa-stopwatch latency-icon"></i> Latency Analysis</h3>
                         <div class="ttest-grid">
                             <div class="ttest-card mqtt-card">
                                 <div class="ttest-card-header">
@@ -1964,7 +2428,7 @@
                         </div>
                     </div>
                     <div class="ttest-subsection">
-                        <h3>Power Consumption Analysis</h3>
+                        <h3><i class="fas fa-bolt power-icon"></i> Power Consumption Analysis</h3>
                         @if($summary['ttest_daya']['valid'])
                             <div class="ttest-grid">
                                 <div class="ttest-card mqtt-card">
@@ -2038,10 +2502,10 @@
         <div class="footer">
             <p class="footer-text"><i class="fas fa-graduation-cap"></i> Sistem Penelitian - Analisis Komparatif MQTT vs HTTP</p>
             <p class="footer-meta">
-                <span style="margin-right:12px;color:#00cc88"><i class="fas fa-database"></i> MySQL</span>
-                <span style="margin-right:12px;color:#667eea"><i class="fas fa-rocket"></i> Laravel</span>
-                <span style="margin-right:12px;color:#0066ff"><i class="fas fa-chart-line"></i> Chart.js</span>
-                <span style="color:#ff6b6b"><i class="fas fa-ruler-combined"></i> T-Test Analysis</span>
+                <span class="footer-pill footer-pill-db"><i class="fas fa-database"></i> MySQL</span>
+                <span class="footer-pill footer-pill-laravel"><i class="fas fa-rocket"></i> Laravel</span>
+                <span class="footer-pill footer-pill-chart"><i class="fas fa-chart-line"></i> Chart.js</span>
+                <span class="footer-pill footer-pill-ttest"><i class="fas fa-ruler-combined"></i> T-Test Analysis</span>
             </p>
         </div>
     </div>
@@ -2056,6 +2520,17 @@
         let latestPowerData = null;
 
         const latencyRuntimeState = {
+            totalPoints: 0,
+            minWindowPoints: 1,
+            maxWindowPoints: 1,
+            currentWindowSpan: 10,
+            lastUserActionAt: Date.now(),
+            idleAutoFollowMs: 5000,
+            controlsBound: false,
+            autoFollowFrameId: null,
+        };
+
+        const powerRuntimeState = {
             totalPoints: 0,
             minWindowPoints: 1,
             maxWindowPoints: 1,
@@ -2255,6 +2730,21 @@
                 }
             } else if (currentDataWarnings && !nextDataWarnings) {
                 currentDataWarnings.remove();
+            }
+
+            const currentDiagnosticsPanel = document.getElementById('protocolDiagnosticsPanel');
+            const nextDiagnosticsPanel = newDoc.getElementById('protocolDiagnosticsPanel');
+            if (currentDiagnosticsPanel && nextDiagnosticsPanel) {
+                if (currentDiagnosticsPanel.innerHTML !== nextDiagnosticsPanel.innerHTML) {
+                    currentDiagnosticsPanel.innerHTML = nextDiagnosticsPanel.innerHTML;
+                }
+            } else if (!currentDiagnosticsPanel && nextDiagnosticsPanel) {
+                const qualityPanel = document.getElementById('protocolQualityPanel');
+                if (qualityPanel) {
+                    qualityPanel.insertAdjacentHTML('beforebegin', nextDiagnosticsPanel.outerHTML);
+                }
+            } else if (currentDiagnosticsPanel && !nextDiagnosticsPanel) {
+                currentDiagnosticsPanel.remove();
             }
 
             const currentQualityPanel = document.getElementById('protocolQualityPanel');
@@ -2717,12 +3207,248 @@
             bindLatencyCanvasInteractions(latencyCtx);
         }
 
-        function refreshPowerChart(powerData) {
+        function updatePowerToolbarInfo() {
+            const toolbarInfo = document.getElementById('powerToolbarInfo');
+            if (!toolbarInfo) return;
+
+            const total = powerRuntimeState.totalPoints;
+            const minView = Math.min(10, total);
+            const maxView = Math.min(30, total);
+            toolbarInfo.textContent = `Total data point: ${total} | View: ${minView}-${maxView} data`;
+        }
+
+        function markPowerUserAction() {
+            powerRuntimeState.lastUserActionAt = Date.now();
+            if (powerRuntimeState.autoFollowFrameId) {
+                cancelAnimationFrame(powerRuntimeState.autoFollowFrameId);
+                powerRuntimeState.autoFollowFrameId = null;
+            }
+        }
+
+        function isPowerIdle() {
+            return (Date.now() - powerRuntimeState.lastUserActionAt) >= powerRuntimeState.idleAutoFollowMs;
+        }
+
+        function buildPowerWindow(start, end) {
+            const totalPoints = powerRuntimeState.totalPoints;
+            if (totalPoints <= 0) {
+                return { start: 0, end: 0, span: 0 };
+            }
+
+            const minWindowPoints = Math.min(powerRuntimeState.minWindowPoints, totalPoints);
+            const maxWindowPoints = Math.min(powerRuntimeState.maxWindowPoints, totalPoints);
+
+            let normalizedStart = Math.round(Number(start));
+            let normalizedEnd = Math.round(Number(end));
+
+            if (!Number.isFinite(normalizedStart) || !Number.isFinite(normalizedEnd)) {
+                normalizedEnd = totalPoints;
+                normalizedStart = Math.max(1, normalizedEnd - minWindowPoints + 1);
+            }
+
+            if (normalizedStart > normalizedEnd) {
+                const temp = normalizedStart;
+                normalizedStart = normalizedEnd;
+                normalizedEnd = temp;
+            }
+
+            const currentSpan = Math.max(1, normalizedEnd - normalizedStart + 1);
+            const targetSpan = clampValue(currentSpan, minWindowPoints, maxWindowPoints);
+            const center = normalizedStart + (currentSpan - 1) / 2;
+
+            normalizedStart = Math.round(center - (targetSpan - 1) / 2);
+            normalizedEnd = normalizedStart + targetSpan - 1;
+
+            if (normalizedStart < 1) {
+                normalizedEnd += 1 - normalizedStart;
+                normalizedStart = 1;
+            }
+
+            if (normalizedEnd > totalPoints) {
+                normalizedStart -= normalizedEnd - totalPoints;
+                normalizedEnd = totalPoints;
+            }
+
+            normalizedStart = clampValue(normalizedStart, 1, totalPoints);
+            normalizedEnd = clampValue(normalizedEnd, normalizedStart, totalPoints);
+
+            return {
+                start: normalizedStart,
+                end: normalizedEnd,
+                span: normalizedEnd - normalizedStart + 1,
+            };
+        }
+
+        function updatePowerZoomButtons(span) {
+            const zoomInBtn = document.getElementById('powerZoomIn');
+            const zoomOutBtn = document.getElementById('powerZoomOut');
+
+            if (zoomInBtn) zoomInBtn.disabled = span <= powerRuntimeState.minWindowPoints;
+            if (zoomOutBtn) zoomOutBtn.disabled = span >= powerRuntimeState.maxWindowPoints;
+        }
+
+        function animatePowerWindow(currentWindow, targetWindow, durationMs) {
+            if (!powerChartInstance || !powerChartInstance.scales || !powerChartInstance.scales.x) return;
+
+            if (powerRuntimeState.autoFollowFrameId) {
+                cancelAnimationFrame(powerRuntimeState.autoFollowFrameId);
+                powerRuntimeState.autoFollowFrameId = null;
+            }
+
+            const xScale = powerChartInstance.scales.x;
+            const animationDuration = durationMs || 700;
+            const startTime = performance.now();
+            const easeOutCubic = (progress) => 1 - Math.pow(1 - progress, 3);
+
+            const step = (now) => {
+                if (!powerChartInstance || !powerChartInstance.scales || !powerChartInstance.scales.x) {
+                    powerRuntimeState.autoFollowFrameId = null;
+                    return;
+                }
+
+                const progress = Math.min((now - startTime) / animationDuration, 1);
+                const eased = easeOutCubic(progress);
+
+                const currentMin = currentWindow.start + (targetWindow.start - currentWindow.start) * eased;
+                const currentMax = currentWindow.end + (targetWindow.end - currentWindow.end) * eased;
+
+                xScale.options.min = currentMin;
+                xScale.options.max = currentMax;
+                powerChartInstance.update('none');
+
+                if (progress < 1) {
+                    powerRuntimeState.autoFollowFrameId = requestAnimationFrame(step);
+                    return;
+                }
+
+                xScale.options.min = targetWindow.start;
+                xScale.options.max = targetWindow.end;
+                powerChartInstance.update('none');
+                powerRuntimeState.currentWindowSpan = targetWindow.span;
+                updatePowerZoomButtons(targetWindow.span);
+                powerRuntimeState.autoFollowFrameId = null;
+            };
+
+            powerRuntimeState.autoFollowFrameId = requestAnimationFrame(step);
+        }
+
+        function applyPowerWindow(start, end, options) {
+            if (!powerChartInstance || !powerChartInstance.scales || !powerChartInstance.scales.x) return null;
+
+            const applyOptions = options || {};
+            const animate = applyOptions.animate === true;
+            const targetWindow = buildPowerWindow(start, end);
+            const xScale = powerChartInstance.scales.x;
+            const currentWindow = buildPowerWindow(xScale.min, xScale.max);
+
+            if (currentWindow.start === targetWindow.start && currentWindow.end === targetWindow.end) {
+                powerRuntimeState.currentWindowSpan = targetWindow.span;
+                updatePowerZoomButtons(targetWindow.span);
+                return targetWindow;
+            }
+
+            if (animate) {
+                animatePowerWindow(currentWindow, targetWindow, applyOptions.durationMs || 700);
+                return targetWindow;
+            }
+
+            if (powerRuntimeState.autoFollowFrameId) {
+                cancelAnimationFrame(powerRuntimeState.autoFollowFrameId);
+                powerRuntimeState.autoFollowFrameId = null;
+            }
+
+            xScale.options.min = targetWindow.start;
+            xScale.options.max = targetWindow.end;
+            powerChartInstance.update('none');
+
+            powerRuntimeState.currentWindowSpan = targetWindow.span;
+            updatePowerZoomButtons(targetWindow.span);
+            return targetWindow;
+        }
+
+        function zoomPowerByStep(direction) {
+            if (!powerChartInstance || !powerChartInstance.scales || !powerChartInstance.scales.x) return;
+
+            const current = buildPowerWindow(powerChartInstance.scales.x.min, powerChartInstance.scales.x.max);
+            const step = 2;
+            const targetSpan = direction === 'in'
+                ? Math.max(powerRuntimeState.minWindowPoints, current.span - step)
+                : Math.min(powerRuntimeState.maxWindowPoints, current.span + step);
+
+            const center = current.start + (current.span - 1) / 2;
+            const start = Math.round(center - (targetSpan - 1) / 2);
+            const end = start + targetSpan - 1;
+
+            applyPowerWindow(start, end, { animate: false });
+        }
+
+        function bindPowerControls() {
+            if (powerRuntimeState.controlsBound) return;
+
+            const zoomInBtn = document.getElementById('powerZoomIn');
+            const zoomOutBtn = document.getElementById('powerZoomOut');
+            const zoomResetBtn = document.getElementById('powerZoomReset');
+            if (!zoomInBtn || !zoomOutBtn || !zoomResetBtn) return;
+
+            zoomInBtn.addEventListener('click', function() {
+                markPowerUserAction();
+                zoomPowerByStep('in');
+            });
+
+            zoomOutBtn.addEventListener('click', function() {
+                markPowerUserAction();
+                zoomPowerByStep('out');
+            });
+
+            zoomResetBtn.addEventListener('click', function() {
+                markPowerUserAction();
+                const end = powerRuntimeState.totalPoints;
+                const span = powerRuntimeState.minWindowPoints;
+                powerRuntimeState.currentWindowSpan = span;
+                const start = Math.max(1, end - span + 1);
+                applyPowerWindow(start, end, { animate: false });
+            });
+
+            powerRuntimeState.controlsBound = true;
+        }
+
+        function bindPowerCanvasInteractions(canvas) {
+            if (!canvas || canvas.dataset.powerInteractionsBound === '1') return;
+
+            ['mousedown', 'touchstart', 'pointerdown'].forEach(function(eventName) {
+                canvas.addEventListener(eventName, markPowerUserAction, { passive: true });
+            });
+
+            canvas.dataset.powerInteractionsBound = '1';
+        }
+
+        function refreshPowerChart(powerData, options) {
+            const refreshOptions = options || {};
+            const initialLoad = refreshOptions.initialLoad === true;
             latestPowerData = powerData;
             const powerCtx = document.getElementById('powerChart');
             if (!powerCtx) return;
 
             const totalPoints = Math.max(0, Number(powerData.total_points || (Array.isArray(powerData.labels) ? powerData.labels.length : 0)));
+            powerRuntimeState.totalPoints = totalPoints;
+
+            const defaultWindowPoints = Math.max(1, Math.min(10, Math.max(totalPoints, 1)));
+            powerRuntimeState.minWindowPoints = totalPoints > 0 ? Math.min(defaultWindowPoints, totalPoints) : 1;
+            powerRuntimeState.maxWindowPoints = totalPoints > 0
+                ? Math.min(totalPoints, Math.max(powerRuntimeState.minWindowPoints, 30))
+                : 1;
+
+            if (!Number.isFinite(powerRuntimeState.currentWindowSpan) || powerRuntimeState.currentWindowSpan <= 0 || initialLoad) {
+                powerRuntimeState.currentWindowSpan = powerRuntimeState.minWindowPoints;
+            }
+
+            powerRuntimeState.currentWindowSpan = clampValue(
+                powerRuntimeState.currentWindowSpan,
+                powerRuntimeState.minWindowPoints,
+                powerRuntimeState.maxWindowPoints
+            );
+            updatePowerToolbarInfo();
+
             const toPowerPoints = function(series) {
                 if (!Array.isArray(series)) return [];
                 return series
@@ -2751,11 +3477,14 @@
                 return;
             }
 
-            const defaultWindow = Math.min(30, totalPoints);
-            const windowStart = Math.max(1, totalPoints - defaultWindow + 1);
-            const windowEnd = totalPoints;
+            const previousWindow = powerChartInstance && powerChartInstance.scales && powerChartInstance.scales.x
+                ? buildPowerWindow(powerChartInstance.scales.x.min, powerChartInstance.scales.x.max)
+                : null;
 
             if (!powerChartInstance) {
+                const initialEnd = totalPoints;
+                const initialStart = Math.max(1, initialEnd - powerRuntimeState.currentWindowSpan + 1);
+
                 powerChartInstance = new Chart(powerCtx.getContext('2d'), {
                     type: 'line',
                     data: {
@@ -2798,8 +3527,8 @@
                             },
                             x: {
                                 type: 'linear',
-                                min: windowStart,
-                                max: windowEnd,
+                                min: initialStart,
+                                max: initialEnd,
                                 grid: { display: false },
                                 title: { display: true, text: 'Urutan Data (WIB - Surabaya)' },
                                 ticks: {
@@ -2840,7 +3569,14 @@
                                 pan: {
                                     enabled: true,
                                     mode: 'x',
-                                    threshold: 6
+                                    threshold: 6,
+                                    onPanStart: function() {
+                                        markPowerUserAction();
+                                    },
+                                    onPanComplete: function({chart}) {
+                                        markPowerUserAction();
+                                        applyPowerWindow(chart.scales.x.min, chart.scales.x.max, { animate: false });
+                                    }
                                 },
                                 zoom: {
                                     mode: 'x',
@@ -2849,29 +3585,56 @@
                                     drag: { enabled: false }
                                 },
                                 limits: {
-                                    x: { min: 1, max: totalPoints, minRange: Math.min(5, totalPoints) }
+                                    x: { min: 1, max: totalPoints, minRange: powerRuntimeState.minWindowPoints }
                                 }
                             }
                         },
                         animation: false
                     }
                 });
+                bindPowerControls();
+                bindPowerCanvasInteractions(powerCtx);
+                applyPowerWindow(initialStart, initialEnd, { animate: false });
                 return;
             }
 
             powerChartInstance.data.datasets[0].data = mqttPoints;
             powerChartInstance.data.datasets[1].data = httpPoints;
             powerChartInstance.options.scales.x.max = totalPoints;
-            powerChartInstance.options.scales.x.min = Math.max(1, totalPoints - Math.min(30, totalPoints) + 1);
             powerChartInstance.options.plugins.zoom.limits.x.max = totalPoints;
-            powerChartInstance.options.plugins.zoom.limits.x.minRange = Math.min(5, totalPoints);
+            powerChartInstance.options.plugins.zoom.limits.x.minRange = powerRuntimeState.minWindowPoints;
             powerChartInstance.update('none');
+
+            const preservedSpan = previousWindow ? previousWindow.span : powerRuntimeState.currentWindowSpan;
+            powerRuntimeState.currentWindowSpan = clampValue(
+                preservedSpan,
+                powerRuntimeState.minWindowPoints,
+                powerRuntimeState.maxWindowPoints
+            );
+
+            const shouldFollowLatest = initialLoad || isPowerIdle();
+            if (shouldFollowLatest) {
+                const followEnd = totalPoints;
+                const followStart = Math.max(1, followEnd - powerRuntimeState.currentWindowSpan + 1);
+                applyPowerWindow(followStart, followEnd, { animate: !initialLoad, durationMs: 650 });
+            } else if (previousWindow) {
+                const preservedStart = previousWindow.start;
+                const preservedEnd = preservedStart + powerRuntimeState.currentWindowSpan - 1;
+                applyPowerWindow(preservedStart, preservedEnd, { animate: false });
+            } else {
+                const fallbackEnd = totalPoints;
+                const fallbackStart = Math.max(1, fallbackEnd - powerRuntimeState.currentWindowSpan + 1);
+                applyPowerWindow(fallbackStart, fallbackEnd, { animate: false });
+            }
+
+            bindPowerControls();
+            bindPowerCanvasInteractions(powerCtx);
         }
 
         function initCharts(doc, options) {
             const payload = getChartPayload(doc || document);
             refreshLatencyChart(payload.latencyData, options || { initialLoad: true });
-            refreshPowerChart(payload.powerData);
+            refreshPowerChart(payload.powerData, options || { initialLoad: true });
         }
 
         function autoRefreshData() {

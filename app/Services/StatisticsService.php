@@ -374,6 +374,9 @@ class StatisticsService
             'payload_bytes',
             'uptime_s',
             'free_heap_bytes',
+            'sensor_age_ms',
+            'sensor_read_seq',
+            'send_tick_ms',
         ];
 
         $valid = $data->filter(function ($row) use ($requiredFields) {
@@ -484,4 +487,3 @@ class StatisticsService
         return (float) $scores->avg();
     }
 }
-
