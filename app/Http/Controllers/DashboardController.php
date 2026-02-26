@@ -13,23 +13,32 @@ class DashboardController extends Controller
 {
     protected $statisticsService;
 
+    public function showResetPage()
+    {
+        return view('reset-data', $this->buildResetPagePayload());
+    }
+
     // Reset all eksperimen data
     public function resetData()
     {
+        $statusType = 'success';
+        $statusMessage = 'Data eksperimen berhasil direset!';
+
         try {
             DB::transaction(function () {
                 // Gunakan delete agar aman saat ada foreign key constraint.
                 Eksperimen::query()->delete();
             });
-
-            return redirect()
-                ->route('dashboard')
-                ->with('status', 'Data eksperimen berhasil direset!');
         } catch (Throwable $e) {
-            return redirect()
-                ->route('dashboard')
-                ->with('status', 'Gagal reset data eksperimen: ' . $e->getMessage());
+            $statusType = 'error';
+            $statusMessage = 'Gagal reset data eksperimen: ' . $e->getMessage();
         }
+
+        $payload = $this->buildResetPagePayload();
+        $payload['statusType'] = $statusType;
+        $payload['statusMessage'] = $statusMessage;
+
+        return response()->view('reset-data', $payload);
     }
 
     public function __construct(StatisticsService $statisticsService)
@@ -98,12 +107,12 @@ class DashboardController extends Controller
                 'available' => true,
                 'id' => (int) $row->id,
                 'packet_seq' => $row->packet_seq !== null ? (int) $row->packet_seq : null,
-                'suhu' => $row->suhu !== null ? round((float) $row->suhu, 2) : null,
-                'kelembapan' => $row->kelembapan !== null ? round((float) $row->kelembapan, 2) : null,
-                'latency_ms' => $row->latency_ms !== null ? round((float) $row->latency_ms, 2) : null,
-                'daya_mw' => $row->daya_mw !== null ? round((float) $row->daya_mw, 2) : null,
+                'suhu' => $row->suhu !== null ? (float) $row->suhu : null,
+                'kelembapan' => $row->kelembapan !== null ? (float) $row->kelembapan : null,
+                'latency_ms' => $row->latency_ms !== null ? (float) $row->latency_ms : null,
+                'daya_mw' => $row->daya_mw !== null ? (float) $row->daya_mw : null,
                 'rssi_dbm' => $row->rssi_dbm !== null ? (int) $row->rssi_dbm : null,
-                'tx_duration_ms' => $row->tx_duration_ms !== null ? round((float) $row->tx_duration_ms, 2) : null,
+                'tx_duration_ms' => $row->tx_duration_ms !== null ? (float) $row->tx_duration_ms : null,
                 'payload_bytes' => $row->payload_bytes !== null ? (int) $row->payload_bytes : null,
                 'uptime_s' => $row->uptime_s !== null ? (int) $row->uptime_s : null,
                 'free_heap_bytes' => $row->free_heap_bytes !== null ? (int) $row->free_heap_bytes : null,
@@ -134,20 +143,27 @@ class DashboardController extends Controller
             $deltaKelembapan = ((float) $latestMqtt->kelembapan) - ((float) $latestHttp->kelembapan);
 
             $protocolDiagnostics['delta'] = [
-                'suhu' => round($deltaSuhu, 2),
-                'kelembapan' => round($deltaKelembapan, 2),
-                'latency_ms' => round(((float) $latestMqtt->latency_ms) - ((float) $latestHttp->latency_ms), 2),
-                'daya_mw' => round(((float) $latestMqtt->daya_mw) - ((float) $latestHttp->daya_mw), 2),
-                'tx_duration_ms' => round(((float) $latestMqtt->tx_duration_ms) - ((float) $latestHttp->tx_duration_ms), 2),
+                'suhu' => $deltaSuhu,
+                'kelembapan' => $deltaKelembapan,
+                'latency_ms' => ((float) $latestMqtt->latency_ms) - ((float) $latestHttp->latency_ms),
+                'daya_mw' => ((float) $latestMqtt->daya_mw) - ((float) $latestHttp->daya_mw),
+                'tx_duration_ms' => ((float) $latestMqtt->tx_duration_ms) - ((float) $latestHttp->tx_duration_ms),
                 'payload_bytes' => ((int) $latestMqtt->payload_bytes) - ((int) $latestHttp->payload_bytes),
                 'rssi_dbm' => ((int) $latestMqtt->rssi_dbm) - ((int) $latestHttp->rssi_dbm),
+                'sensor_read_seq' => ((int) ($latestMqtt->sensor_read_seq ?? 0)) - ((int) ($latestHttp->sensor_read_seq ?? 0)),
+                'send_tick_ms' => ((int) ($latestMqtt->send_tick_ms ?? 0)) - ((int) ($latestHttp->send_tick_ms ?? 0)),
                 'sensor_age_ms' => ((int) ($latestMqtt->sensor_age_ms ?? 0)) - ((int) ($latestHttp->sensor_age_ms ?? 0)),
-                'server_gap_ms' => $serverGapMs !== null ? round($serverGapMs, 2) : null,
+                'server_gap_ms' => $serverGapMs !== null ? $serverGapMs : null,
             ];
             $protocolDiagnostics['pair_available'] = true;
 
-            if (abs($deltaSuhu) < 0.01 && abs($deltaKelembapan) < 0.01) {
-                $protocolDiagnostics['sensor_sync_note'] = 'Nilai suhu/kelembapan identik pada sampel terbaru. Ini normal karena firmware memakai snapshot sensor yang sama untuk HTTP dan MQTT.';
+            $sameSensorReadSeq = isset($latestMqtt->sensor_read_seq, $latestHttp->sensor_read_seq)
+                && ((int) $latestMqtt->sensor_read_seq === (int) $latestHttp->sensor_read_seq);
+
+            if ($sameSensorReadSeq) {
+                $protocolDiagnostics['sensor_sync_note'] = 'Peringatan: sensor_read_seq MQTT dan HTTP sama pada sampel terbaru. Ini mengindikasikan kedua payload kemungkinan memakai snapshot sensor yang sama.';
+            } elseif (abs($deltaSuhu) < 0.01 && abs($deltaKelembapan) < 0.01) {
+                $protocolDiagnostics['sensor_sync_note'] = 'Nilai suhu/kelembapan identik pada sampel terbaru. Data tetap dapat valid jika kondisi lingkungan stabil, namun pastikan sensor_read_seq berbeda antar protokol.';
             } else {
                 $protocolDiagnostics['sensor_sync_note'] = 'Nilai suhu/kelembapan berbeda di sampel terbaru. Ini bisa terjadi karena timing kirim protokol tidak persis bersamaan.';
             }
@@ -244,6 +260,23 @@ class DashboardController extends Controller
         }
         if (($summary['http']['std_daya'] ?? 0) < 0.5 && ($summary['http']['total_data'] ?? 0) >= 20) {
             $dataWarnings[] = "Variasi daya HTTP sangat rendah (std < 0.5). Data cenderung konstan, cek perhitungan daya firmware.";
+        }
+        if (($protocolDiagnostics['pair_available'] ?? false) && isset($protocolDiagnostics['delta'])) {
+            $diagDelta = $protocolDiagnostics['delta'];
+            $sensorReadGap = isset($diagDelta['sensor_read_seq']) ? (int) $diagDelta['sensor_read_seq'] : null;
+            $sendTickGap = isset($diagDelta['send_tick_ms']) ? (int) $diagDelta['send_tick_ms'] : null;
+            $tempGap = isset($diagDelta['suhu']) ? abs((float) $diagDelta['suhu']) : null;
+            $humidityGap = isset($diagDelta['kelembapan']) ? abs((float) $diagDelta['kelembapan']) : null;
+
+            if ($sensorReadGap !== null && $sensorReadGap === 0) {
+                $dataWarnings[] = "Validasi protokol: sensor_read_seq MQTT dan HTTP terbaru sama. Indikasi snapshot sensor dipakai bersama, bukan pembacaan terpisah.";
+            }
+            if ($sendTickGap !== null && $sendTickGap === 0) {
+                $dataWarnings[] = "Validasi protokol: send_tick_ms MQTT dan HTTP terbaru sama. Cek firmware agar setiap protokol melakukan pembacaan/kirim terpisah.";
+            }
+            if ($tempGap !== null && $humidityGap !== null && $tempGap < 0.0000005 && $humidityGap < 0.0000005 && $sensorReadGap === 0) {
+                $dataWarnings[] = "Suhu dan kelembapan antar protokol identik hingga presisi tinggi dengan sensor_read_seq yang sama. Periksa potensi data duplikat lintas protokol.";
+            }
         }
 
         // Host mismatch checks: tampilkan warning jelas jika konfigurasi host broker bermasalah.
@@ -415,5 +448,38 @@ class DashboardController extends Controller
         }
 
         return in_array($resolved, array_unique($localIps), true);
+    }
+
+    private function buildResetPagePayload(): array
+    {
+        $totalRows = Eksperimen::query()->count();
+        $mqttRows = Eksperimen::query()->whereRaw('UPPER(protokol) = ?', ['MQTT'])->count();
+        $httpRows = Eksperimen::query()->whereRaw('UPPER(protokol) = ?', ['HTTP'])->count();
+
+        $latestRecord = Eksperimen::query()
+            ->select(['id', 'protokol', 'timestamp_server', 'created_at'])
+            ->latest('id')
+            ->first();
+
+        $latestWib = '-';
+        if ($latestRecord) {
+            $timestampSource = $latestRecord->timestamp_server ?? $latestRecord->created_at;
+            if ($timestampSource) {
+                try {
+                    $latestWib = (clone $timestampSource)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i:s') . ' WIB';
+                } catch (Throwable) {
+                    $latestWib = '-';
+                }
+            }
+        }
+
+        return [
+            'totalRows' => $totalRows,
+            'mqttRows' => $mqttRows,
+            'httpRows' => $httpRows,
+            'latestWib' => $latestWib,
+            'statusType' => null,
+            'statusMessage' => null,
+        ];
     }
 }

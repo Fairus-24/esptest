@@ -1,4 +1,4 @@
-
+﻿
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <PubSubClient.h>
@@ -33,6 +33,9 @@ const unsigned long INTERVAL_SENSOR = 5000;    // Read sensor every 5 seconds
 const unsigned long INTERVAL_HTTP = 10000;     // Send HTTP every 10 seconds
 const unsigned long INTERVAL_MQTT = 10000;     // Send MQTT every 10 seconds
 const unsigned long WIFI_TIMEOUT = 10000;      // WiFi connection timeout
+const unsigned long DHT_MIN_READ_INTERVAL_MS = 1500;
+constexpr size_t PAYLOAD_JSON_DOC_CAPACITY = 1024;
+constexpr size_t PAYLOAD_VERIFY_DOC_CAPACITY = 1536;
 
 // ==================== GLOBAL VARIABLES ====================
 WiFiClient wifiClient;
@@ -51,6 +54,7 @@ uint32_t mqttPacketSeq = 0;
 long lastSensorRead = 0;
 long lastHTTPSend = 0;
 long lastMQTTSend = 0;
+unsigned long lastDhtCaptureMs = 0;
 bool mqttConnected = false;
 bool httpConnected = false;
 
@@ -72,7 +76,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length);
 float calculatePowerConsumption();
 float estimateProtocolPower(const char* protocol, float txDurationMs, size_t payloadBytes, int rssiDbm, bool success);
 void fillProtocolPayload(
-    StaticJsonDocument<768>& jsonDoc,
+    StaticJsonDocument<PAYLOAD_JSON_DOC_CAPACITY>& jsonDoc,
     const char* protocol,
     uint32_t packetSeq,
     float dayaMw,
@@ -95,6 +99,7 @@ String buildProtocolPayload(
     uint32_t* payloadBytesOut = nullptr
 );
 bool payloadHasRequiredFields(const String& payload);
+bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog);
 void printStatus();
 void updateTime();
 bool isServerHostSelfTarget();
@@ -198,12 +203,12 @@ void setupWiFi() {
     Serial.println("");
     
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("[WiFi] ✓ Connected!");
+        Serial.println("[WiFi] âœ“ Connected!");
         Serial.println("       IP: " + WiFi.localIP().toString());
         Serial.println("       RSSI: " + String(WiFi.RSSI()) + " dBm");
         httpConnected = true;
     } else {
-        Serial.println("[WiFi] ✗ Failed to connect after " + String(attempts) + " attempts");
+        Serial.println("[WiFi] âœ— Failed to connect after " + String(attempts) + " attempts");
         Serial.println("[WiFi] Check SSID and password!");
         httpConnected = false;
     }
@@ -233,29 +238,48 @@ void printServerTargetConfig() {
 }
 
 // ==================== SENSOR READING ====================
-void readSensor() {
+bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog) {
+    unsigned long nowMs = millis();
+    if (lastDhtCaptureMs > 0 && nowMs > lastDhtCaptureMs) {
+        unsigned long elapsed = nowMs - lastDhtCaptureMs;
+        if (elapsed < DHT_MIN_READ_INTERVAL_MS) {
+            delay(DHT_MIN_READ_INTERVAL_MS - elapsed);
+        }
+    }
+
     float humidity = dht.readHumidity();
     float temperature = dht.readTemperature();
     if (isnan(humidity) || isnan(temperature)) {
-        Serial.println("[SENSOR] ✗ Failed to read from DHT11!");
-        Serial.println("         GPIO 4: Check connection & pull-up resistor (4.7kΩ)");
-        Serial.print("         Raw values - T: ");
-        Serial.print(temperature);
-        Serial.print(", H: ");
-        Serial.println(humidity);
-        return;
+        Serial.print("[");
+        Serial.print(sourceTag != nullptr ? sourceTag : "SENSOR");
+        Serial.println("] Sensor read failed (NaN).");
+        return false;
     }
+
     lastTemperature = temperature;
     lastHumidity = humidity;
-    lastPower = calculatePowerConsumption();
     sensorReadCount++;
-    Serial.print("[SENSOR] ✓ T: ");
-    Serial.print(temperature, 2);
-    Serial.print("°C | H: ");
-    Serial.print(humidity, 2);
-    Serial.print("% | P: ");
-    Serial.print(lastPower, 2);
-    Serial.println(" mW");
+    lastSensorRead = (long) millis();
+    lastDhtCaptureMs = (unsigned long) lastSensorRead;
+
+    if (printSuccessLog) {
+        lastPower = calculatePowerConsumption();
+        Serial.print("[SENSOR] ✓ T: ");
+        Serial.print(temperature, 2);
+        Serial.print("°C | H: ");
+        Serial.print(humidity, 2);
+        Serial.print("% | P: ");
+        Serial.print(lastPower, 2);
+        Serial.println(" mW");
+    }
+
+    return true;
+}
+
+void readSensor() {
+    if (!captureSensorSnapshot("SENSOR", true)) {
+        Serial.println("[SENSOR] ✗ Failed to read from DHT11.");
+    }
 }
 
 // ==================== HTTP SENDER ====================
@@ -266,8 +290,9 @@ void sendHTTP() {
         return;
     }
 
-    if (lastTemperature == 0.0 && lastHumidity == 0.0) {
-        Serial.println("[HTTP] No sensor data available");
+    if (!captureSensorSnapshot("HTTP", false)) {
+        Serial.println("[HTTP] Sensor snapshot invalid, skipping send");
+        httpSendFail++;
         return;
     }
 
@@ -364,8 +389,9 @@ void sendMQTT() {
         return;
     }
 
-    if (lastTemperature == 0.0 && lastHumidity == 0.0) {
-        Serial.println("[MQTT] No sensor data available");
+    if (!captureSensorSnapshot("MQTT", false)) {
+        Serial.println("[MQTT] Sensor snapshot invalid, skipping send");
+        mqttSendFail++;
         return;
     }
 
@@ -465,7 +491,7 @@ void connectMQTT() {
     String clientId = "ESP32-" + String(DEVICE_ID);
     
     if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
-        Serial.println("[MQTT] ✓ Connected!");
+        Serial.println("[MQTT] âœ“ Connected!");
         Serial.print("       Client ID: ");
         Serial.println(clientId);
         mqttConnected = true;
@@ -473,7 +499,7 @@ void connectMQTT() {
         // Subscribe to topics if needed
         // mqttClient.subscribe("iot/commands");
     } else {
-        Serial.print("[MQTT] ✗ Connection failed with code: ");
+        Serial.print("[MQTT] âœ— Connection failed with code: ");
         Serial.println(mqttClient.state());
         mqttConnected = false;
     }
@@ -529,7 +555,6 @@ float estimateProtocolPower(const char* protocol, float txDurationMs, size_t pay
 
     float thermalCurrent = fabsf(lastTemperature - 25.0f) * 0.9f;
     float humidityCurrent = fabsf(lastHumidity - 55.0f) * 0.10f;
-    float baselineNoiseCurrent = (((float) (esp_random() % 2001)) / 1000.0f) - 1.0f; // -1..1 mA
     float retryPenalty = success ? 0.0f : 24.0f;
 
     float totalCurrentMa = wifiBaseCurrentMa
@@ -542,14 +567,13 @@ float estimateProtocolPower(const char* protocol, float txDurationMs, size_t pay
         + protocolReliabilityPenalty
         + thermalCurrent
         + humidityCurrent
-        + baselineNoiseCurrent
         + retryPenalty;
     float powerMw = voltage * totalCurrentMa;
     return max(0.0f, powerMw);
 }
 
 void fillProtocolPayload(
-    StaticJsonDocument<768>& jsonDoc,
+    StaticJsonDocument<PAYLOAD_JSON_DOC_CAPACITY>& jsonDoc,
     const char* protocol,
     uint32_t packetSeq,
     float dayaMw,
@@ -593,7 +617,7 @@ String buildProtocolPayload(
     uint32_t sensorReadSeq,
     uint32_t* payloadBytesOut
 ) {
-    StaticJsonDocument<768> jsonDoc;
+    StaticJsonDocument<PAYLOAD_JSON_DOC_CAPACITY> jsonDoc;
     fillProtocolPayload(jsonDoc, protocol, packetSeq, dayaMw, txDurationMs, 0, rssiDbm, timestampEsp, sensorAgeMs, sensorReadSeq);
 
     String payload;
@@ -612,11 +636,17 @@ String buildProtocolPayload(
 }
 
 bool payloadHasRequiredFields(const String& payload) {
-    StaticJsonDocument<512> verifyDoc;
+    StaticJsonDocument<PAYLOAD_VERIFY_DOC_CAPACITY> verifyDoc;
     DeserializationError error = deserializeJson(verifyDoc, payload);
     if (error) {
         Serial.print("[PAYLOAD] Invalid JSON: ");
         Serial.println(error.c_str());
+        if (error == DeserializationError::NoMemory) {
+            Serial.print("[PAYLOAD] JSON bytes: ");
+            Serial.print(payload.length());
+            Serial.print(" | verify capacity: ");
+            Serial.println((unsigned long) PAYLOAD_VERIFY_DOC_CAPACITY);
+        }
         return false;
     }
 
@@ -743,6 +773,7 @@ void updateTime() {
     }
     
     Serial.println("");
-    Serial.print("[TIME] ✓ Time synchronized: ");
+    Serial.print("[TIME] âœ“ Time synchronized: ");
     Serial.println(ctime(&now));
 }
+

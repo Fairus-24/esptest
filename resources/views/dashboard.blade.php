@@ -153,6 +153,167 @@
             font-size: 0.9em;
         }
 
+        .network-float {
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            width: min(332px, calc(100vw - 28px));
+            border-radius: 14px;
+            padding: 10px 12px;
+            background: linear-gradient(142deg, rgba(2, 6, 23, 0.92), rgba(18, 71, 121, 0.86));
+            border: 1px solid rgba(148, 163, 184, 0.36);
+            box-shadow: 0 20px 36px rgba(2, 6, 23, 0.28);
+            backdrop-filter: blur(8px);
+            color: #e2e8f0;
+            z-index: 1200;
+        }
+
+        .network-float-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 7px;
+        }
+
+        .network-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.79rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            color: #f8fafc;
+        }
+
+        .network-title i {
+            color: #60a5fa;
+        }
+
+        .network-widget-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.66rem;
+            font-weight: 800;
+            border-radius: 999px;
+            padding: 3px 8px;
+            border: 1px solid transparent;
+        }
+
+        .network-widget-status .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            display: inline-block;
+            box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.24);
+        }
+
+        .network-widget-status.is-online {
+            color: #bbf7d0;
+            background: rgba(16, 185, 129, 0.16);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .network-widget-status.is-online .status-dot {
+            background: #22c55e;
+        }
+
+        .network-widget-status.is-offline {
+            color: #fecaca;
+            background: rgba(239, 68, 68, 0.16);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .network-widget-status.is-offline .status-dot {
+            background: #ef4444;
+        }
+
+        .network-protocol-row {
+            display: grid;
+            grid-template-columns: 76px minmax(0, 1fr) minmax(0, 1fr);
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px dashed rgba(148, 163, 184, 0.28);
+        }
+
+        .network-protocol-row:last-of-type {
+            border-bottom: none;
+        }
+
+        .network-protocol-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #cbd5e1;
+        }
+
+        .network-protocol-row.is-online .network-protocol-label {
+            color: #f8fafc;
+        }
+
+        .network-protocol-row.is-offline .network-protocol-label {
+            color: #fecaca;
+        }
+
+        .network-protocol-label i {
+            font-size: 0.7rem;
+        }
+
+        .network-metric {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            text-align: right;
+        }
+
+        .network-metric small {
+            color: rgba(203, 213, 225, 0.82);
+            font-size: 0.62rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .network-metric strong {
+            color: #f8fafc;
+            font-size: 0.8rem;
+            font-weight: 800;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .network-protocol-row.is-offline .network-metric strong {
+            color: #fecaca;
+        }
+
+        .network-stamp {
+            margin-top: 6px;
+            color: rgba(203, 213, 225, 0.84);
+            font-size: 0.62rem;
+            line-height: 1.35;
+        }
+
+        .network-note {
+            margin-top: 4px;
+            color: rgba(148, 163, 184, 0.9);
+            font-size: 0.6rem;
+            line-height: 1.35;
+        }
+
+        @media (max-width: 900px) {
+            .network-float {
+                top: 10px;
+                right: 10px;
+                width: min(304px, calc(100vw - 20px));
+                padding: 9px 10px;
+            }
+        }
+
         /* Stats Grid */
         .stats-grid {
             display: grid;
@@ -170,6 +331,13 @@
             border: 1px solid rgba(0,0,0,0.05);
             position: relative;
             overflow: hidden;
+        }
+
+        .stat-card-help {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 3;
         }
 
         .stat-card::before {
@@ -272,6 +440,18 @@
             display: flex;
             align-items: center;
             gap: 12px;
+        }
+
+        .chart-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .chart-title-row .chart-title {
+            margin-bottom: 0;
         }
 
         .chart-title i {
@@ -468,7 +648,8 @@
             gap: 8px;
         }
 
-        .ttest-help-btn {
+        .ttest-help-btn,
+        .card-help-btn {
             width: 26px;
             height: 26px;
             border: 1px solid rgba(100, 116, 139, 0.35);
@@ -486,19 +667,22 @@
             transition: all 0.2s ease;
         }
 
-        .ttest-help-btn:hover {
+        .ttest-help-btn:hover,
+        .card-help-btn:hover {
             background: #eef2ff;
             border-color: rgba(79, 70, 229, 0.35);
             color: #3730a3;
         }
 
-        .ttest-help-btn[aria-expanded="true"] {
+        .ttest-help-btn[aria-expanded="true"],
+        .card-help-btn[aria-expanded="true"] {
             background: #dbeafe;
             border-color: rgba(37, 99, 235, 0.4);
             color: #1d4ed8;
         }
 
-        .ttest-help-panel {
+        .ttest-help-panel,
+        .card-help-panel {
             margin: 0 0 12px;
             padding: 10px 12px;
             border-radius: 10px;
@@ -509,15 +693,18 @@
             line-height: 1.5;
         }
 
-        .ttest-help-item {
+        .ttest-help-item,
+        .card-help-item {
             margin: 0 0 6px;
         }
 
-        .ttest-help-item:last-child {
+        .ttest-help-item:last-child,
+        .card-help-item:last-child {
             margin-bottom: 0;
         }
 
-        .ttest-help-label {
+        .ttest-help-label,
+        .card-help-label {
             font-weight: 700;
             color: #0f172a;
         }
@@ -1429,10 +1616,6 @@
             margin-bottom: 34px;
         }
 
-        .reset-form {
-            margin: 0;
-        }
-
         .reset-btn {
             border: none;
             border-radius: 12px;
@@ -1442,6 +1625,10 @@
             cursor: pointer;
             background: linear-gradient(135deg, #dc2626, #e11d48);
             box-shadow: 0 12px 24px rgba(220, 38, 38, 0.28);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
         }
 
         .reset-status {
@@ -1587,6 +1774,16 @@
             gap: 8px;
         }
 
+        .quality-help-btn {
+            width: 22px;
+            height: 22px;
+            font-size: 0.72rem;
+        }
+
+        .quality-help-panel {
+            margin: 0 12px 10px;
+        }
+
         .quality-dot {
             width: 10px;
             height: 10px;
@@ -1693,6 +1890,14 @@
             padding: 10px 12px;
         }
 
+        .protocol-card-header {
+            margin: 0 0 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
         .protocol-diagnostic-card.mqtt {
             border-left: 4px solid var(--mqtt-blue);
         }
@@ -1707,12 +1912,53 @@
         }
 
         .protocol-diagnostic-card h4 {
-            margin: 0 0 8px;
+            margin: 0;
             font-size: 0.9rem;
             color: #0f172a;
             display: flex;
             align-items: center;
             gap: 7px;
+        }
+
+        .header-metric-card {
+            position: relative;
+        }
+
+        .header-metric-help {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 2;
+            width: 22px;
+            height: 22px;
+            font-size: 0.72rem;
+            background: rgba(255, 255, 255, 0.24);
+            color: #f8fafc;
+            border-color: rgba(255, 255, 255, 0.48);
+        }
+
+        .header-metric-help:hover {
+            background: rgba(255, 255, 255, 0.36);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.7);
+        }
+
+        .header-metric-help[aria-expanded="true"] {
+            background: rgba(30, 64, 175, 0.45);
+            color: #ffffff;
+            border-color: rgba(191, 219, 254, 0.7);
+        }
+
+        .header-metric-help-panel {
+            margin-top: 8px;
+            background: rgba(2, 6, 23, 0.56);
+            border-color: rgba(148, 163, 184, 0.5);
+            color: #e2e8f0;
+            font-size: 0.75rem;
+        }
+
+        .header-metric-help-panel .card-help-label {
+            color: #f8fafc;
         }
 
         .protocol-diagnostic-list {
@@ -2069,13 +2315,87 @@
     </style>
 </head>
 <body>
+    @php
+        $computeRealtimeMbitPerSecond = static function ($payloadBytes, $txDurationMs): ?float {
+            if ($payloadBytes === null || $txDurationMs === null) {
+                return null;
+            }
+
+            $bytes = (float) $payloadBytes;
+            $durationMs = (float) $txDurationMs;
+            if ($bytes <= 0 || $durationMs <= 0) {
+                return null;
+            }
+
+            return (($bytes * 8) / 1000000) / ($durationMs / 1000);
+        };
+
+        $formatRealtimeLatency = static function ($latency): string {
+            if ($latency === null || $latency === '') {
+                return '-';
+            }
+
+            return number_format((float) $latency, 2) . ' ms';
+        };
+
+        $formatRealtimeSpeed = static function ($speed): string {
+            if ($speed === null) {
+                return '-';
+            }
+
+            return number_format((float) $speed, 3) . ' Mb/s';
+        };
+
+        $latestMqttRealtime = $protocolDiagnostics['mqtt'] ?? ['available' => false];
+        $latestHttpRealtime = $protocolDiagnostics['http'] ?? ['available' => false];
+
+        $mqttRealtimeLatency = $formatRealtimeLatency($latestMqttRealtime['latency_ms'] ?? null);
+        $httpRealtimeLatency = $formatRealtimeLatency($latestHttpRealtime['latency_ms'] ?? null);
+        $mqttRealtimeSpeed = $formatRealtimeSpeed($computeRealtimeMbitPerSecond($latestMqttRealtime['payload_bytes'] ?? null, $latestMqttRealtime['tx_duration_ms'] ?? null));
+        $httpRealtimeSpeed = $formatRealtimeSpeed($computeRealtimeMbitPerSecond($latestHttpRealtime['payload_bytes'] ?? null, $latestHttpRealtime['tx_duration_ms'] ?? null));
+        $mqttRealtimeStamp = $latestMqttRealtime['timestamp_server'] ?? '-';
+        $httpRealtimeStamp = $latestHttpRealtime['timestamp_server'] ?? '-';
+        $isRealtimeWidgetLive = $mqttConnected || $httpConnected;
+    @endphp
+
+    <aside id="realtimeNetworkWidget" class="network-float" aria-live="polite">
+        <div class="network-float-head">
+            <span class="network-title"><i class="fas fa-gauge-high"></i> Realtime Link Monitor</span>
+            <span id="networkWidgetStatus" class="network-widget-status {{ $isRealtimeWidgetLive ? 'is-online' : 'is-offline' }}">
+                <span class="status-dot"></span>
+                {{ $isRealtimeWidgetLive ? 'LIVE' : 'IDLE' }}
+            </span>
+        </div>
+        <div id="mqttNetworkRow" class="network-protocol-row {{ $mqttConnected ? 'is-online' : 'is-offline' }}">
+            <span class="network-protocol-label"><i class="fas fa-broadcast-tower"></i> MQTT</span>
+            <span class="network-metric"><small>Ping</small><strong>{{ $mqttRealtimeLatency }}</strong></span>
+            <span class="network-metric"><small>Speed</small><strong>{{ $mqttRealtimeSpeed }}</strong></span>
+        </div>
+        <div id="httpNetworkRow" class="network-protocol-row {{ $httpConnected ? 'is-online' : 'is-offline' }}">
+            <span class="network-protocol-label"><i class="fas fa-server"></i> HTTP</span>
+            <span class="network-metric"><small>Ping</small><strong>{{ $httpRealtimeLatency }}</strong></span>
+            <span class="network-metric"><small>Speed</small><strong>{{ $httpRealtimeSpeed }}</strong></span>
+        </div>
+        <div id="networkWidgetStamp" class="network-stamp">
+            MQTT: {{ $mqttRealtimeStamp }}<br>
+            HTTP: {{ $httpRealtimeStamp }}
+        </div>
+        <p class="network-note">Speed dihitung dari payload bytes / tx duration telemetry terbaru.</p>
+    </aside>
+
     <div class="container">
         <!-- Header -->
         <div class="header">
             <div class="header-content header-metric-row">
                 <div class="header-metric-card suhu-card">
+                    <button type="button" class="card-help-btn header-metric-help" data-help-target="helpHeaderSuhu" aria-controls="helpHeaderSuhu" aria-expanded="false" title="Lihat penjelasan card suhu">?</button>
                     <div class="metric-icon"><i class="fas fa-thermometer-half"></i></div>
                     <div class="metric-label">Rata-rata Suhu</div>
+                    <div id="helpHeaderSuhu" class="card-help-panel header-metric-help-panel" hidden>
+                        <p class="card-help-item"><span class="card-help-label">Rata-rata Suhu:</span> Nilai rata-rata suhu gabungan dari data MQTT dan HTTP terbaru.</p>
+                        <p class="card-help-item"><span class="card-help-label">MQTT / HTTP:</span> Menampilkan rata-rata suhu masing-masing protokol untuk perbandingan langsung.</p>
+                        <p class="card-help-item"><span class="card-help-label">Delta (MQTT-HTTP):</span> Selisih rata-rata suhu antara dua protokol pada sampel terbaru.</p>
+                    </div>
                     <div class="metric-value" id="avgSuhuValue">{{ number_format((float) ($avgSuhu ?? 0), 2) }}<span class="metric-unit">C</span></div>
                     <div class="metric-detail" id="avgSuhuDetail">
                         MQTT: {{ number_format((float) ($mqttAvgSuhu ?? 0), 2) }} C<br>
@@ -2099,8 +2419,14 @@
                     </div>
                 </div>
                 <div class="header-metric-card kelembapan-card">
+                    <button type="button" class="card-help-btn header-metric-help" data-help-target="helpHeaderHumidity" aria-controls="helpHeaderHumidity" aria-expanded="false" title="Lihat penjelasan card kelembapan">?</button>
                     <div class="metric-icon"><i class="fas fa-tint"></i></div>
                     <div class="metric-label">Rata-rata Kelembapan</div>
+                    <div id="helpHeaderHumidity" class="card-help-panel header-metric-help-panel" hidden>
+                        <p class="card-help-item"><span class="card-help-label">Rata-rata Kelembapan:</span> Nilai rata-rata kelembapan gabungan dari data MQTT dan HTTP terbaru.</p>
+                        <p class="card-help-item"><span class="card-help-label">MQTT / HTTP:</span> Menampilkan rata-rata kelembapan per protokol untuk melihat perbedaan pembacaan.</p>
+                        <p class="card-help-item"><span class="card-help-label">Delta (MQTT-HTTP):</span> Selisih kelembapan terbaru antar protokol.</p>
+                    </div>
                     <div class="metric-value" id="avgKelembapanValue">{{ number_format((float) ($avgKelembapan ?? 0), 2) }}<span class="metric-unit">%</span></div>
                     <div class="metric-detail" id="avgKelembapanDetail">
                         MQTT: {{ number_format((float) ($mqttAvgKelembapan ?? 0), 2) }}%<br>
@@ -2116,59 +2442,104 @@
         <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Real-Time Metrics</h2>
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card mqtt-color">
+                <button type="button" class="card-help-btn stat-card-help" data-help-target="helpStatMqttTotal" aria-controls="helpStatMqttTotal" aria-expanded="false" title="Lihat penjelasan card">?</button>
                 <div class="stat-icon mqtt"><i class="fas fa-broadcast-tower"></i></div>
+                <div id="helpStatMqttTotal" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">MQTT - Total Data:</span> Jumlah seluruh baris data protokol MQTT yang sudah tersimpan.</p>
+                    <p class="card-help-item"><span class="card-help-label">Nilai utama:</span> Counter realtime total data MQTT.</p>
+                    <p class="card-help-item"><span class="card-help-label">data points:</span> Satuan jumlah record, bukan satuan fisik sensor.</p>
+                </div>
                 <span class="stat-label">MQTT - Total Data</span>
                 <span class="stat-value">{{ $summary['mqtt']['total_data'] }}</span>
                 <span class="stat-unit">data points</span>
             </div>
             <div class="stat-card mqtt-color">
+                <button type="button" class="card-help-btn stat-card-help" data-help-target="helpStatMqttLatency" aria-controls="helpStatMqttLatency" aria-expanded="false" title="Lihat penjelasan card">?</button>
                 <div class="stat-icon mqtt"><i class="fas fa-clock"></i></div>
+                <div id="helpStatMqttLatency" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">MQTT - Avg Latency:</span> Rata-rata waktu tempuh pengiriman data MQTT hingga diterima server.</p>
+                    <p class="card-help-item"><span class="card-help-label">Nilai utama:</span> Mean latency dari sampel data MQTT yang dipakai analisis.</p>
+                    <p class="card-help-item"><span class="card-help-label">milliseconds:</span> Satuan milidetik; makin kecil biasanya makin baik.</p>
+                </div>
                 <span class="stat-label">MQTT - Avg Latency</span>
                 <span class="stat-value">{{ $summary['mqtt']['avg_latency_ms'] }}</span>
                 <span class="stat-unit">milliseconds</span>
             </div>
             <div class="stat-card mqtt-color">
+                <button type="button" class="card-help-btn stat-card-help" data-help-target="helpStatMqttPower" aria-controls="helpStatMqttPower" aria-expanded="false" title="Lihat penjelasan card">?</button>
                 <div class="stat-icon mqtt"><i class="fas fa-bolt"></i></div>
+                <div id="helpStatMqttPower" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">MQTT - Avg Power:</span> Rata-rata konsumsi daya pada siklus kirim MQTT.</p>
+                    <p class="card-help-item"><span class="card-help-label">Nilai utama:</span> Mean `daya_mw` data MQTT yang sudah tervalidasi.</p>
+                    <p class="card-help-item"><span class="card-help-label">milliwatts:</span> Satuan daya listrik dalam mW.</p>
+                </div>
                 <span class="stat-label">MQTT - Avg Power</span>
                 <span class="stat-value">{{ $summary['mqtt']['avg_daya_mw'] }}</span>
                 <span class="stat-unit">milliwatts</span>
             </div>
             <div class="stat-card mqtt-color">
+                <button type="button" class="card-help-btn stat-card-help" data-help-target="helpStatMqttReliability" aria-controls="helpStatMqttReliability" aria-expanded="false" title="Lihat penjelasan card">?</button>
                 <div class="stat-icon mqtt"><i class="fas fa-shield-alt"></i></div>
+                <div id="helpStatMqttReliability" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">MQTT - Reliability:</span> Skor kesehatan pengiriman MQTT berdasarkan sequence, kelengkapan field, dan transmission health.</p>
+                    <p class="card-help-item"><span class="card-help-label">Nilai utama (%):</span> Skor gabungan reliabilitas protokol MQTT.</p>
+                    <p class="card-help-item"><span class="card-help-label">seq | complete | tx:</span> Ringkasan continuity packet, completeness payload, dan kesehatan transmisi.</p>
+                </div>
                 <span class="stat-label">MQTT - Reliability</span>
                 <span class="stat-value">{{ $reliability['mqtt_reliability'] }}%</span>
                 <span class="stat-unit">seq {{ $reliability['mqtt_expected_packets'] > 0 ? ($reliability['mqtt_received_packets'] . '/' . $reliability['mqtt_expected_packets']) : '-' }} | complete {{ $reliability['mqtt_data_completeness'] }}% | tx {{ $reliability['mqtt_transmission_health'] ?? 0 }}%</span>
             </div>
             <div class="stat-card http-color">
+                <button type="button" class="card-help-btn stat-card-help" data-help-target="helpStatHttpTotal" aria-controls="helpStatHttpTotal" aria-expanded="false" title="Lihat penjelasan card">?</button>
                 <div class="stat-icon http"><i class="fas fa-server"></i></div>
+                <div id="helpStatHttpTotal" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">HTTP - Total Data:</span> Jumlah seluruh baris data protokol HTTP yang sudah tersimpan.</p>
+                    <p class="card-help-item"><span class="card-help-label">Nilai utama:</span> Counter realtime total data HTTP.</p>
+                    <p class="card-help-item"><span class="card-help-label">data points:</span> Satuan jumlah record, bukan satuan fisik sensor.</p>
+                </div>
                 <span class="stat-label">HTTP - Total Data</span>
                 <span class="stat-value">{{ $summary['http']['total_data'] }}</span>
                 <span class="stat-unit">data points</span>
             </div>
             <div class="stat-card http-color">
+                <button type="button" class="card-help-btn stat-card-help" data-help-target="helpStatHttpLatency" aria-controls="helpStatHttpLatency" aria-expanded="false" title="Lihat penjelasan card">?</button>
                 <div class="stat-icon http"><i class="fas fa-hourglass-end"></i></div>
+                <div id="helpStatHttpLatency" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">HTTP - Avg Latency:</span> Rata-rata waktu tempuh request HTTP hingga diproses server.</p>
+                    <p class="card-help-item"><span class="card-help-label">Nilai utama:</span> Mean latency dari sampel data HTTP.</p>
+                    <p class="card-help-item"><span class="card-help-label">milliseconds:</span> Satuan milidetik; makin kecil biasanya makin baik.</p>
+                </div>
                 <span class="stat-label">HTTP - Avg Latency</span>
                 <span class="stat-value">{{ $summary['http']['avg_latency_ms'] }}</span>
                 <span class="stat-unit">milliseconds</span>
             </div>
             <div class="stat-card http-color">
+                <button type="button" class="card-help-btn stat-card-help" data-help-target="helpStatHttpPower" aria-controls="helpStatHttpPower" aria-expanded="false" title="Lihat penjelasan card">?</button>
                 <div class="stat-icon http"><i class="fas fa-plug"></i></div>
+                <div id="helpStatHttpPower" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">HTTP - Avg Power:</span> Rata-rata konsumsi daya pada siklus kirim HTTP.</p>
+                    <p class="card-help-item"><span class="card-help-label">Nilai utama:</span> Mean `daya_mw` data HTTP yang sudah tervalidasi.</p>
+                    <p class="card-help-item"><span class="card-help-label">milliwatts:</span> Satuan daya listrik dalam mW.</p>
+                </div>
                 <span class="stat-label">HTTP - Avg Power</span>
                 <span class="stat-value">{{ $summary['http']['avg_daya_mw'] }}</span>
                 <span class="stat-unit">milliwatts</span>
             </div>
             <div class="stat-card http-color">
+                <button type="button" class="card-help-btn stat-card-help" data-help-target="helpStatHttpReliability" aria-controls="helpStatHttpReliability" aria-expanded="false" title="Lihat penjelasan card">?</button>
                 <div class="stat-icon http"><i class="fas fa-check-circle"></i></div>
+                <div id="helpStatHttpReliability" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">HTTP - Reliability:</span> Skor kesehatan pengiriman HTTP berdasarkan sequence, kelengkapan field, dan transmission health.</p>
+                    <p class="card-help-item"><span class="card-help-label">Nilai utama (%):</span> Skor gabungan reliabilitas protokol HTTP.</p>
+                    <p class="card-help-item"><span class="card-help-label">seq | complete | tx:</span> Ringkasan continuity packet, completeness payload, dan kesehatan transmisi.</p>
+                </div>
                 <span class="stat-label">HTTP - Reliability</span>
                 <span class="stat-value">{{ $reliability['http_reliability'] }}%</span>
                 <span class="stat-unit">seq {{ $reliability['http_expected_packets'] > 0 ? ($reliability['http_received_packets'] . '/' . $reliability['http_expected_packets']) : '-' }} | complete {{ $reliability['http_data_completeness'] }}% | tx {{ $reliability['http_transmission_health'] ?? 0 }}%</span>
             </div>
         </div>
         <div class="action-row">
-            <form id="resetEksperimenForm" class="reset-form" method="POST" action="{{ route('reset.data') }}">
-                @csrf
-                <button type="submit" class="reset-btn"><i class="fas fa-trash-alt"></i> Reset Data Eksperimen</button>
-            </form>
+            <a href="{{ (rtrim(request()->getBaseUrl(), '/') !== '' ? rtrim(request()->getBaseUrl(), '/') : '') . '/reset-data' }}" class="reset-btn"><i class="fas fa-trash-alt"></i> Reset Data Eksperimen</a>
             @if(session('status'))
                 <span id="resetStatusMessage" class="reset-status">{{ session('status') }}</span>
             @endif
@@ -2195,6 +2566,51 @@
                     'http' => $protocolDiagnostics['http'] ?? ['protocol' => 'HTTP', 'available' => false],
                 ];
                 $protocolDelta = $protocolDiagnostics['delta'] ?? null;
+                $formatPreciseFloat = static function ($value, int $decimals = 8): string {
+                    if ($value === null || $value === '') {
+                        return '-';
+                    }
+                    return number_format((float) $value, $decimals, '.', '');
+                };
+                $formatSignedPreciseFloat = static function ($value, int $decimals = 8): string {
+                    if ($value === null || $value === '') {
+                        return '-';
+                    }
+                    $numeric = (float) $value;
+                    $prefix = $numeric >= 0 ? '+' : '';
+                    return $prefix . number_format($numeric, $decimals, '.', '');
+                };
+                $protocolRowHelp = [
+                    'Data ID' => 'ID unik row pada database untuk payload terbaru protokol ini.',
+                    'Packet Seq' => 'Nomor urut paket dari ESP32 untuk mendeteksi gap/loss.',
+                    'Timestamp ESP' => 'Waktu saat data dicatat di ESP32 (ditampilkan dalam WIB).',
+                    'Timestamp Server' => 'Waktu saat payload diterima server Laravel (WIB).',
+                    'Suhu (raw)' => 'Nilai suhu mentah presisi tinggi yang dikirim payload protokol ini.',
+                    'Kelembapan (raw)' => 'Nilai kelembapan mentah presisi tinggi dari payload protokol ini.',
+                    'Latency' => 'Estimasi waktu kirim data protokol dari sumber ke server.',
+                    'Daya' => 'Estimasi konsumsi daya saat proses kirim protokol.',
+                    'RSSI' => 'Kekuatan sinyal WiFi saat payload dikirim (semakin mendekati 0 biasanya lebih kuat).',
+                    'TX Duration' => 'Durasi transmisi payload untuk protokol terkait.',
+                    'Payload' => 'Ukuran payload yang dikirim dalam byte.',
+                    'Sensor Age' => 'Usia data sensor saat payload dikirim.',
+                    'Sensor Read Seq' => 'Urutan pembacaan sensor untuk menelusuri snapshot data.',
+                    'Send Tick' => 'Tick monotonic ESP32 saat payload dipublish/dikirim.',
+                    'Uptime' => 'Lamanya ESP32 menyala saat payload dikirim.',
+                    'Free Heap' => 'Memori bebas ESP32 saat payload dikirim.',
+                ];
+                $deltaRowHelp = [
+                    'Suhu' => 'Selisih suhu MQTT terhadap HTTP pada sampel terbaru.',
+                    'Kelembapan' => 'Selisih kelembapan MQTT terhadap HTTP pada sampel terbaru.',
+                    'Latency' => 'Selisih latency antara MQTT dan HTTP.',
+                    'Daya' => 'Selisih konsumsi daya antara MQTT dan HTTP.',
+                    'TX Duration' => 'Selisih waktu transmisi payload antara dua protokol.',
+                    'Payload' => 'Perbedaan ukuran payload MQTT dan HTTP.',
+                    'RSSI' => 'Perbedaan kekuatan sinyal saat kedua protokol mengirim.',
+                    'Sensor Read Seq' => 'Gap urutan pembacaan sensor antara MQTT dan HTTP.',
+                    'Send Tick' => 'Gap tick kirim monotonic antar protokol.',
+                    'Sensor Age' => 'Gap usia snapshot sensor antar protokol.',
+                    'Server Timestamp Gap' => 'Jarak waktu penerimaan server antara payload MQTT dan HTTP.',
+                ];
             @endphp
             <div class="protocol-diagnostics-grid">
                 @foreach($diagnosticCards as $diagnosticCard)
@@ -2202,13 +2618,14 @@
                         $cardProtocol = strtoupper((string) ($diagnosticCard['protocol'] ?? 'UNKNOWN'));
                         $cardClass = strtolower($cardProtocol);
                         $cardIcon = $cardProtocol === 'MQTT' ? 'fa-broadcast-tower' : 'fa-server';
+                        $helpPanelId = 'protocolHelp' . ucfirst(strtolower($cardProtocol));
                         $rows = [
                             ['label' => 'Data ID', 'value' => $diagnosticCard['id'] ?? '-'],
                             ['label' => 'Packet Seq', 'value' => $diagnosticCard['packet_seq'] ?? '-'],
                             ['label' => 'Timestamp ESP', 'value' => $diagnosticCard['timestamp_esp'] ?? '-'],
                             ['label' => 'Timestamp Server', 'value' => $diagnosticCard['timestamp_server'] ?? '-'],
-                            ['label' => 'Suhu', 'value' => isset($diagnosticCard['suhu']) ? number_format((float) $diagnosticCard['suhu'], 2) . ' C' : '-'],
-                            ['label' => 'Kelembapan', 'value' => isset($diagnosticCard['kelembapan']) ? number_format((float) $diagnosticCard['kelembapan'], 2) . ' %' : '-'],
+                            ['label' => 'Suhu (raw)', 'value' => isset($diagnosticCard['suhu']) ? $formatPreciseFloat($diagnosticCard['suhu']) . ' C' : '-'],
+                            ['label' => 'Kelembapan (raw)', 'value' => isset($diagnosticCard['kelembapan']) ? $formatPreciseFloat($diagnosticCard['kelembapan']) . ' %' : '-'],
                             ['label' => 'Latency', 'value' => isset($diagnosticCard['latency_ms']) ? number_format((float) $diagnosticCard['latency_ms'], 2) . ' ms' : '-'],
                             ['label' => 'Daya', 'value' => isset($diagnosticCard['daya_mw']) ? number_format((float) $diagnosticCard['daya_mw'], 2) . ' mW' : '-'],
                             ['label' => 'RSSI', 'value' => isset($diagnosticCard['rssi_dbm']) ? $diagnosticCard['rssi_dbm'] . ' dBm' : '-'],
@@ -2222,7 +2639,15 @@
                         ];
                     @endphp
                     <article class="protocol-diagnostic-card {{ $cardClass }}">
-                        <h4><i class="fas {{ $cardIcon }}"></i> {{ $cardProtocol }} Latest Payload</h4>
+                        <div class="protocol-card-header">
+                            <h4><i class="fas {{ $cardIcon }}"></i> {{ $cardProtocol }} Latest Payload</h4>
+                            <button type="button" class="card-help-btn" data-help-target="{{ $helpPanelId }}" aria-controls="{{ $helpPanelId }}" aria-expanded="false" title="Lihat penjelasan row card ini">?</button>
+                        </div>
+                        <div id="{{ $helpPanelId }}" class="card-help-panel" hidden>
+                            @foreach($rows as $row)
+                                <p class="card-help-item"><span class="card-help-label">{{ $row['label'] }}:</span> {{ $protocolRowHelp[$row['label']] ?? 'Keterangan row belum tersedia.' }}</p>
+                            @endforeach
+                        </div>
                         <div class="protocol-diagnostic-list">
                             @if(!($diagnosticCard['available'] ?? false))
                                 <div class="protocol-diagnostic-row">
@@ -2241,16 +2666,26 @@
                     </article>
                 @endforeach
                 <article class="protocol-diagnostic-card delta">
-                    <h4><i class="fas fa-code-compare"></i> Delta MQTT - HTTP</h4>
+                    <div class="protocol-card-header">
+                        <h4><i class="fas fa-code-compare"></i> Delta MQTT - HTTP</h4>
+                        <button type="button" class="card-help-btn" data-help-target="protocolHelpDelta" aria-controls="protocolHelpDelta" aria-expanded="false" title="Lihat penjelasan row card ini">?</button>
+                    </div>
+                    <div id="protocolHelpDelta" class="card-help-panel" hidden>
+                        @foreach($deltaRowHelp as $deltaLabel => $deltaDesc)
+                            <p class="card-help-item"><span class="card-help-label">{{ $deltaLabel }}:</span> {{ $deltaDesc }}</p>
+                        @endforeach
+                    </div>
                     <div class="protocol-diagnostic-list">
                         @if($protocolDiagnostics['pair_available'] ?? false)
-                            <div class="protocol-diagnostic-row"><span class="label">Suhu</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['suhu'] ?? 0)) }} C</span></div>
-                            <div class="protocol-diagnostic-row"><span class="label">Kelembapan</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['kelembapan'] ?? 0)) }} %</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Suhu</span><span class="value">{{ $formatSignedPreciseFloat($protocolDelta['suhu'] ?? null) }} C</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Kelembapan</span><span class="value">{{ $formatSignedPreciseFloat($protocolDelta['kelembapan'] ?? null) }} %</span></div>
                             <div class="protocol-diagnostic-row"><span class="label">Latency</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['latency_ms'] ?? 0)) }} ms</span></div>
                             <div class="protocol-diagnostic-row"><span class="label">Daya</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['daya_mw'] ?? 0)) }} mW</span></div>
                             <div class="protocol-diagnostic-row"><span class="label">TX Duration</span><span class="value">{{ sprintf('%+.2f', (float) ($protocolDelta['tx_duration_ms'] ?? 0)) }} ms</span></div>
                             <div class="protocol-diagnostic-row"><span class="label">Payload</span><span class="value">{{ (($protocolDelta['payload_bytes'] ?? 0) >= 0 ? '+' : '') . ($protocolDelta['payload_bytes'] ?? 0) }} bytes</span></div>
                             <div class="protocol-diagnostic-row"><span class="label">RSSI</span><span class="value">{{ (($protocolDelta['rssi_dbm'] ?? 0) >= 0 ? '+' : '') . ($protocolDelta['rssi_dbm'] ?? 0) }} dBm</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Sensor Read Seq</span><span class="value">{{ (($protocolDelta['sensor_read_seq'] ?? 0) >= 0 ? '+' : '') . ($protocolDelta['sensor_read_seq'] ?? 0) }}</span></div>
+                            <div class="protocol-diagnostic-row"><span class="label">Send Tick</span><span class="value">{{ (($protocolDelta['send_tick_ms'] ?? 0) >= 0 ? '+' : '') . ($protocolDelta['send_tick_ms'] ?? 0) }} ms</span></div>
                             <div class="protocol-diagnostic-row"><span class="label">Sensor Age</span><span class="value">{{ (($protocolDelta['sensor_age_ms'] ?? 0) >= 0 ? '+' : '') . ($protocolDelta['sensor_age_ms'] ?? 0) }} ms</span></div>
                             <div class="protocol-diagnostic-row"><span class="label">Server Timestamp Gap</span><span class="value">{{ isset($protocolDelta['server_gap_ms']) ? number_format((float) $protocolDelta['server_gap_ms'], 2) . ' ms' : '-' }}</span></div>
                         @else
@@ -2266,6 +2701,7 @@
                     $hasQualityIssue = false;
                     $isMqttProtocol = strtoupper((string) $protocol) === 'MQTT';
                     $protocolIconClass = $isMqttProtocol ? 'fa-broadcast-tower quality-protocol-mqtt' : 'fa-server quality-protocol-http';
+                    $qualityHelpPanelId = 'qualityHelp' . preg_replace('/[^a-z0-9]/i', '', ucfirst(strtolower((string) $protocol)));
                     if (($protocolMeta['total'] ?? 0) > 0 && isset($protocolMeta['fields']) && is_array($protocolMeta['fields'])) {
                         foreach ($protocolMeta['fields'] as $fieldMeta) {
                             if (($fieldMeta['missing'] ?? 0) > 0) {
@@ -2287,10 +2723,20 @@
                                 <span class="quality-title-count">({{ $protocolMeta['total'] }} data)</span>
                             </h4>
                             <span class="quality-summary-meta">
+                                <button type="button" class="card-help-btn quality-help-btn" data-help-target="{{ $qualityHelpPanelId }}" aria-controls="{{ $qualityHelpPanelId }}" aria-expanded="false" title="Lihat penjelasan row card ini">?</button>
                                 <span class="quality-dot {{ $hasQualityIssue ? 'quality-dot-bad' : 'quality-dot-good' }}" aria-label="{{ $hasQualityIssue ? 'Status warning' : 'Status aman' }}"></span>
                                 <span class="quality-toggle"><i class="fas fa-chevron-down"></i></span>
                             </span>
                         </summary>
+                        <div id="{{ $qualityHelpPanelId }}" class="card-help-panel quality-help-panel" hidden>
+                            @if($protocolMeta['total'] === 0)
+                                <p class="card-help-item"><span class="card-help-label">Status:</span> Belum ada data untuk validasi kelengkapan field protokol ini.</p>
+                            @else
+                                @foreach($protocolMeta['fields'] as $fieldMeta)
+                                    <p class="card-help-item"><span class="card-help-label">{{ $fieldMeta['label'] }}:</span> Menampilkan jumlah data valid dibanding total data untuk field ini.</p>
+                                @endforeach
+                            @endif
+                        </div>
                         <div class="quality-content">
                         @if($protocolMeta['total'] === 0)
                             <div class="quality-row">
@@ -2316,11 +2762,20 @@
         @if($mqttTotal > 0 || $httpTotal > 0)
             <h2 class="section-title"><i class="fas fa-chart-bar"></i> Comparative Analysis</h2>
             <div class="chart-container">
-                <h3 class="chart-title"><i class="fas fa-stopwatch"></i> Latency Comparison</h3>
+                <div class="chart-title-row">
+                    <h3 class="chart-title"><i class="fas fa-stopwatch"></i> Latency Comparison</h3>
+                    <button type="button" class="card-help-btn" data-help-target="chartHelpLatency" aria-controls="chartHelpLatency" aria-expanded="false" title="Lihat penjelasan row card ini">?</button>
+                </div>
+                <div id="chartHelpLatency" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">Total data point:</span> Jumlah titik data latency gabungan MQTT + HTTP yang tersedia di chart.</p>
+                    <p class="card-help-item"><span class="card-help-label">Default(min):</span> Jumlah titik minimum yang ditampilkan ketika zoom di-reset.</p>
+                    <p class="card-help-item"><span class="card-help-label">View saat ini:</span> Jumlah titik yang sedang terlihat pada viewport chart sekarang.</p>
+                    <p class="card-help-item"><span class="card-help-label">Zoom/Pan:</span> Gunakan tombol `-`, `+`, `Reset` dan geser horizontal untuk melihat data lama/baru.</p>
+                </div>
                 @if(count($latencyChartData['labels']) > 0)
                     <div class="chart-toolbar">
                         <div class="chart-toolbar-info" id="latencyToolbarInfo">
-                            Total data point: {{ $latencyChartData['total_points'] }} | View: {{ min(10, $latencyChartData['total_points']) }}-{{ min(30, $latencyChartData['total_points']) }} data
+                            Total data point: {{ $latencyChartData['total_points'] }} | Default(min): {{ min(10, $latencyChartData['total_points']) }} data | View saat ini: {{ min(10, $latencyChartData['total_points']) }} data
                         </div>
                         <div class="zoom-controls">
                             <button type="button" id="latencyZoomOut" class="zoom-btn" aria-label="Zoom Out">-</button>
@@ -2337,11 +2792,20 @@
                 @endif
             </div>
             <div class="chart-container">
-                <h3 class="chart-title"><i class="fas fa-battery-half"></i> Power Consumption Comparison</h3>
+                <div class="chart-title-row">
+                    <h3 class="chart-title"><i class="fas fa-battery-half"></i> Power Consumption Comparison</h3>
+                    <button type="button" class="card-help-btn" data-help-target="chartHelpPower" aria-controls="chartHelpPower" aria-expanded="false" title="Lihat penjelasan row card ini">?</button>
+                </div>
+                <div id="chartHelpPower" class="card-help-panel" hidden>
+                    <p class="card-help-item"><span class="card-help-label">Total data point:</span> Jumlah titik data daya gabungan MQTT + HTTP yang tersedia di chart.</p>
+                    <p class="card-help-item"><span class="card-help-label">Default(min):</span> Jumlah titik minimum saat reset tampilan power chart.</p>
+                    <p class="card-help-item"><span class="card-help-label">View saat ini:</span> Jumlah titik yang sedang tampil saat ini pada chart power.</p>
+                    <p class="card-help-item"><span class="card-help-label">Zoom/Pan:</span> Gunakan tombol `-`, `+`, `Reset` dan geser horizontal untuk eksplorasi data.</p>
+                </div>
                 @if(count($powerChartData['labels']) > 0)
                     <div class="chart-toolbar">
                         <div class="chart-toolbar-info" id="powerToolbarInfo">
-                            Total data point: {{ $powerChartData['total_points'] }} | View: {{ min(10, $powerChartData['total_points']) }}-{{ min(30, $powerChartData['total_points']) }} data
+                            Total data point: {{ $powerChartData['total_points'] }} | Default(min): {{ min(15, $powerChartData['total_points']) }} data | View saat ini: {{ min(15, $powerChartData['total_points']) }} data
                         </div>
                         <div class="zoom-controls">
                             <button type="button" id="powerZoomOut" class="zoom-btn" aria-label="Zoom Out">-</button>
@@ -2689,7 +3153,61 @@
             }
         }
 
+        function syncElementClassAndHtml(newDoc, elementId) {
+            const currentElement = document.getElementById(elementId);
+            const nextElement = newDoc.getElementById(elementId);
+            if (!currentElement || !nextElement) return;
+
+            currentElement.className = nextElement.className;
+            if (currentElement.innerHTML !== nextElement.innerHTML) {
+                currentElement.innerHTML = nextElement.innerHTML;
+            }
+        }
+
+        function captureOpenHelpTargets() {
+            const targets = [];
+
+            document.querySelectorAll('.ttest-help-btn[aria-expanded="true"], .card-help-btn[aria-expanded="true"]').forEach((btn) => {
+                const targetId = btn.getAttribute('data-help-target');
+                if (targetId) {
+                    targets.push(targetId);
+                }
+            });
+
+            document.querySelectorAll('.ttest-help-panel:not([hidden]), .card-help-panel:not([hidden])').forEach((panel) => {
+                if (panel.id) {
+                    targets.push(panel.id);
+                }
+            });
+
+            return Array.from(new Set(targets));
+        }
+
+        function restoreOpenHelpTargets(targetIds) {
+            if (!Array.isArray(targetIds) || targetIds.length === 0) return;
+
+            const buttons = document.querySelectorAll('.ttest-help-btn, .card-help-btn');
+            const panels = document.querySelectorAll('.ttest-help-panel, .card-help-panel');
+            buttons.forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
+            panels.forEach((panel) => panel.setAttribute('hidden', 'hidden'));
+
+            targetIds.forEach((targetId) => {
+                if (!targetId) return;
+                const panel = document.getElementById(targetId);
+                if (!panel) return;
+
+                panel.removeAttribute('hidden');
+                buttons.forEach((btn) => {
+                    if (btn.getAttribute('data-help-target') === targetId) {
+                        btn.setAttribute('aria-expanded', 'true');
+                    }
+                });
+            });
+        }
+
         function syncHeaderRealtimeData(newDoc) {
+            const openHelpTargets = captureOpenHelpTargets();
+
             syncElementById(newDoc, 'avgSuhuValue', true);
             syncElementById(newDoc, 'avgKelembapanValue', true);
             syncElementById(newDoc, 'avgSuhuDetail', true);
@@ -2703,6 +3221,11 @@
                 currentBadge.className = nextBadge.className;
                 currentBadge.innerHTML = nextBadge.innerHTML;
             });
+
+            syncElementClassAndHtml(newDoc, 'networkWidgetStatus');
+            syncElementClassAndHtml(newDoc, 'mqttNetworkRow');
+            syncElementClassAndHtml(newDoc, 'httpNetworkRow');
+            syncElementById(newDoc, 'networkWidgetStamp', true);
 
             const currentStatus = document.getElementById('resetStatusMessage');
             const nextStatus = newDoc.getElementById('resetStatusMessage');
@@ -2766,6 +3289,8 @@
                     }
                 });
             }
+
+            restoreOpenHelpTargets(openHelpTargets);
         }
 
         function decorateLatencyDataset(dataset) {
@@ -2793,12 +3318,17 @@
             return source[pointIndex - 1] || '-';
         }
 
-        function bindTtestHelpButtons() {
-            if (document.body && document.body.dataset.ttestHelpBound === '1') return;
+        function bindHelpButtons() {
+            if (document.body && document.body.dataset.helpButtonsBound === '1') return;
 
             document.addEventListener('click', function(event) {
-                const helpBtn = event.target.closest('.ttest-help-btn');
+                const helpBtn = event.target.closest('.ttest-help-btn, .card-help-btn');
                 if (!helpBtn) return;
+
+                if (helpBtn.closest('.quality-summary')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
 
                 const targetId = helpBtn.getAttribute('data-help-target');
                 if (!targetId) return;
@@ -2808,7 +3338,7 @@
 
                 const shouldOpen = panel.hasAttribute('hidden');
 
-                document.querySelectorAll('.ttest-help-btn[aria-expanded="true"]').forEach((openBtn) => {
+                document.querySelectorAll('.ttest-help-btn[aria-expanded="true"], .card-help-btn[aria-expanded="true"]').forEach((openBtn) => {
                     const openTarget = openBtn.getAttribute('data-help-target');
                     const openPanel = openTarget ? document.getElementById(openTarget) : null;
                     if (!openPanel || openBtn === helpBtn) return;
@@ -2826,7 +3356,7 @@
             });
 
             if (document.body) {
-                document.body.dataset.ttestHelpBound = '1';
+                document.body.dataset.helpButtonsBound = '1';
             }
         }
 
@@ -2835,9 +3365,20 @@
             if (!toolbarInfo) return;
 
             const total = latencyRuntimeState.totalPoints;
-            const minView = Math.min(10, total);
-            const maxView = Math.min(30, total);
-            toolbarInfo.textContent = `Total data point: ${total} | View: ${minView}-${maxView} data`;
+            if (total <= 0) {
+                toolbarInfo.textContent = 'Total data point: 0 | Default(min): 0 data | View saat ini: 0 data';
+                return;
+            }
+
+            const minView = Math.min(latencyRuntimeState.minWindowPoints, total);
+            const maxView = Math.min(latencyRuntimeState.maxWindowPoints, total);
+            const currentSpan = clampValue(
+                Math.round(Number(latencyRuntimeState.currentWindowSpan || minView)),
+                minView,
+                maxView
+            );
+
+            toolbarInfo.textContent = `Total data point: ${total} | Default(min): ${minView} data | View saat ini: ${currentSpan} data`;
         }
 
         function markLatencyUserAction() {
@@ -2953,6 +3494,7 @@
                 latencyChartInstance.update('none');
                 latencyRuntimeState.currentWindowSpan = targetWindow.span;
                 updateLatencyZoomButtons(targetWindow.span);
+                updateLatencyToolbarInfo();
                 latencyRuntimeState.autoFollowFrameId = null;
             };
 
@@ -2971,6 +3513,7 @@
             if (currentWindow.start === targetWindow.start && currentWindow.end === targetWindow.end) {
                 latencyRuntimeState.currentWindowSpan = targetWindow.span;
                 updateLatencyZoomButtons(targetWindow.span);
+                updateLatencyToolbarInfo();
                 return targetWindow;
             }
 
@@ -2990,6 +3533,7 @@
 
             latencyRuntimeState.currentWindowSpan = targetWindow.span;
             updateLatencyZoomButtons(targetWindow.span);
+            updateLatencyToolbarInfo();
             return targetWindow;
         }
 
@@ -3212,9 +3756,20 @@
             if (!toolbarInfo) return;
 
             const total = powerRuntimeState.totalPoints;
-            const minView = Math.min(10, total);
-            const maxView = Math.min(30, total);
-            toolbarInfo.textContent = `Total data point: ${total} | View: ${minView}-${maxView} data`;
+            if (total <= 0) {
+                toolbarInfo.textContent = 'Total data point: 0 | Default(min): 0 data | View saat ini: 0 data';
+                return;
+            }
+
+            const minView = Math.min(powerRuntimeState.minWindowPoints, total);
+            const maxView = Math.min(powerRuntimeState.maxWindowPoints, total);
+            const currentSpan = clampValue(
+                Math.round(Number(powerRuntimeState.currentWindowSpan || minView)),
+                minView,
+                maxView
+            );
+
+            toolbarInfo.textContent = `Total data point: ${total} | Default(min): ${minView} data | View saat ini: ${currentSpan} data`;
         }
 
         function markPowerUserAction() {
@@ -3326,6 +3881,7 @@
                 powerChartInstance.update('none');
                 powerRuntimeState.currentWindowSpan = targetWindow.span;
                 updatePowerZoomButtons(targetWindow.span);
+                updatePowerToolbarInfo();
                 powerRuntimeState.autoFollowFrameId = null;
             };
 
@@ -3344,6 +3900,7 @@
             if (currentWindow.start === targetWindow.start && currentWindow.end === targetWindow.end) {
                 powerRuntimeState.currentWindowSpan = targetWindow.span;
                 updatePowerZoomButtons(targetWindow.span);
+                updatePowerToolbarInfo();
                 return targetWindow;
             }
 
@@ -3363,6 +3920,7 @@
 
             powerRuntimeState.currentWindowSpan = targetWindow.span;
             updatePowerZoomButtons(targetWindow.span);
+            updatePowerToolbarInfo();
             return targetWindow;
         }
 
@@ -3432,10 +3990,10 @@
             const totalPoints = Math.max(0, Number(powerData.total_points || (Array.isArray(powerData.labels) ? powerData.labels.length : 0)));
             powerRuntimeState.totalPoints = totalPoints;
 
-            const defaultWindowPoints = Math.max(1, Math.min(10, Math.max(totalPoints, 1)));
+            const defaultWindowPoints = Math.max(1, Math.min(15, Math.max(totalPoints, 1)));
             powerRuntimeState.minWindowPoints = totalPoints > 0 ? Math.min(defaultWindowPoints, totalPoints) : 1;
             powerRuntimeState.maxWindowPoints = totalPoints > 0
-                ? Math.min(totalPoints, Math.max(powerRuntimeState.minWindowPoints, 30))
+                ? Math.min(120, totalPoints)
                 : 1;
 
             if (!Number.isFinite(powerRuntimeState.currentWindowSpan) || powerRuntimeState.currentWindowSpan <= 0 || initialLoad) {
@@ -3644,17 +4202,6 @@
                     const parser = new DOMParser();
                     const newDoc = parser.parseFromString(html, 'text/html');
 
-                    // Keep CSRF token on reset form in sync with latest session token.
-                    const currentResetForm = document.getElementById('resetEksperimenForm');
-                    const freshResetForm = newDoc.getElementById('resetEksperimenForm');
-                    if (currentResetForm && freshResetForm) {
-                        const currentTokenInput = currentResetForm.querySelector('input[name="_token"]');
-                        const freshTokenInput = freshResetForm.querySelector('input[name="_token"]');
-                        if (currentTokenInput && freshTokenInput && freshTokenInput.value) {
-                            currentTokenInput.value = freshTokenInput.value;
-                        }
-                    }
-
                     syncHeaderRealtimeData(newDoc);
 
                     // Update and animate stat values
@@ -3719,7 +4266,7 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             initCharts(document, { initialLoad: true });
-            bindTtestHelpButtons();
+            bindHelpButtons();
             
             // Animate all stat values immediately on load
             document.querySelectorAll('.stat-value').forEach(el => {

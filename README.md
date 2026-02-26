@@ -99,6 +99,17 @@ The project has been updated with the following behavior:
 40. Power Consumption chart now includes the same toolbar as Latency chart (`+`, `-`, `Reset`, bounded zoom, pan, and idle auto-follow).
 41. Core sensor fields (`suhu`, `kelembapan`) are intentionally shared from the same ESP32 sensor snapshot for MQTT and HTTP, so values can be identical on the same sampling window.
 42. Protocol detail telemetry now includes `sensor_age_ms`, `sensor_read_seq`, and `send_tick_ms`, and dashboard adds a `Protocol Payload Diagnostics` panel with MQTT-vs-HTTP delta metrics.
+43. Power chart toolbar now uses default minimum view `15` data points; `+` is disabled at default/min view, and `-` can zoom out up to `120` points.
+44. Latency toolbar now shows `Default(min)` and `View saat ini` values directly (replacing the old `View` range label).
+45. ESP32 payload validation memory was increased to prevent `Invalid JSON: NoMemory` during HTTP/MQTT send pre-check.
+46. ESP32 now captures a fresh sensor snapshot for each protocol send path (HTTP and MQTT), so payload generation no longer reuses protocol data by copy.
+47. Dashboard protocol diagnostics now display high-precision temperature/humidity values (up to 8 decimals) and include protocol-independence deltas (`sensor_read_seq`, `send_tick_ms`) with warning hooks.
+48. ESP32 power estimation no longer uses random baseline noise, so `daya` is now deterministic from real measured inputs and retry state.
+49. All main dashboard cards now include a `(?)` help toggle that explains the meaning of each row/value (header metrics, realtime metric cards, diagnostics cards, quality cards, chart cards, and T-test cards).
+50. Reset submit no longer shows raw `Redirecting to ...` text; `POST /reset-data` now returns the same reset page with a styled success/error banner that matches dashboard palette.
+51. Open `(?)` help panels now persist during auto-refresh; they no longer auto-close when `Protocol Payload Diagnostics` and quality sections are refreshed.
+52. Reset confirmation input now enforces uppercase typing automatically (`RESET`) to prevent casing mistakes during confirmation.
+53. Dashboard now includes a floating top-right realtime link monitor (speedtest-style) showing per-protocol ping (`ms`) and throughput (`Mb/s`) computed from latest telemetry (`latency_ms`, `payload_bytes`, `tx_duration_ms`).
 
 ## Tech Stack
 
@@ -440,6 +451,12 @@ How ESP32 fills each payload field:
 | `http_success_count`/`http_fail_count` | local HTTP counters (diagnostic) |
 | `mqtt_success_count`/`mqtt_fail_count` | local MQTT counters (diagnostic) |
 
+Protocol-capture behavior:
+- HTTP send path triggers its own sensor snapshot before building payload.
+- MQTT send path also triggers its own sensor snapshot before building payload.
+- Firmware enforces DHT minimum interval protection to avoid invalid over-read while still keeping protocol captures independent.
+- Power estimation is deterministic (no random noise term), computed from RSSI, TX duration, payload size, temperature/humidity contribution, and retry/failure context.
+
 Build and upload:
 
 ```bash
@@ -549,11 +566,20 @@ Validation rules:
 - `sensor_read_seq`: optional integer (`>= 0`) for sensor snapshot trace.
 - `send_tick_ms`: optional integer (`>= 0`) for ESP32 monotonic send ordering.
 
+### GET `/reset-data`
+
+Purpose: render dedicated reset page with summary cards and guarded confirmation flow.
+
+Used by dashboard button: `Reset Data Eksperimen`.
+
 ### POST `/reset-data`
 
 Purpose: clear all records in `eksperimens`.
 
-Used by dashboard button: `Reset Data Eksperimen`.
+Used by reset page submit form after user confirms (`checkbox` + typed `RESET`).
+
+Current behavior: after submit, Laravel renders `/reset-data` directly with a styled status banner (success/error), so users do not see raw redirect-text pages.
+The confirmation textbox auto-converts all typed characters to uppercase so the required keyword stays consistent.
 
 Note: route is CSRF-exempt in current implementation to avoid gateway/session mismatch (`419 Page Expired`) in this deployment mode.
 
@@ -578,6 +604,8 @@ Other dashboard behavior:
 - T-test summary for latency and power
 - protocol-level summary cards
 - dedicated reset experiment data button
+- dedicated `/reset-data` management page with synchronized dashboard palette and guarded reset confirmation
+- floating top-right `Realtime Link Monitor` (MQTT/HTTP ping ms + throughput Mb/s from latest real payload telemetry)
 - modernized header cards for temperature and humidity
 - live status badges for MQTT and HTTP connectivity
 - responsive layout tuned for desktop, tablet, and mobile
@@ -592,6 +620,8 @@ Other dashboard behavior:
 - power chart now plots realtime power per data point (windowed view) instead of static per-device averages
 - power statistical section remains visible even when variance is zero (constant dataset case)
 - each T-test card provides an inline `(?)` explanation panel for all row labels/values
+- all major dashboard cards now provide a `(?)` explanation panel so each row/value meaning is visible directly in-context
+- open `(?)` help panel state is preserved across 5-second auto-refresh (especially on `Protocol Payload Diagnostics` cards)
 - statistical cards remain centered on mobile, matching tablet alignment/flow
 - when `Statistical Analysis` appears for the first time during auto-refresh, the page reloads once to sync the full section
 - t-test labels use standard statistical symbols (mu, sigma, sigma^2, plus-minus)
@@ -606,6 +636,11 @@ Other dashboard behavior:
 - favicon/meta tags are configured in `<head>` for consistent browser tab identity
 - protocol diagnostics panel now shows latest payload detail per protocol (MQTT + HTTP) and signed delta values for key fields
 - dashboard now explicitly explains when suhu/kelembapan are identical because both protocols use the same sensor snapshot window
+- latency toolbar now displays `Default(min)` and `View saat ini` for active window tracking (without the old `View` range text)
+- power chart default/min visible window is 15 points; zoom-in cannot go below this default and zoom-out is capped at 120 points
+- protocol diagnostics now shows suhu/kelembapan in high precision (8 decimals) to reflect actual stored payload values
+- dashboard warning list flags possible cross-protocol snapshot reuse when latest `sensor_read_seq` or `send_tick_ms` is identical
+- after flashing latest firmware, latest HTTP and MQTT rows should usually show different `sensor_read_seq` values when both protocols capture independently
 
 ## Reliability Formula (Current)
 
@@ -722,8 +757,16 @@ GROUP BY protokol;
 
 ### Reset button shows `419 Page Expired`
 
+- Open reset flow from dashboard button first (`GET /reset-data`), then submit reset from that page.
 - Ensure route `POST /reset-data` is configured exactly as current code.
 - Verify access path is `http://127.0.0.1/esptest/public`.
+
+### Reset page shows raw `Redirecting to http://localhost:8000`
+
+- Current code should no longer redirect on reset submit; it renders the same `/reset-data` page with a styled status banner.
+- If you still see raw redirect text, clear compiled views/cache and restart HTTP gateway stack:
+  - `php artisan optimize:clear`
+  - restart Apache/XAMPP and Laravel HTTP worker process.
 
 ### Humidity value not shown on dashboard
 
@@ -784,6 +827,14 @@ GROUP BY protokol;
 
 - Ensure JSON is properly quoted when using `mosquitto_pub`.
 - Prefer command format shown in this README.
+
+### ESP32 shows `Invalid JSON: NoMemory`
+
+- This means JSON validation buffer on firmware is too small for current payload size.
+- Update to latest firmware in this repository and re-flash:
+  `pio run -t upload`.
+- Current firmware uses larger JSON capacities (`PAYLOAD_JSON_DOC_CAPACITY=1024`, `PAYLOAD_VERIFY_DOC_CAPACITY=1536`) to avoid this error.
+- If you add more payload fields in future, increase these constants again and rebuild.
 
 ### ESP32 upload fails (`COMx access denied`)
 
