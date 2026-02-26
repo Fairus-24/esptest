@@ -110,6 +110,8 @@ The project has been updated with the following behavior:
 51. Open `(?)` help panels now persist during auto-refresh; they no longer auto-close when `Protocol Payload Diagnostics` and quality sections are refreshed.
 52. Reset confirmation input now enforces uppercase typing automatically (`RESET`) to prevent casing mistakes during confirmation.
 53. Dashboard now includes a floating top-right realtime link monitor (speedtest-style) showing per-protocol ping (`ms`) and throughput (`Mb/s`) computed from latest telemetry (`latency_ms`, `payload_bytes`, `tx_duration_ms`).
+54. Realtime link monitor now also measures device-side external network ping/speed directly from browser runtime, so values differ per client device/network (WiFi/cellular), similar to lightweight speedtest behavior.
+55. Realtime link monitor supports collapse/expand by clicking `LIVE/IDLE`, starts collapsed by default, and auto-collapses when user clicks outside the widget without auto-opening again.
 
 ## Tech Stack
 
@@ -606,6 +608,8 @@ Other dashboard behavior:
 - dedicated reset experiment data button
 - dedicated `/reset-data` management page with synchronized dashboard palette and guarded reset confirmation
 - floating top-right `Realtime Link Monitor` (MQTT/HTTP ping ms + throughput Mb/s from latest real payload telemetry)
+- same monitor now includes browser-measured external ping/speed (per-device internet condition, speedtest-style)
+- monitor is collapsible via `LIVE/IDLE`, defaults minimized, and auto-minimizes on outside click
 - modernized header cards for temperature and humidity
 - live status badges for MQTT and HTTP connectivity
 - responsive layout tuned for desktop, tablet, and mobile

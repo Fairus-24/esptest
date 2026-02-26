@@ -168,12 +168,24 @@
             z-index: 1200;
         }
 
+        .network-float.is-collapsed {
+            width: auto;
+            max-width: calc(100vw - 28px);
+            padding: 8px 10px;
+            border-radius: 999px;
+        }
+
         .network-float-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
             margin-bottom: 7px;
+        }
+
+        .network-float.is-collapsed .network-float-head {
+            margin-bottom: 0;
+            justify-content: flex-end;
         }
 
         .network-title {
@@ -190,7 +202,21 @@
             color: #60a5fa;
         }
 
+        .network-float.is-collapsed .network-title {
+            display: none;
+        }
+
+        .network-float-body {
+            display: block;
+        }
+
+        .network-float.is-collapsed .network-float-body {
+            display: none;
+        }
+
         .network-widget-status {
+            appearance: none;
+            -webkit-appearance: none;
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -199,6 +225,19 @@
             border-radius: 999px;
             padding: 3px 8px;
             border: 1px solid transparent;
+            line-height: 1;
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .network-widget-status:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.28);
+        }
+
+        .network-widget-status:hover {
+            transform: translateY(-1px);
         }
 
         .network-widget-status .status-dot {
@@ -303,6 +342,14 @@
             color: rgba(148, 163, 184, 0.9);
             font-size: 0.6rem;
             line-height: 1.35;
+        }
+
+        .network-external-note {
+            margin-top: 6px;
+            color: rgba(147, 197, 253, 0.9);
+            font-size: 0.62rem;
+            line-height: 1.35;
+            font-weight: 700;
         }
 
         @media (max-width: 900px) {
@@ -2358,29 +2405,37 @@
         $isRealtimeWidgetLive = $mqttConnected || $httpConnected;
     @endphp
 
-    <aside id="realtimeNetworkWidget" class="network-float" aria-live="polite">
+    <aside id="realtimeNetworkWidget" class="network-float is-collapsed" aria-live="polite">
         <div class="network-float-head">
             <span class="network-title"><i class="fas fa-gauge-high"></i> Realtime Link Monitor</span>
-            <span id="networkWidgetStatus" class="network-widget-status {{ $isRealtimeWidgetLive ? 'is-online' : 'is-offline' }}">
+            <button id="networkWidgetStatus" type="button" class="network-widget-status {{ $isRealtimeWidgetLive ? 'is-online' : 'is-offline' }}" aria-expanded="false" aria-controls="networkWidgetBody">
                 <span class="status-dot"></span>
                 {{ $isRealtimeWidgetLive ? 'LIVE' : 'IDLE' }}
-            </span>
+            </button>
         </div>
-        <div id="mqttNetworkRow" class="network-protocol-row {{ $mqttConnected ? 'is-online' : 'is-offline' }}">
-            <span class="network-protocol-label"><i class="fas fa-broadcast-tower"></i> MQTT</span>
-            <span class="network-metric"><small>Ping</small><strong>{{ $mqttRealtimeLatency }}</strong></span>
-            <span class="network-metric"><small>Speed</small><strong>{{ $mqttRealtimeSpeed }}</strong></span>
+        <div id="networkWidgetBody" class="network-float-body">
+            <div id="mqttNetworkRow" class="network-protocol-row {{ $mqttConnected ? 'is-online' : 'is-offline' }}">
+                <span class="network-protocol-label"><i class="fas fa-broadcast-tower"></i> MQTT</span>
+                <span class="network-metric"><small>Ping</small><strong>{{ $mqttRealtimeLatency }}</strong></span>
+                <span class="network-metric"><small>Speed</small><strong>{{ $mqttRealtimeSpeed }}</strong></span>
+            </div>
+            <div id="httpNetworkRow" class="network-protocol-row {{ $httpConnected ? 'is-online' : 'is-offline' }}">
+                <span class="network-protocol-label"><i class="fas fa-server"></i> HTTP</span>
+                <span class="network-metric"><small>Ping</small><strong>{{ $httpRealtimeLatency }}</strong></span>
+                <span class="network-metric"><small>Speed</small><strong>{{ $httpRealtimeSpeed }}</strong></span>
+            </div>
+            <div id="externalNetworkRow" class="network-protocol-row is-online">
+                <span class="network-protocol-label"><i class="fas fa-globe"></i> External</span>
+                <span class="network-metric"><small>Ping</small><strong id="externalPingValue">Mengukur...</strong></span>
+                <span class="network-metric"><small>Speed</small><strong id="externalSpeedValue">Mengukur...</strong></span>
+            </div>
+            <div id="networkWidgetStamp" class="network-stamp">
+                MQTT: {{ $mqttRealtimeStamp }}<br>
+                HTTP: {{ $httpRealtimeStamp }}
+            </div>
+            <div id="externalNetworkStamp" class="network-external-note">External: menunggu pengukuran browser...</div>
+            <p class="network-note">MQTT/HTTP dari telemetry device. External diukur langsung dari browser perangkat ini.</p>
         </div>
-        <div id="httpNetworkRow" class="network-protocol-row {{ $httpConnected ? 'is-online' : 'is-offline' }}">
-            <span class="network-protocol-label"><i class="fas fa-server"></i> HTTP</span>
-            <span class="network-metric"><small>Ping</small><strong>{{ $httpRealtimeLatency }}</strong></span>
-            <span class="network-metric"><small>Speed</small><strong>{{ $httpRealtimeSpeed }}</strong></span>
-        </div>
-        <div id="networkWidgetStamp" class="network-stamp">
-            MQTT: {{ $mqttRealtimeStamp }}<br>
-            HTTP: {{ $httpRealtimeStamp }}
-        </div>
-        <p class="network-note">Speed dihitung dari payload bytes / tx duration telemetry terbaru.</p>
     </aside>
 
     <div class="container">
@@ -3005,6 +3060,14 @@
             autoFollowFrameId: null,
         };
 
+        const networkWidgetState = {
+            collapsed: true,
+            interactionsBound: false,
+            externalProbeInFlight: false,
+            externalProbeIntervalMs: 15000,
+            lastExternalProbeAt: 0,
+        };
+
         const chartOptions = {
             responsive: true,
             maintainAspectRatio: false,
@@ -3164,6 +3227,207 @@
             }
         }
 
+        function getNetworkWidgetElements() {
+            return {
+                widget: document.getElementById('realtimeNetworkWidget'),
+                toggle: document.getElementById('networkWidgetStatus'),
+                body: document.getElementById('networkWidgetBody'),
+                externalRow: document.getElementById('externalNetworkRow'),
+                externalPing: document.getElementById('externalPingValue'),
+                externalSpeed: document.getElementById('externalSpeedValue'),
+                externalStamp: document.getElementById('externalNetworkStamp'),
+            };
+        }
+
+        function applyNetworkWidgetCollapsedState(collapsed) {
+            const { widget, toggle } = getNetworkWidgetElements();
+            if (!widget || !toggle) return;
+
+            const shouldCollapse = collapsed === true;
+            networkWidgetState.collapsed = shouldCollapse;
+            widget.classList.toggle('is-collapsed', shouldCollapse);
+            toggle.setAttribute('aria-expanded', shouldCollapse ? 'false' : 'true');
+        }
+
+        function bindNetworkWidgetInteractions() {
+            if (networkWidgetState.interactionsBound) return;
+
+            const { widget, toggle } = getNetworkWidgetElements();
+            if (!widget || !toggle) return;
+
+            toggle.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                applyNetworkWidgetCollapsedState(!networkWidgetState.collapsed);
+            });
+
+            document.addEventListener('pointerdown', function(event) {
+                const { widget: currentWidget } = getNetworkWidgetElements();
+                if (!currentWidget || networkWidgetState.collapsed) return;
+                if (currentWidget.contains(event.target)) return;
+                applyNetworkWidgetCollapsedState(true);
+            });
+
+            networkWidgetState.interactionsBound = true;
+            applyNetworkWidgetCollapsedState(true);
+        }
+
+        function formatExternalPingLabel(pingMs) {
+            if (!Number.isFinite(pingMs) || pingMs <= 0) {
+                return '-';
+            }
+
+            return `${pingMs.toFixed(1)} ms`;
+        }
+
+        function formatExternalSpeedLabel(speedMbit) {
+            if (!Number.isFinite(speedMbit) || speedMbit <= 0) {
+                return '-';
+            }
+
+            return `${speedMbit.toFixed(3)} Mb/s`;
+        }
+
+        function getNetworkConnectionHints() {
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (!connection) {
+                return { rtt: null, downlink: null, effectiveType: null };
+            }
+
+            const rtt = Number.isFinite(Number(connection.rtt)) ? Number(connection.rtt) : null;
+            const downlink = Number.isFinite(Number(connection.downlink)) ? Number(connection.downlink) : null;
+            const effectiveType = typeof connection.effectiveType === 'string' ? connection.effectiveType : null;
+
+            return { rtt, downlink, effectiveType };
+        }
+
+        function updateExternalNetworkUi(payload) {
+            const { externalRow, externalPing, externalSpeed, externalStamp } = getNetworkWidgetElements();
+            if (!externalRow || !externalPing || !externalSpeed || !externalStamp) return;
+
+            externalPing.textContent = formatExternalPingLabel(payload.pingMs);
+            externalSpeed.textContent = formatExternalSpeedLabel(payload.speedMbit);
+
+            const hasValidData = Number.isFinite(payload.pingMs) || Number.isFinite(payload.speedMbit);
+            externalRow.classList.toggle('is-online', hasValidData);
+            externalRow.classList.toggle('is-offline', !hasValidData);
+
+            externalStamp.textContent = payload.stampText || 'External: data tidak tersedia.';
+        }
+
+        async function probeExternalPingMs() {
+            const targets = [
+                `https://www.gstatic.com/generate_204?ts=${Date.now()}`,
+                `https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js?ping=${Date.now()}`,
+            ];
+
+            for (const target of targets) {
+                try {
+                    const startedAt = performance.now();
+                    await fetch(target, {
+                        method: 'GET',
+                        mode: 'no-cors',
+                        cache: 'no-store',
+                    });
+                    const elapsedMs = performance.now() - startedAt;
+                    if (Number.isFinite(elapsedMs) && elapsedMs > 0) {
+                        return elapsedMs;
+                    }
+                } catch (error) {
+                    // ignore target failure and try next.
+                }
+            }
+
+            return null;
+        }
+
+        async function probeExternalSpeedMbit() {
+            const targets = [
+                `https://speed.cloudflare.com/__down?bytes=700000&ts=${Date.now()}`,
+                `https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js?speed=${Date.now()}`,
+            ];
+
+            for (const target of targets) {
+                try {
+                    const startedAt = performance.now();
+                    const response = await fetch(target, {
+                        method: 'GET',
+                        mode: 'cors',
+                        cache: 'no-store',
+                    });
+
+                    if (!response.ok) {
+                        continue;
+                    }
+
+                    const blob = await response.blob();
+                    const elapsedMs = performance.now() - startedAt;
+                    if (!Number.isFinite(elapsedMs) || elapsedMs <= 0 || blob.size <= 0) {
+                        continue;
+                    }
+
+                    return ((blob.size * 8) / 1000000) / (elapsedMs / 1000);
+                } catch (error) {
+                    // ignore target failure and try next.
+                }
+            }
+
+            return null;
+        }
+
+        async function updateExternalNetworkMetrics(force = false) {
+            if (networkWidgetState.externalProbeInFlight) return;
+
+            const now = Date.now();
+            if (!force && networkWidgetState.lastExternalProbeAt > 0) {
+                const elapsed = now - networkWidgetState.lastExternalProbeAt;
+                if (elapsed < networkWidgetState.externalProbeIntervalMs - 400) {
+                    return;
+                }
+            }
+
+            networkWidgetState.externalProbeInFlight = true;
+            updateExternalNetworkUi({
+                pingMs: null,
+                speedMbit: null,
+                stampText: 'External: mengukur koneksi internet perangkat...',
+            });
+
+            try {
+                const [rawPingMs, rawSpeedMbit] = await Promise.all([
+                    probeExternalPingMs(),
+                    probeExternalSpeedMbit(),
+                ]);
+
+                const hints = getNetworkConnectionHints();
+                const pingMs = Number.isFinite(rawPingMs) ? rawPingMs : hints.rtt;
+                const speedMbit = Number.isFinite(rawSpeedMbit) ? rawSpeedMbit : hints.downlink;
+                const checkedAtWib = new Date().toLocaleTimeString('id-ID', {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    timeZone: 'Asia/Jakarta',
+                });
+                const hintLabel = hints.effectiveType ? ` | mode ${String(hints.effectiveType).toUpperCase()}` : '';
+
+                updateExternalNetworkUi({
+                    pingMs: Number.isFinite(pingMs) ? pingMs : null,
+                    speedMbit: Number.isFinite(speedMbit) ? speedMbit : null,
+                    stampText: `External check WIB ${checkedAtWib}${hintLabel}`,
+                });
+            } catch (error) {
+                updateExternalNetworkUi({
+                    pingMs: null,
+                    speedMbit: null,
+                    stampText: 'External: pengukuran gagal (cek akses internet/browser).',
+                });
+            } finally {
+                networkWidgetState.lastExternalProbeAt = Date.now();
+                networkWidgetState.externalProbeInFlight = false;
+            }
+        }
+
         function captureOpenHelpTargets() {
             const targets = [];
 
@@ -3226,6 +3490,7 @@
             syncElementClassAndHtml(newDoc, 'mqttNetworkRow');
             syncElementClassAndHtml(newDoc, 'httpNetworkRow');
             syncElementById(newDoc, 'networkWidgetStamp', true);
+            applyNetworkWidgetCollapsedState(networkWidgetState.collapsed);
 
             const currentStatus = document.getElementById('resetStatusMessage');
             const nextStatus = newDoc.getElementById('resetStatusMessage');
@@ -4267,7 +4532,9 @@
         document.addEventListener('DOMContentLoaded', () => {
             initCharts(document, { initialLoad: true });
             bindHelpButtons();
-            
+            bindNetworkWidgetInteractions();
+            updateExternalNetworkMetrics(true);
+             
             // Animate all stat values immediately on load
             document.querySelectorAll('.stat-value').forEach(el => {
                 const originalText = el.textContent.trim();
@@ -4286,6 +4553,7 @@
             setupIntersectionObserver();
             // Auto-refresh every 5 seconds
             setInterval(autoRefreshData, 5000);
+            setInterval(() => updateExternalNetworkMetrics(false), networkWidgetState.externalProbeIntervalMs);
         });
     </script>
 </body>
