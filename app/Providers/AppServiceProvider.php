@@ -10,6 +10,8 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,6 +29,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         app(RuntimeConfigOverrideService::class)->apply();
+        $this->configureProductionUrlScheme();
         $this->configureRateLimiters();
 
         if ($this->app->runningInConsole() || $this->app->runningUnitTests()) {
@@ -36,6 +39,24 @@ class AppServiceProvider extends ServiceProvider
         app(LaravelHttpAutoStarter::class)->ensureRunning();
         app(MosquittoAutoStarter::class)->ensureRunning();
         app(MqttWorkerAutoStarter::class)->ensureRunning();
+    }
+
+    private function configureProductionUrlScheme(): void
+    {
+        // Behind Nginx reverse proxy, force URL generation to HTTPS when APP_URL is https://
+        // so forms/redirects do not downgrade to HTTP in browser.
+        $appUrl = trim((string) config('app.url', ''));
+        $forceHttps = filter_var(env('APP_FORCE_HTTPS', false), FILTER_VALIDATE_BOOL)
+            || Str::startsWith(strtolower($appUrl), 'https://');
+
+        if (!$forceHttps) {
+            return;
+        }
+
+        URL::forceScheme('https');
+        if ($appUrl !== '') {
+            URL::forceRootUrl($appUrl);
+        }
     }
 
     private function configureRateLimiters(): void

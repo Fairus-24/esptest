@@ -170,9 +170,9 @@
                 <p>Kelola runtime environment, provisioning multi-device ESP32, dan generator firmware siap upload.</p>
             </div>
             <div class="actions">
-                <a class="btn" href="{{ route('dashboard') }}">Dashboard</a>
-                <a class="btn" href="{{ route('simulation.index') }}">Simulation</a>
-                <form method="POST" action="{{ route('admin.logout') }}">
+                <a class="btn" href="{{ route('dashboard', [], false) }}">Dashboard</a>
+                <a class="btn" href="{{ route('simulation.index', [], false) }}">Simulation</a>
+                <form method="POST" action="{{ route('admin.logout', [], false) }}">
                     @csrf
                     <button type="submit" class="btn warn">Logout Admin</button>
                 </form>
@@ -195,7 +195,7 @@
                     $grouped = collect($settings)->groupBy('group');
                 @endphp
 
-                <form method="POST" action="{{ route('admin.config.runtime.save') }}" class="stack">
+                <form method="POST" action="{{ route('admin.config.runtime.save', [], false) }}" class="stack">
                     @csrf
                     @foreach ($grouped as $groupName => $items)
                         <div class="group-label">{{ $groupName }}</div>
@@ -252,7 +252,7 @@
                 <div class="panel">
                     <h2>Tambah Device ESP32</h2>
                     <p class="sub">Tambah device baru agar langsung punya profil firmware terpisah.</p>
-                    <form method="POST" action="{{ route('admin.config.devices.store') }}" class="stack">
+                    <form method="POST" action="{{ route('admin.config.devices.store', [], false) }}" class="stack">
                         @csrf
                         <input name="nama_device" placeholder="Nama device (contoh: ESP32-LAB-03)" required>
                         <input name="lokasi" placeholder="Lokasi (contoh: Lab Praktikum A)">
@@ -278,7 +278,7 @@
                                 <td>{{ $device->nama_device }}</td>
                                 <td>{{ $device->lokasi ?: '-' }}</td>
                                 <td>
-                                    <a class="btn" href="{{ route('admin.config.index', ['device_id' => $device->id]) }}">Pilih</a>
+                                    <a class="btn" href="{{ route('admin.config.index', ['device_id' => $device->id], false) }}">Pilih</a>
                                 </td>
                             </tr>
                         @empty
@@ -295,7 +295,7 @@
                 <h2>Firmware Profile: Device #{{ $selectedDevice->id }} ({{ $selectedDevice->nama_device }})</h2>
                 <p class="sub">Atur board + koneksi device, lalu generate firmware siap upload.</p>
 
-                <form method="POST" action="{{ route('admin.config.devices.profile.save', $selectedDevice) }}" class="stack">
+                <form method="POST" action="{{ route('admin.config.devices.profile.save', $selectedDevice, false) }}" class="stack">
                     @csrf
                     <div class="row">
                         <div><label>Board</label><select name="board">@foreach ($boardOptions as $board)<option value="{{ $board }}" @selected($selectedProfile->board === $board)>{{ $board }}</option>@endforeach</select></div>
@@ -333,9 +333,9 @@
                 <h2>Generated Firmware Output</h2>
                 <p class="sub">Template di bawah sudah disesuaikan dengan profile + runtime environment override terbaru.</p>
                 <div class="actions" style="margin-bottom:10px;">
-                    <a class="btn" href="{{ route('admin.config.devices.firmware.main', $selectedDevice) }}">Download main.cpp</a>
-                    <a class="btn" href="{{ route('admin.config.devices.firmware.platformio', $selectedDevice) }}">Download platformio.ini</a>
-                    <form method="POST" action="{{ route('admin.config.devices.firmware.apply', $selectedDevice) }}">
+                    <a class="btn" href="{{ route('admin.config.devices.firmware.main', $selectedDevice, false) }}">Download main.cpp</a>
+                    <a class="btn" href="{{ route('admin.config.devices.firmware.platformio', $selectedDevice, false) }}">Download platformio.ini</a>
+                    <form method="POST" action="{{ route('admin.config.devices.firmware.apply', $selectedDevice, false) }}">
                         @csrf
                         <button class="btn primary" type="submit">Apply ke Workspace Firmware</button>
                     </form>
@@ -359,4 +359,3 @@
     </div>
 </body>
 </html>
-

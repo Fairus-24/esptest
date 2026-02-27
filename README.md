@@ -173,6 +173,9 @@ The project has been updated with the following behavior:
 114. Added Debian runtime git automation scripts for auto pull, auto test, auto commit, and optional auto push (`scripts/debian/git_runtime_sync.sh` + cron installer).
 115. Added Debian bootstrap script to run production setup in one flow (`composer install`, migrate, optimize clear, PM2 start/save, and cron sync registration).
 116. Added low-memory defaults for auto-sync test execution (`php -d memory_limit=384M ...`) to better fit 1GB RAM servers.
+117. Laravel now trusts reverse-proxy headers and forces HTTPS URL generation when `APP_URL` is `https://...` (or `APP_FORCE_HTTPS=true`), preventing insecure HTTP form-action downgrade on admin login behind Nginx.
+118. Admin views now use relative route URLs for form submissions/navigation as an additional safeguard against mixed-scheme form posts.
+119. Firmware profile defaults are now derived from effective runtime config (`APP_URL` + `MQTT_HOST`) instead of hardcoded Windows LAN/path values, reducing first-run misrouting in production.
 
 ## Tech Stack
 
@@ -321,6 +324,7 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | Key | Required | Example | How to fill |
 | --- | --- | --- | --- |
 | `APP_URL` | Yes | `http://127.0.0.1/esptest/public` | Match your Apache public URL |
+| `APP_FORCE_HTTPS` | Recommended for reverse proxy | `true` | Force generated URLs/forms to HTTPS (production behind Nginx) |
 | `DB_CONNECTION` | Yes | `mysql` | Use MySQL in this project |
 | `DB_HOST` | Yes | `127.0.0.1` | Local MySQL from XAMPP |
 | `DB_PORT` | Yes | `3306` | Default MySQL port |
@@ -433,6 +437,7 @@ Runtime override note:
 
 ```env
 APP_URL=http://127.0.0.1/esptest/public
+APP_FORCE_HTTPS=false
 
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
@@ -1328,6 +1333,17 @@ GROUP BY protokol;
   - `php artisan optimize:clear`
 - Check login rate limiter; repeated failures may temporarily throttle requests.
 
+### Admin login shows browser warning: form submission is not secure
+
+- Ensure production `.env` has:
+  - `APP_URL=https://your-domain`
+  - `APP_FORCE_HTTPS=true`
+- Ensure Nginx forwards proto header:
+  - `proxy_set_header X-Forwarded-Proto $scheme;`
+- Clear cache and reload:
+  - `php artisan optimize:clear`
+  - restart PM2/Nginx processes.
+
 ### Auto git sync is not running on Debian
 
 - Check cron entries:
@@ -1405,6 +1421,19 @@ GROUP BY protokol;
 - If ESP32 cannot send HTTP/MQTT, re-check firmware `SERVER_HOST` against your current PC LAN IP (`ipconfig`).
 - Restart worker after host changes so new config is loaded:
   `php mqtt_worker.php`.
+
+### Production domain is live but no telemetry rows are inserted
+
+- Check firmware target values (most common root cause):
+  - `SERVER_HOST` must match production domain/host.
+  - `HTTP_ENDPOINT` must match deployment path (usually `/api/http-data` for root-domain Nginx proxy).
+  - `ESP_HTTP_INGEST_KEY` must match server `.env` `HTTP_INGEST_KEY`.
+- For MQTT mode, verify ESP32 can reach `MQTT_HOST:MQTT_PORT` from its network (public/LAN routing and firewall/NAT must allow it).
+- Validate server-side API directly:
+  - `curl -i -X POST https://your-domain/api/http-data -H "X-Ingest-Key: <key>" -H "Content-Type: application/json" -d '<payload>'`
+- Inspect logs:
+  - `tail -f storage/logs/laravel.log`
+  - `tail -f storage/logs/mqtt_worker.log`
 
 ### Dashboard returns `500 Server Error`
 
