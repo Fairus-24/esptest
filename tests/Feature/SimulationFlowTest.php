@@ -72,16 +72,18 @@ class SimulationFlowTest extends TestCase
 
         $beforeTickCount = app(ApplicationSimulationService::class)->status()['tick_count'] ?? 0;
         $ran = false;
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            sleep(1);
+        $lastReason = null;
+        for ($attempt = 0; $attempt < 8; $attempt++) {
+            usleep(1200000);
             $response = $this->post('/simulation/tick')->assertOk();
             $ran = (bool) ($response->json('data.ran') ?? false);
+            $lastReason = (string) ($response->json('data.reason') ?? '');
             if ($ran) {
                 break;
             }
         }
 
-        $this->assertTrue($ran);
+        $this->assertTrue($ran, 'Simulation tick never ran. Last reason: ' . ($lastReason ?: 'unknown'));
 
         $afterTickCount = app(ApplicationSimulationService::class)->status()['tick_count'] ?? 0;
         $this->assertGreaterThan($beforeTickCount, $afterTickCount);

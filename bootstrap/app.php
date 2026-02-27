@@ -17,6 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Trust reverse-proxy headers from Nginx so Laravel can detect HTTPS/original host.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'ingest.key' => VerifyIngestKey::class,
             'admin.session' => EnsureAdminSession::class,
