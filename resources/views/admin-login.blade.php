@@ -90,7 +90,7 @@
             <div class="alert err">{{ $errors->first() }}</div>
         @endif
 
-        <form method="POST" action="{{ route('admin.login.submit') }}">
+        <form method="POST" action="{{ route('admin.login.submit', [], false) }}">
             @csrf
             <label for="token">Admin Token</label>
             <input type="password" id="token" name="token" autocomplete="current-password" placeholder="Masukkan token admin">
@@ -104,9 +104,8 @@
                 Token disimpan di environment server (`ADMIN_PANEL_TOKEN`).
             @endif
             <br>
-            <a href="{{ route('dashboard') }}">Kembali ke Dashboard</a>
+            <a href="{{ route('dashboard', [], false) }}">Kembali ke Dashboard</a>
         </div>
     </div>
 </body>
 </html>
-

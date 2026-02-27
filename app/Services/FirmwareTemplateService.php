@@ -10,15 +10,27 @@ class FirmwareTemplateService
 {
     public function ensureProfile(Device $device): DeviceFirmwareProfile
     {
+        $appUrl = trim((string) config('app.url', 'http://127.0.0.1'));
+        $serverHost = (string) (parse_url($appUrl, PHP_URL_HOST) ?: '127.0.0.1');
+        $appPath = trim((string) (parse_url($appUrl, PHP_URL_PATH) ?: ''), '/');
+        $httpEndpoint = $appPath !== ''
+            ? '/' . $appPath . '/api/http-data'
+            : '/api/http-data';
+
+        $mqttHost = trim((string) config('mqtt.host', ''));
+        if ($mqttHost === '') {
+            $mqttHost = $serverHost;
+        }
+
         return DeviceFirmwareProfile::query()->firstOrCreate(
             ['device_id' => $device->id],
             [
                 'board' => 'esp32doit-devkit-v1',
                 'wifi_ssid' => 'Free',
                 'wifi_password' => 'gratiskok',
-                'server_host' => '192.168.0.104',
-                'http_endpoint' => '/esptest/public/api/http-data',
-                'mqtt_host' => '192.168.0.104',
+                'server_host' => $serverHost,
+                'http_endpoint' => $httpEndpoint,
+                'mqtt_host' => $mqttHost,
                 'mqtt_port' => 1883,
                 'mqtt_topic' => 'iot/esp32/suhu',
                 'mqtt_user' => 'esp32',
@@ -162,4 +174,3 @@ class FirmwareTemplateService
         };
     }
 }
-
