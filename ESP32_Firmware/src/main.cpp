@@ -48,9 +48,9 @@ const char* WIFI_SSID = "Free";
 const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
-#define SERVER_HOST "192.168.0.104"  // Windows host LAN IP (update if DHCP IP changes)
+#define SERVER_HOST "202.154.58.51"  // Windows host LAN IP (update if DHCP IP changes)
 const char* HTTP_SERVER = "http://" SERVER_HOST;  // Apache front, proxied to PHP 8.4 server
-const char* HTTP_ENDPOINT = "/esptest/public/api/http-data";
+const char* HTTP_ENDPOINT = "/api/http-data";
 const char* MQTT_SERVER = SERVER_HOST;  // Same subnet as ESP32
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
