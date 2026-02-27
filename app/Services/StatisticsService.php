@@ -12,17 +12,17 @@ class StatisticsService
     /**
      * Dapatkan data MQTT
      */
-    public function getMqttData()
+    public function getMqttData(): Collection
     {
-        return Eksperimen::where('protokol', 'MQTT')->get();
+        return $this->getProtocolData('MQTT', $this->analysisWindowSize());
     }
 
     /**
      * Dapatkan data HTTP
      */
-    public function getHttpData()
+    public function getHttpData(): Collection
     {
-        return Eksperimen::where('protokol', 'HTTP')->get();
+        return $this->getProtocolData('HTTP', $this->analysisWindowSize());
     }
 
     /**
@@ -233,10 +233,10 @@ class StatisticsService
     /**
      * Dapatkan summary statistik lengkap
      */
-    public function getSummary()
+    public function getSummary(?Collection $mqttData = null, ?Collection $httpData = null)
     {
-        $mqttData = $this->getMqttData();
-        $httpData = $this->getHttpData();
+        $mqttData = $mqttData ?? $this->getMqttData();
+        $httpData = $httpData ?? $this->getHttpData();
 
         // Statistik Latency
         $latencyTTest = $this->tTest($mqttData, $httpData, 'latency_ms');
@@ -354,6 +354,22 @@ class StatisticsService
             ->values();
     }
 
+    private function getProtocolData(string $protocol, int $limit): Collection
+    {
+        return Eksperimen::query()
+            ->where('protokol', strtoupper($protocol))
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get()
+            ->sortBy('id')
+            ->values();
+    }
+
+    private function analysisWindowSize(): int
+    {
+        return max(50, (int) config('dashboard.analysis_window', 1200));
+    }
+
     private function calculateRequiredFieldCompleteness(Collection $data): float
     {
         $total = $data->count();
@@ -410,26 +426,18 @@ class StatisticsService
 
         $expected = 0;
         $received = 0;
+        $maxGapForLoss = max(1, (int) config('dashboard.sequence.max_gap_for_loss', 120));
+        $rebootUptimeDropSeconds = max(1, (int) config('dashboard.sequence.reboot_uptime_drop_seconds', 30));
 
         foreach ($withSequence->groupBy('device_id') as $deviceRows) {
-            $seq = $deviceRows->pluck('packet_seq')
-                ->filter(fn($value) => is_numeric($value))
-                ->map(fn($value) => (int) $value)
-                ->unique()
-                ->sort()
-                ->values();
+            $deviceStats = $this->calculateDeviceSequenceStats(
+                $deviceRows->sortBy('id')->values(),
+                $maxGapForLoss,
+                $rebootUptimeDropSeconds
+            );
 
-            if ($seq->isEmpty()) {
-                continue;
-            }
-
-            $minSeq = (int) $seq->first();
-            $maxSeq = (int) $seq->last();
-            $expectedForDevice = max(1, $maxSeq - $minSeq + 1);
-            $receivedForDevice = min($expectedForDevice, $seq->count());
-
-            $expected += $expectedForDevice;
-            $received += $receivedForDevice;
+            $expected += $deviceStats['expected'];
+            $received += $deviceStats['received'];
         }
 
         if ($expected === 0) {
@@ -454,21 +462,79 @@ class StatisticsService
         ];
     }
 
+    private function calculateDeviceSequenceStats(Collection $rows, int $maxGapForLoss, int $rebootUptimeDropSeconds): array
+    {
+        $expected = 0;
+        $received = 0;
+        $previousSeq = null;
+        $previousUptime = null;
+
+        foreach ($rows as $row) {
+            if (!isset($row->packet_seq) || !is_numeric($row->packet_seq)) {
+                continue;
+            }
+
+            $currentSeq = (int) $row->packet_seq;
+            $currentUptime = isset($row->uptime_s) && is_numeric($row->uptime_s)
+                ? (int) $row->uptime_s
+                : null;
+
+            if ($previousSeq === null) {
+                $expected += 1;
+                $received += 1;
+                $previousSeq = $currentSeq;
+                $previousUptime = $currentUptime;
+                continue;
+            }
+
+            $seqDiff = $currentSeq - $previousSeq;
+            if ($seqDiff === 0) {
+                $previousUptime = $currentUptime;
+                continue;
+            }
+
+            $uptimeResetDetected = $currentUptime !== null
+                && $previousUptime !== null
+                && ($currentUptime + $rebootUptimeDropSeconds) < $previousUptime;
+
+            $startsNewSegment = $uptimeResetDetected
+                || $seqDiff < 0
+                || $seqDiff > $maxGapForLoss;
+
+            if ($startsNewSegment) {
+                $expected += 1;
+                $received += 1;
+            } else {
+                $expected += $seqDiff;
+                $received += 1;
+            }
+
+            $previousSeq = $currentSeq;
+            $previousUptime = $currentUptime;
+        }
+
+        return [
+            'expected' => $expected,
+            'received' => $received,
+        ];
+    }
+
     private function calculateTransmissionHealth(Collection $data, string $protocol): float
     {
         if ($data->isEmpty()) {
             return 0.0;
         }
 
-        $isMqtt = strtoupper($protocol) === 'MQTT';
-        $latencyTargetMs = $isMqtt ? 1500.0 : 3000.0;
-        $txTargetMs = $isMqtt ? 120.0 : 4500.0;
+        $thresholds = $this->resolveTransmissionHealthThresholds($protocol);
+        $weights = $this->resolveTransmissionHealthWeights();
+        $latencyTargetMs = $thresholds['latency_target_ms'];
+        $txTargetMs = $thresholds['tx_target_ms'];
 
         $scores = $data->filter(function ($row) {
             return isset($row->latency_ms, $row->tx_duration_ms)
                 && is_numeric($row->latency_ms)
                 && is_numeric($row->tx_duration_ms);
-        })->map(function ($row) use ($latencyTargetMs, $txTargetMs) {
+        })->map(function ($row) use ($latencyTargetMs, $txTargetMs, $weights) {
             $latency = max(0.0, (float) $row->latency_ms);
             $txDuration = max(0.0, (float) $row->tx_duration_ms);
             $payloadBytes = isset($row->payload_bytes) && is_numeric($row->payload_bytes) ? (int) $row->payload_bytes : 0;
@@ -477,7 +543,9 @@ class StatisticsService
             $txScore = 100.0 - min(100.0, ($txDuration / max(1.0, $txTargetMs)) * 100.0);
             $payloadScore = $payloadBytes > 0 ? 100.0 : 0.0;
 
-            return ($latencyScore * 0.5) + ($txScore * 0.35) + ($payloadScore * 0.15);
+            return ($latencyScore * $weights['latency'])
+                + ($txScore * $weights['tx_duration'])
+                + ($payloadScore * $weights['payload']);
         });
 
         if ($scores->isEmpty()) {
@@ -485,5 +553,54 @@ class StatisticsService
         }
 
         return (float) $scores->avg();
+    }
+
+    private function resolveTransmissionHealthThresholds(string $protocol): array
+    {
+        $isMqtt = strtoupper($protocol) === 'MQTT';
+        $protocolKey = $isMqtt ? 'mqtt' : 'http';
+
+        $config = config("dashboard.transmission_health.{$protocolKey}", []);
+        if (!is_array($config)) {
+            $config = [];
+        }
+
+        $defaultLatencyTarget = $isMqtt ? 1500.0 : 3000.0;
+        $defaultTxTarget = $isMqtt ? 120.0 : 4500.0;
+
+        $latencyTarget = isset($config['latency_target_ms']) ? (float) $config['latency_target_ms'] : $defaultLatencyTarget;
+        $txTarget = isset($config['tx_target_ms']) ? (float) $config['tx_target_ms'] : $defaultTxTarget;
+
+        return [
+            'latency_target_ms' => max(1.0, $latencyTarget),
+            'tx_target_ms' => max(1.0, $txTarget),
+        ];
+    }
+
+    private function resolveTransmissionHealthWeights(): array
+    {
+        $weights = config('dashboard.transmission_health.weights', []);
+        if (!is_array($weights)) {
+            $weights = [];
+        }
+
+        $latencyWeight = max(0.0, isset($weights['latency']) ? (float) $weights['latency'] : 0.50);
+        $txWeight = max(0.0, isset($weights['tx_duration']) ? (float) $weights['tx_duration'] : 0.35);
+        $payloadWeight = max(0.0, isset($weights['payload']) ? (float) $weights['payload'] : 0.15);
+        $totalWeight = $latencyWeight + $txWeight + $payloadWeight;
+
+        if ($totalWeight <= 0.0) {
+            return [
+                'latency' => 0.50,
+                'tx_duration' => 0.35,
+                'payload' => 0.15,
+            ];
+        }
+
+        return [
+            'latency' => $latencyWeight / $totalWeight,
+            'tx_duration' => $txWeight / $totalWeight,
+            'payload' => $payloadWeight / $totalWeight,
+        ];
     }
 }

@@ -3,4 +3,5 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ApiController;
 
-Route::post('/http-data', [ApiController::class, 'storeHttp']);
+Route::middleware(['throttle:http-data', 'ingest.key'])
+    ->post('/http-data', [ApiController::class, 'storeHttp']);

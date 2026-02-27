@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Reset Data Eksperimen - IoT Research Dashboard</title>
     <link rel="icon" type="image/svg+xml" href="{{ asset('project-favicon.svg') }}?v=20260226">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('project-favicon.png') }}?v=20260226">
@@ -327,7 +330,13 @@
 <body>
     @php
         $statusMessage = $statusMessage ?? session('status');
-        $statusType = $statusType ?? (is_string($statusMessage) && str_starts_with(strtolower($statusMessage), 'gagal') ? 'error' : 'success');
+        $sessionStatusType = session('status_type');
+        $statusType = $statusType ?? (
+            in_array($sessionStatusType, ['success', 'error'], true)
+                ? $sessionStatusType
+                : (is_string($statusMessage) && str_starts_with(strtolower($statusMessage), 'gagal') ? 'error' : 'success')
+        );
+        $resetTokenRequired = (bool) ($resetTokenRequired ?? false);
         $basePath = rtrim(request()->getBaseUrl(), '/');
         $resetDataPath = ($basePath !== '' ? $basePath : '') . '/reset-data';
         $dashboardPath = $basePath !== '' ? $basePath . '/' : '/';
@@ -378,6 +387,13 @@
                 Setelah reset, dashboard akan kembali kosong sampai data baru masuk dari ESP32.
             </div>
 
+            @if($errors->any())
+                <div class="result-banner error">
+                    <i class="fas fa-circle-xmark"></i>
+                    {{ $errors->first() }}
+                </div>
+            @endif
+
             @if($totalRows === 0)
                 <div class="empty-note">
                     Tidak ada data tersimpan saat ini. Tombol reset dinonaktifkan otomatis.
@@ -388,13 +404,19 @@
                 @csrf
                 <div class="confirm-wrap">
                     <label class="confirm-check" for="confirmRisk">
-                        <input type="checkbox" id="confirmRisk" name="confirm_risk">
+                        <input type="checkbox" id="confirmRisk" name="confirm_risk" @checked(old('confirm_risk'))>
                         <span>Saya memahami bahwa seluruh data MQTT dan HTTP akan dihapus permanen.</span>
                     </label>
 
                     <label class="confirm-label" for="confirmText">Ketik <strong>RESET</strong> untuk konfirmasi:</label>
-                    <input id="confirmText" class="confirm-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ketik RESET">
+                    <input id="confirmText" name="confirm_text" class="confirm-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ketik RESET" value="{{ old('confirm_text') }}">
                     <div class="confirm-hint">Konfirmasi ini ditujukan untuk mencegah reset tidak sengaja.</div>
+
+                    @if($resetTokenRequired)
+                        <label class="confirm-label" for="resetToken">Masukkan <strong>Reset Token</strong> server:</label>
+                        <input id="resetToken" name="reset_token" class="confirm-input" type="password" autocomplete="off" spellcheck="false" placeholder="Reset token">
+                        <div class="confirm-hint">Token ini dikonfigurasi melalui variabel <code>RESET_DATA_TOKEN</code> di server.</div>
+                    @endif
                 </div>
 
                 <div class="actions">
@@ -417,9 +439,16 @@
 
     <script>
         (function () {
+            window.addEventListener('pageshow', (event) => {
+                if (event.persisted) {
+                    window.location.reload();
+                }
+            });
+
             const totalRows = Number(@json($totalRows));
             const confirmRisk = document.getElementById('confirmRisk');
             const confirmText = document.getElementById('confirmText');
+            const resetToken = document.getElementById('resetToken');
             const submitBtn = document.getElementById('submitResetBtn');
 
             if (!confirmRisk || !confirmText || !submitBtn) {
@@ -433,11 +462,15 @@
                 }
                 const typed = normalized.trim();
                 const hasData = totalRows > 0;
-                submitBtn.disabled = !(hasData && confirmRisk.checked && typed === 'RESET');
+                const tokenReady = !resetToken || (resetToken.value || '').trim() !== '';
+                submitBtn.disabled = !(hasData && confirmRisk.checked && typed === 'RESET' && tokenReady);
             };
 
             confirmRisk.addEventListener('change', syncButtonState);
             confirmText.addEventListener('input', syncButtonState);
+            if (resetToken) {
+                resetToken.addEventListener('input', syncButtonState);
+            }
             syncButtonState();
         }());
     </script>

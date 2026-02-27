@@ -115,9 +115,12 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
         $data['tx_duration_ms'],
         $data['payload_bytes'],
         $data['uptime_s'],
-        $data['free_heap_bytes']
+        $data['free_heap_bytes'],
+        $data['sensor_age_ms'],
+        $data['sensor_read_seq'],
+        $data['send_tick_ms']
     )) {
-        $log('[ERROR] Payload MQTT kurang field wajib (device_id, suhu, kelembapan, timestamp_esp, daya, packet_seq, rssi_dbm, tx_duration_ms, payload_bytes, uptime_s, free_heap_bytes).');
+        $log('[ERROR] Payload MQTT kurang field wajib (device_id, suhu, kelembapan, timestamp_esp, daya, packet_seq, rssi_dbm, tx_duration_ms, payload_bytes, uptime_s, free_heap_bytes, sensor_age_ms, sensor_read_seq, send_tick_ms).');
         return;
     }
 
@@ -131,7 +134,10 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
         !is_numeric($data['tx_duration_ms']) ||
         !is_numeric($data['payload_bytes']) ||
         !is_numeric($data['uptime_s']) ||
-        !is_numeric($data['free_heap_bytes'])
+        !is_numeric($data['free_heap_bytes']) ||
+        !is_numeric($data['sensor_age_ms']) ||
+        !is_numeric($data['sensor_read_seq']) ||
+        !is_numeric($data['send_tick_ms'])
     ) {
         $log('[ERROR] Payload MQTT memiliki tipe field tidak valid (harus numerik).');
         return;
@@ -147,9 +153,9 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
     $payloadBytes = (int) $data['payload_bytes'];
     $uptimeSeconds = (int) $data['uptime_s'];
     $freeHeapBytes = (int) $data['free_heap_bytes'];
-    $sensorAgeMs = null;
-    $sensorReadSeq = null;
-    $sendTickMs = null;
+    $sensorAgeMs = (int) $data['sensor_age_ms'];
+    $sensorReadSeq = (int) $data['sensor_read_seq'];
+    $sendTickMs = (int) $data['send_tick_ms'];
 
     if ($kelembapan < 0 || $kelembapan > 100) {
         $log('[ERROR] Payload MQTT kelembapan di luar rentang 0-100%.');
@@ -191,28 +197,9 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
         return;
     }
 
-    if (array_key_exists('sensor_age_ms', $data)) {
-        if (!is_numeric($data['sensor_age_ms']) || (int) $data['sensor_age_ms'] < 0) {
-            $log('[ERROR] Payload MQTT sensor_age_ms harus numerik dan >= 0.');
-            return;
-        }
-        $sensorAgeMs = (int) $data['sensor_age_ms'];
-    }
-
-    if (array_key_exists('sensor_read_seq', $data)) {
-        if (!is_numeric($data['sensor_read_seq']) || (int) $data['sensor_read_seq'] < 0) {
-            $log('[ERROR] Payload MQTT sensor_read_seq harus numerik dan >= 0.');
-            return;
-        }
-        $sensorReadSeq = (int) $data['sensor_read_seq'];
-    }
-
-    if (array_key_exists('send_tick_ms', $data)) {
-        if (!is_numeric($data['send_tick_ms']) || (int) $data['send_tick_ms'] < 0) {
-            $log('[ERROR] Payload MQTT send_tick_ms harus numerik dan >= 0.');
-            return;
-        }
-        $sendTickMs = (int) $data['send_tick_ms'];
+    if ($sensorAgeMs < 0 || $sensorReadSeq < 0 || $sendTickMs < 0) {
+        $log('[ERROR] Payload MQTT sensor_age_ms/sensor_read_seq/send_tick_ms harus >= 0.');
+        return;
     }
 
     $deviceId = (int) $data['device_id'];
@@ -229,25 +216,29 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
     $timestampEsp = Carbon::createFromTimestampUTC($timestampEspRaw);
     $latencyMs = abs((float) $timestampServer->floatDiffInMilliseconds($timestampEsp));
 
-    Eksperimen::query()->create([
-        'device_id' => $deviceId,
-        'protokol' => 'MQTT',
-        'suhu' => $suhu,
-        'kelembapan' => $kelembapan,
-        'timestamp_esp' => $timestampEsp,
-        'timestamp_server' => $timestampServer,
-        'latency_ms' => $latencyMs,
-        'daya_mw' => $daya,
-        'packet_seq' => $packetSeq,
-        'rssi_dbm' => $rssiDbm,
-        'tx_duration_ms' => $txDurationMs,
-        'payload_bytes' => $payloadBytes,
-        'uptime_s' => $uptimeSeconds,
-        'free_heap_bytes' => $freeHeapBytes,
-        'sensor_age_ms' => $sensorAgeMs,
-        'sensor_read_seq' => $sensorReadSeq,
-        'send_tick_ms' => $sendTickMs,
-    ]);
+    Eksperimen::query()->updateOrCreate(
+        [
+            'device_id' => $deviceId,
+            'protokol' => 'MQTT',
+            'packet_seq' => $packetSeq,
+        ],
+        [
+            'suhu' => $suhu,
+            'kelembapan' => $kelembapan,
+            'timestamp_esp' => $timestampEsp,
+            'timestamp_server' => $timestampServer,
+            'latency_ms' => $latencyMs,
+            'daya_mw' => $daya,
+            'rssi_dbm' => $rssiDbm,
+            'tx_duration_ms' => $txDurationMs,
+            'payload_bytes' => $payloadBytes,
+            'uptime_s' => $uptimeSeconds,
+            'free_heap_bytes' => $freeHeapBytes,
+            'sensor_age_ms' => $sensorAgeMs,
+            'sensor_read_seq' => $sensorReadSeq,
+            'send_tick_ms' => $sendTickMs,
+        ]
+    );
 
     $log("[DB] MQTT data saved. device_id={$deviceId}, packet_seq={$packetSeq}, suhu={$suhu}, kelembapan={$kelembapan}, daya={$daya}, latency_ms={$latencyMs}, rssi_dbm={$rssiDbm}, tx_duration_ms={$txDurationMs}, payload_bytes={$payloadBytes}, sensor_age_ms=" . ($sensorAgeMs ?? '-') . ", sensor_read_seq=" . ($sensorReadSeq ?? '-') . ", send_tick_ms=" . ($sendTickMs ?? '-'));
 };

@@ -3,7 +3,43 @@
 #include <HTTPClient.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <DHT.h>
+#include <DHTesp.h>
+
+#ifndef ESP_HTTP_INGEST_KEY
+#define ESP_HTTP_INGEST_KEY ""
+#endif
+
+#ifndef ESP_SENSOR_INTERVAL_MS
+#define ESP_SENSOR_INTERVAL_MS 8000UL
+#endif
+
+#ifndef ESP_SENSOR_SNAPSHOT_MAX_AGE_MS
+#define ESP_SENSOR_SNAPSHOT_MAX_AGE_MS 20000UL
+#endif
+
+#ifndef ESP_SENSOR_FALLBACK_MAX_AGE_MS
+#define ESP_SENSOR_FALLBACK_MAX_AGE_MS 180000UL
+#endif
+
+#ifndef ESP_SENSOR_EMERGENCY_MAX_AGE_MS
+#define ESP_SENSOR_EMERGENCY_MAX_AGE_MS 900000UL
+#endif
+
+#ifndef ESP_SENSOR_RECOVERY_INTERVAL_MS
+#define ESP_SENSOR_RECOVERY_INTERVAL_MS 3200UL
+#endif
+
+#ifndef ESP_HTTP_POST_RETRY_MAX
+#define ESP_HTTP_POST_RETRY_MAX 2
+#endif
+
+#ifndef ESP_HTTP_POST_RETRY_BACKOFF_MS
+#define ESP_HTTP_POST_RETRY_BACKOFF_MS 250
+#endif
+
+#ifndef ESP_HTTP_READ_TIMEOUT_MS
+#define ESP_HTTP_READ_TIMEOUT_MS 3500
+#endif
 
 
 // ==================== CONFIGURATION ====================
@@ -20,22 +56,40 @@ const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";
 const char* MQTT_PASSWORD = "esp32";
+const char* HTTP_INGEST_KEY = ESP_HTTP_INGEST_KEY;
 
 
 // Device Settings
 #define DHTPIN 4
-#define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE);
+DHTesp dht;
 const int DEVICE_ID = 1;
+const DHTesp::DHT_MODEL_t DHT_MODEL_PREFERRED = DHTesp::DHT11;
 
 // Timing Settings
-const unsigned long INTERVAL_SENSOR = 5000;    // Read sensor every 5 seconds
+const unsigned long INTERVAL_SENSOR = ESP_SENSOR_INTERVAL_MS;    // Background sensor read cadence.
 const unsigned long INTERVAL_HTTP = 10000;     // Send HTTP every 10 seconds
 const unsigned long INTERVAL_MQTT = 10000;     // Send MQTT every 10 seconds
 const unsigned long WIFI_TIMEOUT = 10000;      // WiFi connection timeout
-const unsigned long DHT_MIN_READ_INTERVAL_MS = 1500;
+const unsigned long INTERVAL_NTP_RETRY = 30000; // Retry NTP every 30 seconds when unsynced
+const bool ENABLE_BACKGROUND_SENSOR_READ = false; // Disable extra polling to reduce DHT timing collisions.
+const bool ALLOW_SENSOR_STATUS_FALLBACK = true; // Compatibility mode: accept plausible values even if DHT status is noisy.
+const bool ALLOW_SENSOR_EMERGENCY_FALLBACK = true; // Keep telemetry running when DHT is temporarily unstable.
+const unsigned long MAX_SENSOR_SNAPSHOT_AGE_MS = ESP_SENSOR_SNAPSHOT_MAX_AGE_MS; // Fresh snapshot budget for protocol send.
+const unsigned long MAX_SENSOR_FALLBACK_AGE_MS = ESP_SENSOR_FALLBACK_MAX_AGE_MS; // Standard fallback budget when direct read fails.
+const unsigned long MAX_SENSOR_EMERGENCY_AGE_MS = ESP_SENSOR_EMERGENCY_MAX_AGE_MS; // Emergency fallback budget for severe DHT instability.
+const unsigned long INTERVAL_SENSOR_RECOVERY = ESP_SENSOR_RECOVERY_INTERVAL_MS; // Faster controlled poll when DHT is unstable.
+const unsigned long SENSOR_OUTLIER_GUARD_WINDOW_MS = 180000UL;
+const float SENSOR_MAX_TEMP_JUMP_C = 4.5f;
+const float SENSOR_MAX_HUMIDITY_JUMP = 18.0f;
+unsigned long dhtMinReadIntervalMs = 2200;
 constexpr size_t PAYLOAD_JSON_DOC_CAPACITY = 1024;
 constexpr size_t PAYLOAD_VERIFY_DOC_CAPACITY = 1536;
+const uint8_t DHT_READ_RETRY_MAX = 4;
+const uint8_t DHT_FAILS_BEFORE_REINIT = 5;
+const uint8_t DHT_BOOTSTRAP_TRIES = 3;
+const uint8_t HTTP_POST_RETRY_MAX = ESP_HTTP_POST_RETRY_MAX;
+const uint16_t HTTP_POST_RETRY_BACKOFF_MS = ESP_HTTP_POST_RETRY_BACKOFF_MS;
+const uint16_t HTTP_READ_TIMEOUT_MS = ESP_HTTP_READ_TIMEOUT_MS;
 
 // ==================== GLOBAL VARIABLES ====================
 WiFiClient wifiClient;
@@ -52,11 +106,16 @@ float lastMqttTxDurationMs = 50.0;
 uint32_t httpPacketSeq = 0;
 uint32_t mqttPacketSeq = 0;
 long lastSensorRead = 0;
+unsigned long lastSensorPollMs = 0;
 long lastHTTPSend = 0;
 long lastMQTTSend = 0;
 unsigned long lastDhtCaptureMs = 0;
+unsigned long lastDhtAttemptMs = 0;
 bool mqttConnected = false;
 bool httpConnected = false;
+bool timeSynced = false;
+uint8_t currentSensorFallbackLevel = 0;
+uint32_t lastDeliveredSensorReadSeq = 0;
 
 // Statistics
 unsigned long sensorReadCount = 0;
@@ -65,6 +124,14 @@ unsigned long httpSendFail = 0;
 unsigned long mqttSendSuccess = 0;
 unsigned long mqttSendFail = 0;
 unsigned long lastMQTTAttempt = 0;  // Prevent MQTT connection spam
+unsigned long lastNtpAttempt = 0;
+unsigned long sensorFallbackStandardCount = 0;
+unsigned long sensorFallbackEmergencyCount = 0;
+unsigned long sensorFallbackRejectedCount = 0;
+uint8_t dhtConsecutiveFail = 0;
+uint8_t dhtReinitCounter = 0;
+DHTesp::DHT_MODEL_t activeDhtModel = DHTesp::DHT11;
+bool dhtModelFallbackAttempted = false;
 
 // ==================== FUNCTION DECLARATIONS ====================
 void setupWiFi();
@@ -100,10 +167,18 @@ String buildProtocolPayload(
 );
 bool payloadHasRequiredFields(const String& payload);
 bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog);
+bool hasRecentSensorSnapshot(uint32_t* sensorAgeMsOut = nullptr, uint32_t maxAgeMs = MAX_SENSOR_SNAPSHOT_AGE_MS);
+bool hasAnySensorSnapshot(uint32_t* sensorAgeMsOut = nullptr);
+bool captureDedicatedSensorSnapshotForSend(const char* sourceTag, uint32_t* sensorAgeMsOut, uint32_t* sensorReadSeqOut);
 void printStatus();
-void updateTime();
+bool updateTime(bool verbose = true);
 bool isServerHostSelfTarget();
 void printServerTargetConfig();
+void refreshDhtSamplingInterval();
+const char* dhtModelToString(DHTesp::DHT_MODEL_t model);
+void reinitializeDhtSensor(const char* reason);
+void seedPacketSequenceFromTime();
+void cooperativeDelay(unsigned long durationMs);
 
 // ==================== SETUP ====================
 void setup() {
@@ -117,8 +192,35 @@ void setup() {
     
     // Initialize DHT11
     Serial.println("[INIT] Initializing DHT11 sensor...");
-    dht.begin();
-    delay(1000);  // DHT11 needs time to stabilize
+    pinMode(DHTPIN, INPUT_PULLUP);
+    delay(30);
+    activeDhtModel = DHT_MODEL_PREFERRED;
+    dht.setup(DHTPIN, activeDhtModel);
+    refreshDhtSamplingInterval();
+    Serial.print("[INIT] DHT model: ");
+    Serial.println(dhtModelToString(activeDhtModel));
+    cooperativeDelay(dhtMinReadIntervalMs);  // Let sensor stabilize after boot
+
+    bool bootstrapOk = false;
+    for (uint8_t bootstrapTry = 1; bootstrapTry <= DHT_BOOTSTRAP_TRIES; bootstrapTry++) {
+        if (captureSensorSnapshot("BOOT", false)) {
+            bootstrapOk = true;
+            break;
+        }
+        Serial.print("[INIT] DHT bootstrap attempt ");
+        Serial.print(bootstrapTry);
+        Serial.println(" failed.");
+        cooperativeDelay(dhtMinReadIntervalMs);
+    }
+    if (bootstrapOk) {
+        Serial.print("[INIT] DHT bootstrap OK: T=");
+        Serial.print(lastTemperature, 2);
+        Serial.print(" C, H=");
+        Serial.print(lastHumidity, 2);
+        Serial.println(" %");
+    } else {
+        Serial.println("[INIT] DHT bootstrap failed, runtime retry/reinit will continue.");
+    }
     
     // Connect to WiFi
     setupWiFi();
@@ -127,9 +229,18 @@ void setup() {
     // Setup MQTT
     mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
     mqttClient.setCallback(mqttCallback);
+    mqttClient.setKeepAlive(45);
+    mqttClient.setSocketTimeout(4);
     
     // Synchronize time with NTP
     updateTime();
+    seedPacketSequenceFromTime();
+
+    // Stagger protocol send schedule to avoid DHT read collisions.
+    // HTTP will fire first (after ~10s), MQTT follows ~5s later and then alternates.
+    lastSensorPollMs = millis();
+    lastHTTPSend = (long) millis();
+    lastMQTTSend = (long) (millis() - (INTERVAL_MQTT / 2UL));
     
     Serial.println("[SETUP] Initialization complete!");
     Serial.println("==========================================\n");
@@ -137,6 +248,8 @@ void setup() {
 
 // ==================== MAIN LOOP ====================
 void loop() {
+    httpConnected = (WiFi.status() == WL_CONNECTED);
+
     // Re-connect WiFi if disconnected
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[WARN] WiFi disconnected, reconnecting...");
@@ -153,11 +266,19 @@ void loop() {
     } else {
         mqttClient.loop();
     }
+
+    if (!timeSynced && (millis() - lastNtpAttempt >= INTERVAL_NTP_RETRY)) {
+        updateTime(true);
+    }
     
-    // Read sensor data periodically
-    if (millis() - lastSensorRead >= INTERVAL_SENSOR) {
+    // Background sensor poll keeps latest valid snapshot ready for protocol sends.
+    // Use dedicated poll timestamp so failed reads don't trigger read hammering.
+    unsigned long sensorPollInterval = dhtConsecutiveFail > 0
+        ? max(INTERVAL_SENSOR_RECOVERY, dhtMinReadIntervalMs + 600UL)
+        : INTERVAL_SENSOR;
+    if (ENABLE_BACKGROUND_SENSOR_READ && (millis() - lastSensorPollMs >= sensorPollInterval)) {
+        lastSensorPollMs = millis();
         readSensor();
-        lastSensorRead = millis();
     }
     
     // Send HTTP data periodically
@@ -181,7 +302,7 @@ void loop() {
         lastStatus = millis();
     }
     
-    delay(100);  // Small delay to prevent watchdog timeout
+    cooperativeDelay(100);  // Small delay to keep WiFi/MQTT task responsive.
 }
 
 // ==================== WiFi SETUP ====================
@@ -189,13 +310,14 @@ void setupWiFi() {
     Serial.println("\n[WiFi] Connecting to: " + String(WIFI_SSID));
     
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     
     unsigned long startAttemptTime = millis();
     int attempts = 0;
     
     while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_TIMEOUT) {
-        delay(500);
+        cooperativeDelay(500);
         Serial.print(".");
         attempts++;
     }
@@ -237,24 +359,113 @@ void printServerTargetConfig() {
     }
 }
 
+void cooperativeDelay(unsigned long durationMs) {
+    unsigned long startedAt = millis();
+    while (millis() - startedAt < durationMs) {
+        if (mqttClient.connected()) {
+            mqttClient.loop();
+        }
+
+        unsigned long elapsed = millis() - startedAt;
+        unsigned long remaining = durationMs > elapsed ? (durationMs - elapsed) : 0UL;
+        unsigned long slice = min(remaining, 25UL);
+        if (slice == 0UL) {
+            break;
+        }
+
+        delay(slice);
+        yield();
+    }
+}
+
 // ==================== SENSOR READING ====================
 bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog) {
     unsigned long nowMs = millis();
-    if (lastDhtCaptureMs > 0 && nowMs > lastDhtCaptureMs) {
-        unsigned long elapsed = nowMs - lastDhtCaptureMs;
-        if (elapsed < DHT_MIN_READ_INTERVAL_MS) {
-            delay(DHT_MIN_READ_INTERVAL_MS - elapsed);
+    if (lastDhtAttemptMs > 0 && nowMs > lastDhtAttemptMs) {
+        unsigned long elapsed = nowMs - lastDhtAttemptMs;
+        if (elapsed < dhtMinReadIntervalMs) {
+            cooperativeDelay(dhtMinReadIntervalMs - elapsed);
         }
     }
 
-    float humidity = dht.readHumidity();
-    float temperature = dht.readTemperature();
-    if (isnan(humidity) || isnan(temperature)) {
+    TempAndHumidity sample;
+    DHTesp::DHT_ERROR_t dhtStatus = DHTesp::ERROR_TIMEOUT;
+    bool sampleValid = false;
+    bool acceptedWithStatusFallback = false;
+    bool rejectedAsOutlier = false;
+
+    for (uint8_t attempt = 1; attempt <= DHT_READ_RETRY_MAX; attempt++) {
+        lastDhtAttemptMs = millis();
+        delay(1);  // Keep scheduler responsive around timing-sensitive sensor read.
+        sample = dht.getTempAndHumidity();
+        dhtStatus = dht.getStatus();
+        rejectedAsOutlier = false;
+
+        float humidityAttempt = sample.humidity;
+        float temperatureAttempt = sample.temperature;
+
+        bool plausibleRange = !isnan(humidityAttempt)
+            && !isnan(temperatureAttempt)
+            && humidityAttempt >= 0.0f
+            && humidityAttempt <= 100.0f
+            && temperatureAttempt > -40.0f
+            && temperatureAttempt < 85.0f;
+        bool outlierJump = false;
+        if (plausibleRange && sensorReadCount > 0 && lastDhtCaptureMs > 0) {
+            unsigned long captureAgeMs = millis() >= lastDhtCaptureMs
+                ? (millis() - lastDhtCaptureMs)
+                : 0UL;
+            if (captureAgeMs <= SENSOR_OUTLIER_GUARD_WINDOW_MS) {
+                outlierJump = fabsf(temperatureAttempt - lastTemperature) > SENSOR_MAX_TEMP_JUMP_C
+                    || fabsf(humidityAttempt - lastHumidity) > SENSOR_MAX_HUMIDITY_JUMP;
+            }
+        }
+
+        if (!plausibleRange) {
+            sampleValid = false;
+        } else if (outlierJump) {
+            sampleValid = false;
+            rejectedAsOutlier = true;
+        } else if (dhtStatus == DHTesp::ERROR_NONE) {
+            sampleValid = true;
+        } else if (ALLOW_SENSOR_STATUS_FALLBACK) {
+            sampleValid = true;
+            acceptedWithStatusFallback = true;
+        } else {
+            sampleValid = false;
+        }
+
+        if (sampleValid) {
+            break;
+        }
+
+        if (attempt < DHT_READ_RETRY_MAX) {
+            unsigned long retryBackoff = dhtMinReadIntervalMs + ((unsigned long) dhtConsecutiveFail * 120UL);
+            cooperativeDelay(min(retryBackoff, dhtMinReadIntervalMs + 900UL));
+        }
+    }
+
+    if (!sampleValid) {
+        dhtConsecutiveFail++;
         Serial.print("[");
         Serial.print(sourceTag != nullptr ? sourceTag : "SENSOR");
-        Serial.println("] Sensor read failed (NaN).");
+        Serial.print("] Sensor read failed (");
+        Serial.print(dht.getStatusString());
+        if (rejectedAsOutlier) {
+            Serial.print(", OUTLIER");
+        }
+        Serial.print("), streak=");
+        Serial.println(dhtConsecutiveFail);
+        if (dhtConsecutiveFail >= DHT_FAILS_BEFORE_REINIT) {
+            reinitializeDhtSensor("consecutive read/checksum failures");
+            dhtConsecutiveFail = 0;
+        }
         return false;
     }
+
+    dhtConsecutiveFail = 0;
+    float humidity = sample.humidity;
+    float temperature = sample.temperature;
 
     lastTemperature = temperature;
     lastHumidity = humidity;
@@ -273,7 +484,130 @@ bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog) {
         Serial.println(" mW");
     }
 
+    if (acceptedWithStatusFallback) {
+        Serial.print("[");
+        Serial.print(sourceTag != nullptr ? sourceTag : "SENSOR");
+        Serial.print("] Sensor status=");
+        Serial.print(dht.getStatusString());
+        Serial.println(", value accepted by compatibility fallback.");
+    }
+
     return true;
+}
+
+bool hasRecentSensorSnapshot(uint32_t* sensorAgeMsOut, uint32_t maxAgeMs) {
+    if (sensorReadCount == 0 || lastSensorRead <= 0) {
+        return false;
+    }
+
+    unsigned long nowMs = millis();
+    unsigned long lastReadMs = (unsigned long) lastSensorRead;
+    if (nowMs < lastReadMs) {
+        return false;
+    }
+
+    uint32_t ageMs = (uint32_t) (nowMs - lastReadMs);
+    if (ageMs > maxAgeMs) {
+        return false;
+    }
+
+    if (sensorAgeMsOut != nullptr) {
+        *sensorAgeMsOut = ageMs;
+    }
+
+    return true;
+}
+
+bool hasAnySensorSnapshot(uint32_t* sensorAgeMsOut) {
+    if (sensorReadCount == 0 || lastSensorRead <= 0) {
+        return false;
+    }
+
+    unsigned long nowMs = millis();
+    unsigned long lastReadMs = (unsigned long) lastSensorRead;
+    if (nowMs < lastReadMs) {
+        return false;
+    }
+
+    if (sensorAgeMsOut != nullptr) {
+        *sensorAgeMsOut = (uint32_t) (nowMs - lastReadMs);
+    }
+
+    return true;
+}
+
+bool captureDedicatedSensorSnapshotForSend(const char* sourceTag, uint32_t* sensorAgeMsOut, uint32_t* sensorReadSeqOut) {
+    uint32_t sensorAgeMs = 0U;
+    uint32_t standardFallbackBudgetMs = MAX_SENSOR_FALLBACK_AGE_MS;
+    uint32_t emergencyFallbackBudgetMs = MAX_SENSOR_EMERGENCY_AGE_MS;
+    if (dhtConsecutiveFail >= 3) {
+        standardFallbackBudgetMs = min(standardFallbackBudgetMs, static_cast<uint32_t>(60000U));
+    }
+    if (dhtConsecutiveFail >= (DHT_FAILS_BEFORE_REINIT - 1)) {
+        emergencyFallbackBudgetMs = min(emergencyFallbackBudgetMs, static_cast<uint32_t>(180000U));
+    }
+
+    currentSensorFallbackLevel = 0;
+    // Force a dedicated sensor read for each protocol send so HTTP and MQTT
+    // use independent captures whenever sensor read succeeds.
+    if (captureSensorSnapshot(sourceTag, false) && hasRecentSensorSnapshot(&sensorAgeMs, MAX_SENSOR_SNAPSHOT_AGE_MS)) {
+        if (sensorAgeMsOut != nullptr) {
+            *sensorAgeMsOut = sensorAgeMs;
+        }
+        if (sensorReadSeqOut != nullptr) {
+            *sensorReadSeqOut = (uint32_t) sensorReadCount;
+        }
+        return true;
+    }
+
+    if (hasRecentSensorSnapshot(&sensorAgeMs, standardFallbackBudgetMs)) {
+        currentSensorFallbackLevel = 1;
+        sensorFallbackStandardCount++;
+        Serial.print("[");
+        Serial.print(sourceTag != nullptr ? sourceTag : "SENSOR");
+        Serial.print("] Fresh read unavailable, using fallback snapshot (age=");
+        Serial.print(sensorAgeMs);
+        Serial.print(" ms, budget=");
+        Serial.print(standardFallbackBudgetMs);
+        Serial.println(" ms)");
+        if (sensorAgeMsOut != nullptr) {
+            *sensorAgeMsOut = sensorAgeMs;
+        }
+        if (sensorReadSeqOut != nullptr) {
+            *sensorReadSeqOut = (uint32_t) sensorReadCount;
+        }
+        return true;
+    }
+
+    if (hasAnySensorSnapshot(&sensorAgeMs)) {
+        if (ALLOW_SENSOR_EMERGENCY_FALLBACK && sensorAgeMs <= emergencyFallbackBudgetMs) {
+            currentSensorFallbackLevel = 2;
+            sensorFallbackEmergencyCount++;
+            Serial.print("[");
+            Serial.print(sourceTag != nullptr ? sourceTag : "SENSOR");
+            Serial.print("] DHT unstable, using emergency snapshot (age=");
+            Serial.print(sensorAgeMs);
+            Serial.print(" ms, budget=");
+            Serial.print(emergencyFallbackBudgetMs);
+            Serial.println(" ms)");
+            if (sensorAgeMsOut != nullptr) {
+                *sensorAgeMsOut = sensorAgeMs;
+            }
+            if (sensorReadSeqOut != nullptr) {
+                *sensorReadSeqOut = (uint32_t) sensorReadCount;
+            }
+            return true;
+        }
+
+        Serial.print("[");
+        Serial.print(sourceTag != nullptr ? sourceTag : "SENSOR");
+        Serial.print("] Snapshot age ");
+        Serial.print(sensorAgeMs);
+        Serial.println(" ms exceeds fallback budget, skipping send.");
+        sensorFallbackRejectedCount++;
+    }
+
+    return false;
 }
 
 void readSensor() {
@@ -284,14 +618,30 @@ void readSensor() {
 
 // ==================== HTTP SENDER ====================
 void sendHTTP() {
-    if (!httpConnected || WiFi.status() != WL_CONNECTED) {
+    httpConnected = (WiFi.status() == WL_CONNECTED);
+    if (!httpConnected) {
         Serial.println("[HTTP] WiFi not connected, skipping HTTP send");
         httpSendFail++;
         return;
     }
 
-    if (!captureSensorSnapshot("HTTP", false)) {
+    if (!timeSynced) {
+        Serial.println("[HTTP] Waiting NTP sync, skipping send");
+        httpSendFail++;
+        return;
+    }
+
+    uint32_t sensorAgeMs = 0U;
+    uint32_t sensorReadSeq = (uint32_t) sensorReadCount;
+    if (!captureDedicatedSensorSnapshotForSend("HTTP", &sensorAgeMs, &sensorReadSeq)) {
         Serial.println("[HTTP] Sensor snapshot invalid, skipping send");
+        httpSendFail++;
+        return;
+    }
+    if (currentSensorFallbackLevel > 0 && sensorReadSeq <= lastDeliveredSensorReadSeq) {
+        Serial.print("[HTTP] Duplicate fallback sensor_read_seq=");
+        Serial.print(sensorReadSeq);
+        Serial.println(" already delivered, skipping send");
         httpSendFail++;
         return;
     }
@@ -312,13 +662,12 @@ void sendHTTP() {
     HTTPClient http;
     String url = String(HTTP_SERVER) + String(HTTP_ENDPOINT);
 
+    if (httpPacketSeq == 0 && timeSynced) {
+        seedPacketSequenceFromTime();
+    }
     uint32_t packetSeq = ++httpPacketSeq;
     int rssiDbm = WiFi.RSSI();
     float expectedTxMs = max(20.0f, (lastHttpTxDurationMs * 0.65f) + (fabsf((float) rssiDbm) * 0.35f));
-    uint32_t sensorAgeMs = (lastSensorRead > 0 && millis() >= (unsigned long) lastSensorRead)
-        ? (uint32_t) (millis() - (unsigned long) lastSensorRead)
-        : 0U;
-    uint32_t sensorReadSeq = (uint32_t) sensorReadCount;
     uint32_t payloadBytes = 0;
     String payload = buildProtocolPayload("HTTP", packetSeq, lastHttpPower, expectedTxMs, rssiDbm, timestampEsp, sensorAgeMs, sensorReadSeq, &payloadBytes);
     float predictedPower = estimateProtocolPower("HTTP", expectedTxMs, payloadBytes, rssiDbm, true);
@@ -334,14 +683,43 @@ void sendHTTP() {
     Serial.print("       Payload: ");
     Serial.println(payload);
 
-    http.begin(url);
-    http.addHeader("Content-Type", "application/json");
-    http.setConnectTimeout(5000);
+    auto beginHttpRequest = [&http, &url]() {
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+        if (HTTP_INGEST_KEY != nullptr && strlen(HTTP_INGEST_KEY) > 0) {
+            http.addHeader("X-Ingest-Key", HTTP_INGEST_KEY);
+        }
+        http.setConnectTimeout(5000);
+        http.setTimeout(HTTP_READ_TIMEOUT_MS);
+    };
 
+    int httpCode = -1;
+    bool success = false;
+    uint8_t attemptsUsed = 0;
     unsigned long txStart = millis();
-    int httpCode = http.POST(payload);
+
+    beginHttpRequest();
+    for (uint8_t attempt = 1; attempt <= HTTP_POST_RETRY_MAX; attempt++) {
+        attemptsUsed = attempt;
+        httpCode = http.POST(payload);
+        success = (httpCode >= 200 && httpCode < 300);
+        if (success) {
+            break;
+        }
+
+        if (attempt < HTTP_POST_RETRY_MAX) {
+            Serial.print("[HTTP] Attempt ");
+            Serial.print(attempt);
+            Serial.print(" failed (code ");
+            Serial.print(httpCode);
+            Serial.println("), retrying...");
+            http.end();
+            cooperativeDelay(HTTP_POST_RETRY_BACKOFF_MS * attempt);
+            beginHttpRequest();
+        }
+    }
+
     float txDurationMs = (float) (millis() - txStart);
-    bool success = (httpCode >= 200 && httpCode < 300);
 
     float finalPower = estimateProtocolPower("HTTP", txDurationMs, payloadBytes, rssiDbm, success);
     lastHttpTxDurationMs = txDurationMs;
@@ -359,10 +737,13 @@ void sendHTTP() {
         Serial.print(rssiDbm);
         Serial.print(" dBm | TX: ");
         Serial.print(txDurationMs, 2);
-        Serial.print(" ms | Daya: ");
+        Serial.print(" ms | Try: ");
+        Serial.print(attemptsUsed);
+        Serial.print(" | Daya: ");
         Serial.print(finalPower, 2);
         Serial.println(" mW");
         httpSendSuccess++;
+        lastDeliveredSensorReadSeq = max(lastDeliveredSensorReadSeq, sensorReadSeq);
     } else {
         Serial.print("[HTTP] Failed with code: ");
         Serial.println(httpCode);
@@ -373,7 +754,9 @@ void sendHTTP() {
         Serial.print(rssiDbm);
         Serial.print(" dBm | TX: ");
         Serial.print(txDurationMs, 2);
-        Serial.print(" ms | Daya(estimasi): ");
+        Serial.print(" ms | Try: ");
+        Serial.print(attemptsUsed);
+        Serial.print(" | Daya(estimasi): ");
         Serial.print(finalPower, 2);
         Serial.println(" mW");
         httpSendFail++;
@@ -389,8 +772,23 @@ void sendMQTT() {
         return;
     }
 
-    if (!captureSensorSnapshot("MQTT", false)) {
+    if (!timeSynced) {
+        Serial.println("[MQTT] Waiting NTP sync, skipping send");
+        mqttSendFail++;
+        return;
+    }
+
+    uint32_t sensorAgeMs = 0U;
+    uint32_t sensorReadSeq = (uint32_t) sensorReadCount;
+    if (!captureDedicatedSensorSnapshotForSend("MQTT", &sensorAgeMs, &sensorReadSeq)) {
         Serial.println("[MQTT] Sensor snapshot invalid, skipping send");
+        mqttSendFail++;
+        return;
+    }
+    if (currentSensorFallbackLevel > 0 && sensorReadSeq <= lastDeliveredSensorReadSeq) {
+        Serial.print("[MQTT] Duplicate fallback sensor_read_seq=");
+        Serial.print(sensorReadSeq);
+        Serial.println(" already delivered, skipping send");
         mqttSendFail++;
         return;
     }
@@ -414,13 +812,12 @@ void sendMQTT() {
         return;
     }
 
+    if (mqttPacketSeq == 0 && timeSynced) {
+        seedPacketSequenceFromTime();
+    }
     uint32_t packetSeq = ++mqttPacketSeq;
     int rssiDbm = WiFi.RSSI();
     float expectedTxMs = max(5.0f, (lastMqttTxDurationMs * 0.70f) + (fabsf((float) rssiDbm) * 0.18f));
-    uint32_t sensorAgeMs = (lastSensorRead > 0 && millis() >= (unsigned long) lastSensorRead)
-        ? (uint32_t) (millis() - (unsigned long) lastSensorRead)
-        : 0U;
-    uint32_t sensorReadSeq = (uint32_t) sensorReadCount;
     uint32_t payloadBytes = 0;
     String payload = buildProtocolPayload("MQTT", packetSeq, lastMqttPower, expectedTxMs, rssiDbm, (long) now, sensorAgeMs, sensorReadSeq, &payloadBytes);
     float predictedPower = estimateProtocolPower("MQTT", expectedTxMs, payloadBytes, rssiDbm, true);
@@ -457,6 +854,7 @@ void sendMQTT() {
         Serial.print(finalPower, 2);
         Serial.println(" mW");
         mqttSendSuccess++;
+        lastDeliveredSensorReadSeq = max(lastDeliveredSensorReadSeq, sensorReadSeq);
     } else {
         Serial.println("[MQTT] Publish failed");
         Serial.print("       Seq: ");
@@ -598,8 +996,13 @@ void fillProtocolPayload(
     jsonDoc["free_heap_bytes"] = (uint32_t) ESP.getFreeHeap();
     jsonDoc["sensor_age_ms"] = sensorAgeMs;
     jsonDoc["sensor_read_seq"] = sensorReadSeq;
+    jsonDoc["sensor_fallback_level"] = currentSensorFallbackLevel;
     jsonDoc["send_tick_ms"] = (uint32_t) millis();
     jsonDoc["sensor_reads"] = sensorReadCount;
+    jsonDoc["dht_fail_streak"] = dhtConsecutiveFail;
+    jsonDoc["sensor_fallback_std_count"] = sensorFallbackStandardCount;
+    jsonDoc["sensor_fallback_emergency_count"] = sensorFallbackEmergencyCount;
+    jsonDoc["sensor_fallback_rejected_count"] = sensorFallbackRejectedCount;
     jsonDoc["http_success_count"] = httpSendSuccess;
     jsonDoc["http_fail_count"] = httpSendFail;
     jsonDoc["mqtt_success_count"] = mqttSendSuccess;
@@ -693,6 +1096,9 @@ void printStatus() {
     Serial.print("MQTT: ");
     Serial.println(mqttClient.connected() ? "Connected" : "Disconnected");
 
+    Serial.print("Time Sync: ");
+    Serial.println(timeSynced ? "Synced" : "Not synced");
+
     Serial.print("Last Temperature: ");
     Serial.print(lastTemperature);
     Serial.println(" C");
@@ -745,6 +1151,21 @@ void printStatus() {
 
     Serial.print("Sensor Reads: ");
     Serial.println(sensorReadCount);
+    uint32_t snapshotAgeMs = 0U;
+    if (hasAnySensorSnapshot(&snapshotAgeMs)) {
+        Serial.print("Latest Snapshot Age: ");
+        Serial.print(snapshotAgeMs);
+        Serial.print(" ms | Fallback Level: ");
+        Serial.println(currentSensorFallbackLevel);
+    } else {
+        Serial.println("Latest Snapshot Age: none");
+    }
+    Serial.print("Fallback Std/Emergency/Rejected: ");
+    Serial.print(sensorFallbackStandardCount);
+    Serial.print(" / ");
+    Serial.print(sensorFallbackEmergencyCount);
+    Serial.print(" / ");
+    Serial.println(sensorFallbackRejectedCount);
 
     Serial.print("Uptime: ");
     Serial.print(millis() / 1000);
@@ -757,23 +1178,129 @@ void printStatus() {
     Serial.println("==========================================\n");
 }
 // ==================== TIME SYNC ====================
-void updateTime() {
-    Serial.print("[TIME] Syncing with NTP server...");
-    
-    // Configure time with NTP Server
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-    
-    time_t now = time(nullptr);
-    int attempts = 0;
-    while (now < 24 * 3600 * 2 && attempts < 20) {
-        delay(500);
-        Serial.print(".");
-        now = time(nullptr);
-        attempts++;
+void refreshDhtSamplingInterval() {
+    unsigned long recommended = (unsigned long) dht.getMinimumSamplingPeriod();
+    unsigned long withGuard = recommended + 400UL;
+    if (activeDhtModel == DHTesp::DHT11) {
+        dhtMinReadIntervalMs = max(2500UL, withGuard);
+        return;
     }
-    
-    Serial.println("");
-    Serial.print("[TIME] âœ“ Time synchronized: ");
-    Serial.println(ctime(&now));
+
+    dhtMinReadIntervalMs = max(2500UL, withGuard);
 }
 
+const char* dhtModelToString(DHTesp::DHT_MODEL_t model) {
+    switch (model) {
+        case DHTesp::DHT11:
+            return "DHT11";
+        case DHTesp::DHT22:
+            return "DHT22";
+        case DHTesp::AM2302:
+            return "AM2302";
+        case DHTesp::RHT03:
+            return "RHT03";
+        default:
+            return "AUTO/UNKNOWN";
+    }
+}
+
+void reinitializeDhtSensor(const char* reason) {
+    dhtReinitCounter++;
+    Serial.print("[SENSOR] Reinitializing DHT (");
+    Serial.print(reason != nullptr ? reason : "unknown");
+    Serial.println(")...");
+
+    // If preferred model keeps failing from cold boot (no successful read yet),
+    // probe once with AUTO_DETECT to recover from mislabeled/alternate DHT modules.
+    bool tryAutoDetect = (sensorReadCount == 0)
+        && !dhtModelFallbackAttempted
+        && (dhtReinitCounter >= 3);
+    if (tryAutoDetect) {
+        activeDhtModel = DHTesp::AUTO_DETECT;
+        dhtModelFallbackAttempted = true;
+        Serial.println("[SENSOR] No successful reads yet, trying AUTO_DETECT fail-safe.");
+    } else {
+        activeDhtModel = DHT_MODEL_PREFERRED;
+    }
+
+    dht.setup(DHTPIN, activeDhtModel);
+    refreshDhtSamplingInterval();
+    Serial.print("[SENSOR] DHT model after reinit: ");
+    Serial.println(dhtModelToString(activeDhtModel));
+    cooperativeDelay(dhtMinReadIntervalMs);
+}
+
+void seedPacketSequenceFromTime() {
+    if (!timeSynced) {
+        return;
+    }
+
+    const time_t now = time(nullptr);
+    if (now < 1640995200L) {
+        return;
+    }
+
+    // Use epoch delta seed so packet_seq doesn't restart from 1 after reboot.
+    const uint32_t baseSeed = (uint32_t) max((time_t) 1, now - 1640995200L);
+
+    if (httpPacketSeq < baseSeed) {
+        httpPacketSeq = baseSeed;
+    }
+
+    if (mqttPacketSeq < baseSeed) {
+        mqttPacketSeq = baseSeed;
+    }
+
+    Serial.print("[SEQ] Packet sequence seed: ");
+    Serial.print(baseSeed);
+    Serial.print(" (HTTP=");
+    Serial.print(httpPacketSeq);
+    Serial.print(", MQTT=");
+    Serial.print(mqttPacketSeq);
+    Serial.println(")");
+}
+
+bool updateTime(bool verbose) {
+    lastNtpAttempt = millis();
+
+    if (verbose) {
+        Serial.print("[TIME] Syncing with NTP server...");
+    }
+
+    // Configure time with fallback NTP servers.
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov", "time.google.com");
+
+    const int maxAttempts = 40;
+    time_t now = time(nullptr);
+
+    for (int attempts = 0; attempts < maxAttempts; attempts++) {
+        now = time(nullptr);
+        if (now >= 1640995200L) {
+            timeSynced = true;
+            if (verbose) {
+                Serial.println("");
+                Serial.print("[TIME] âœ“ Time synchronized: ");
+                Serial.println(ctime(&now));
+            }
+            return true;
+        }
+
+        if (verbose) {
+            Serial.print(".");
+        }
+
+        delay(500);
+        yield();
+    }
+
+    timeSynced = false;
+
+    if (verbose) {
+        Serial.println("");
+        Serial.print("[TIME] âœ— Sync failed, epoch=");
+        Serial.println((long) now);
+        Serial.println("[TIME] Will retry automatically every 30 seconds.");
+    }
+
+    return false;
+}

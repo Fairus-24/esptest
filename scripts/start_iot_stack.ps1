@@ -74,6 +74,49 @@ function To-Bool {
     return -not @('0', 'false', 'off', 'no').Contains($normalized)
 }
 
+function Test-IsLocalHost {
+    param([string]$TargetHost)
+
+    if ($null -eq $TargetHost) {
+        return $false
+    }
+
+    $normalized = $TargetHost.Trim().ToLowerInvariant()
+    if ($normalized -eq '') {
+        return $false
+    }
+
+    if (@('localhost', '127.0.0.1', '::1').Contains($normalized)) {
+        return $true
+    }
+
+    $resolvedIps = @()
+    try {
+        $resolvedIps = [System.Net.Dns]::GetHostAddresses($TargetHost) | ForEach-Object { $_.IPAddressToString }
+    } catch {
+        return $false
+    }
+
+    if ($resolvedIps.Count -eq 0) {
+        return $false
+    }
+
+    $localIps = @('127.0.0.1', '::1')
+    try {
+        $localIps += [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) | ForEach-Object { $_.IPAddressToString }
+    } catch {
+        # Keep default loopback set.
+    }
+
+    foreach ($ip in $resolvedIps) {
+        if ($localIps -contains $ip) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Test-TcpPort {
     param(
         [string]$TargetHost,
@@ -176,6 +219,7 @@ $mqttPort = [int](Get-EnvValue -Map $envMap -Key 'MQTT_PORT' -DefaultValue '1883
 $mqttHost = Get-EnvValue -Map $envMap -Key 'MQTT_HOST' -DefaultValue '127.0.0.1'
 
 $mosquittoAutoStart = To-Bool -Value (Get-EnvValue -Map $envMap -Key 'MOSQUITTO_AUTO_START' -DefaultValue 'true')
+$mosquittoOnlyLocal = To-Bool -Value (Get-EnvValue -Map $envMap -Key 'MOSQUITTO_ONLY_LOCAL' -DefaultValue 'true')
 $mosquittoBinary = Get-EnvValue -Map $envMap -Key 'MOSQUITTO_BINARY' -DefaultValue 'C:/Program Files/mosquitto/mosquitto.exe'
 $mosquittoConfig = Get-EnvValue -Map $envMap -Key 'MOSQUITTO_CONFIG' -DefaultValue 'C:/Program Files/mosquitto/mosquitto.conf'
 $mosquittoVerbose = To-Bool -Value (Get-EnvValue -Map $envMap -Key 'MOSQUITTO_VERBOSE' -DefaultValue 'true')
@@ -183,21 +227,29 @@ $mosquittoVerbose = To-Bool -Value (Get-EnvValue -Map $envMap -Key 'MOSQUITTO_VE
 $stackLog = Join-Path $logDir 'iot_stack_startup.log'
 Add-Content -Path $stackLog -Value ("[{0}] Startup triggered." -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
 
-if ($mosquittoAutoStart -and -not (Test-TcpPort -TargetHost $mqttHost -Port $mqttPort)) {
-    $mosqArgs = @()
-    if ($mosquittoVerbose) {
-        $mosqArgs += '-v'
-    }
+if ($mosquittoAutoStart) {
+    $mqttHostIsLocal = Test-IsLocalHost -TargetHost $mqttHost
+    $configuredBrokerReachable = Test-TcpPort -TargetHost $mqttHost -Port $mqttPort
+    $localBrokerReachable = Test-TcpPort -TargetHost '127.0.0.1' -Port $mqttPort
 
-    if ($mosquittoConfig -ne '') {
-        $mosqArgs += @('-c', $mosquittoConfig)
-    }
+    if ($mosquittoOnlyLocal -and -not $mqttHostIsLocal) {
+        Add-Content -Path $stackLog -Value ("[{0}] Mosquitto auto-start skipped: MOSQUITTO_ONLY_LOCAL=true but MQTT_HOST={1} is non-local." -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $mqttHost)
+    } elseif (-not $configuredBrokerReachable -and -not $localBrokerReachable) {
+        $mosqArgs = @()
+        if ($mosquittoVerbose) {
+            $mosqArgs += '-v'
+        }
 
-    $mosqOut = Join-Path $logDir 'mosquitto.log'
-    $mosqErr = Join-Path $logDir 'mosquitto_error.log'
-    if (Start-DetachedProcess -FilePath $mosquittoBinary -ArgumentList $mosqArgs -WorkingDirectory $projectRoot -StdOutPath $mosqOut -StdErrPath $mosqErr) {
-        Add-Content -Path $stackLog -Value ("[{0}] Mosquitto start requested." -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
-        Start-Sleep -Seconds 1
+        if ($mosquittoConfig -ne '') {
+            $mosqArgs += @('-c', $mosquittoConfig)
+        }
+
+        $mosqOut = Join-Path $logDir 'mosquitto.log'
+        $mosqErr = Join-Path $logDir 'mosquitto_error.log'
+        if (Start-DetachedProcess -FilePath $mosquittoBinary -ArgumentList $mosqArgs -WorkingDirectory $projectRoot -StdOutPath $mosqOut -StdErrPath $mosqErr) {
+            Add-Content -Path $stackLog -Value ("[{0}] Mosquitto start requested." -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
+            Start-Sleep -Seconds 1
+        }
     }
 }
 

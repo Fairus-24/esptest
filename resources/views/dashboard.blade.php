@@ -1678,6 +1678,21 @@
             text-decoration: none;
         }
 
+        .admin-config-btn {
+            border: 1px solid rgba(6, 182, 212, 0.35);
+            border-radius: 12px;
+            padding: 10px 16px;
+            font-weight: 700;
+            color: #ecfeff;
+            cursor: pointer;
+            background: linear-gradient(135deg, #0891b2, #0e7490);
+            box-shadow: 0 12px 24px rgba(14, 116, 144, 0.25);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
         .reset-status {
             display: inline-flex;
             align-items: center;
@@ -2249,6 +2264,54 @@
             font-size: 1.08em;
         }
 
+        .simulation-nav-wrap {
+            margin-top: 26px;
+        }
+
+        .simulation-nav-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.38);
+            background: linear-gradient(132deg, #0f172a 0%, #1e3a8a 56%, #0f766e 100%);
+            color: #e2e8f0;
+            text-decoration: none;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            box-shadow: 0 16px 30px rgba(2, 6, 23, 0.26);
+        }
+
+        .simulation-nav-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 34px rgba(2, 6, 23, 0.34);
+        }
+
+        .simulation-nav-title {
+            margin: 0 0 4px;
+            font-size: 1rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #f8fafc;
+        }
+
+        .simulation-nav-desc {
+            margin: 0;
+            font-size: 0.86rem;
+            color: rgba(226, 232, 240, 0.92);
+            font-weight: 500;
+            line-height: 1.55;
+        }
+
+        .simulation-nav-arrow {
+            flex: 0 0 auto;
+            font-size: 1.2rem;
+            color: #93c5fd;
+        }
+
         @media (max-width: 1200px) {
             .stats-grid {
                 grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2308,6 +2371,7 @@
             }
 
             .reset-btn,
+            .admin-config-btn,
             .reset-status {
                 width: 100%;
                 justify-content: center;
@@ -2464,6 +2528,9 @@
                     <h1><i class="fas fa-chart-line"></i> IoT Research System</h1>
                     <p>Analisis Komparatif Protokol MQTT vs HTTP</p>
                     <div class="header-subtitle">
+                        <span id="esp32StatusBadge" class="header-badge status-badge {{ $esp32Connected ? 'is-online' : 'is-offline' }}">
+                            <i class="fas fa-microchip"></i> ESP32 {{ $esp32Connected ? 'ON' : 'OFF' }}
+                        </span>
                         <span id="mqttStatusBadge" class="header-badge status-badge {{ $mqttConnected ? 'is-online' : 'is-offline' }}">
                             <i class="fas fa-wifi"></i> MQTT {{ $mqttConnected ? 'Connected' : 'Disconnected' }}
                         </span>
@@ -2595,6 +2662,7 @@
         </div>
         <div class="action-row">
             <a href="{{ (rtrim(request()->getBaseUrl(), '/') !== '' ? rtrim(request()->getBaseUrl(), '/') : '') . '/reset-data' }}" class="reset-btn"><i class="fas fa-trash-alt"></i> Reset Data Eksperimen</a>
+            <a href="{{ (rtrim(request()->getBaseUrl(), '/') !== '' ? rtrim(request()->getBaseUrl(), '/') : '') . '/admin/config' }}" class="admin-config-btn"><i class="fas fa-sliders"></i> Admin Config & Firmware</a>
             @if(session('status'))
                 <span id="resetStatusMessage" class="reset-status">{{ session('status') }}</span>
             @endif
@@ -3016,6 +3084,23 @@
                 </div>
             </section>
         @endif
+
+        @php
+            $basePath = rtrim(request()->getBaseUrl(), '/');
+            $simulationPath = ($basePath !== '' ? $basePath : '') . '/simulation';
+        @endphp
+        <div class="simulation-nav-wrap">
+            <a href="{{ $simulationPath }}" class="simulation-nav-card">
+                <div>
+                    <h3 class="simulation-nav-title"><i class="fas fa-vial-circle-check"></i> Mode Simulasi Keseluruhan Aplikasi</h3>
+                    <p class="simulation-nav-desc">
+                        Buka halaman simulasi untuk meniru alur end-to-end MQTT vs HTTP secara realtime
+                        (generator data, packet sequence, reliability, diagnostics, chart, dan auto-refresh dashboard).
+                    </p>
+                </div>
+                <i class="fas fa-arrow-right simulation-nav-arrow" aria-hidden="true"></i>
+            </a>
+        </div>
 
         <!-- Footer -->
         <div class="footer">
@@ -3477,7 +3562,7 @@
             syncElementById(newDoc, 'avgSuhuDetail', true);
             syncElementById(newDoc, 'avgKelembapanDetail', true);
 
-            ['mqttStatusBadge', 'httpStatusBadge'].forEach((badgeId) => {
+            ['esp32StatusBadge', 'mqttStatusBadge', 'httpStatusBadge'].forEach((badgeId) => {
                 const currentBadge = document.getElementById(badgeId);
                 const nextBadge = newDoc.getElementById(badgeId);
                 if (!currentBadge || !nextBadge) return;

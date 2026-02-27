@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Device extends Model
 {
@@ -11,8 +13,13 @@ class Device extends Model
         'lokasi',
     ];
 
-    public function eksperimens()
+    public function eksperimens(): HasMany
     {
         return $this->hasMany(Eksperimen::class);
+    }
+
+    public function firmwareProfile(): HasOne
+    {
+        return $this->hasOne(DeviceFirmwareProfile::class);
     }
 }

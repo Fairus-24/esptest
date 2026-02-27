@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Eksperimen;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ApiController extends Controller
 {
@@ -26,9 +29,9 @@ class ApiController extends Controller
      *   "payload_bytes": 212,
      *   "uptime_s": 8451,
      *   "free_heap_bytes": 271232,
-     *   "sensor_age_ms": 1530,          // optional telemetry detail
-     *   "sensor_read_seq": 991,         // optional telemetry detail
-     *   "send_tick_ms": 9876543         // optional telemetry detail
+     *   "sensor_age_ms": 1530,          // required telemetry detail
+     *   "sensor_read_seq": 991,         // required telemetry detail
+     *   "send_tick_ms": 9876543         // required telemetry detail
      * }
      */
     public function storeHttp(Request $request)
@@ -46,9 +49,9 @@ class ApiController extends Controller
                 'payload_bytes' => 'required|integer|min:1',
                 'uptime_s' => 'required|integer|min:0',
                 'free_heap_bytes' => 'required|integer|min:0',
-                'sensor_age_ms' => 'nullable|integer|min:0',
-                'sensor_read_seq' => 'nullable|integer|min:0',
-                'send_tick_ms' => 'nullable|integer|min:0',
+                'sensor_age_ms' => 'required|integer|min:0',
+                'sensor_read_seq' => 'required|integer|min:0',
+                'send_tick_ms' => 'required|integer|min:0',
             ]);
 
             $timestampServer = Carbon::now('UTC');
@@ -57,29 +60,13 @@ class ApiController extends Controller
             // Hitung latency dalam milliseconds
             $latencyMs = abs((float) $timestampServer->floatDiffInMilliseconds($timestampEsp));
 
-            $eksperimen = Eksperimen::create([
-                'device_id' => $validated['device_id'],
-                'protokol' => 'HTTP',
-                'suhu' => $validated['suhu'],
-                'kelembapan' => $validated['kelembapan'],
-                'timestamp_esp' => $timestampEsp,
-                'timestamp_server' => $timestampServer,
-                'latency_ms' => $latencyMs,
-                'daya_mw' => $validated['daya'],
-                'packet_seq' => $validated['packet_seq'],
-                'rssi_dbm' => $validated['rssi_dbm'],
-                'tx_duration_ms' => $validated['tx_duration_ms'],
-                'payload_bytes' => $validated['payload_bytes'],
-                'uptime_s' => $validated['uptime_s'],
-                'free_heap_bytes' => $validated['free_heap_bytes'],
-                'sensor_age_ms' => array_key_exists('sensor_age_ms', $validated) ? $validated['sensor_age_ms'] : null,
-                'sensor_read_seq' => array_key_exists('sensor_read_seq', $validated) ? $validated['sensor_read_seq'] : null,
-                'send_tick_ms' => array_key_exists('send_tick_ms', $validated) ? $validated['send_tick_ms'] : null,
-            ]);
+            $eksperimen = $this->upsertHttpRecord($validated, $timestampServer, $timestampEsp, $latencyMs);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data HTTP berhasil disimpan',
+                'message' => $eksperimen->wasRecentlyCreated
+                    ? 'Data HTTP berhasil disimpan'
+                    : 'Data HTTP duplikat diperbarui (idempotent upsert)',
                 'data' => $eksperimen,
                 'required_fields_received' => [
                     'device_id' => $validated['device_id'],
@@ -93,11 +80,11 @@ class ApiController extends Controller
                     'payload_bytes' => $validated['payload_bytes'],
                     'uptime_s' => $validated['uptime_s'],
                     'free_heap_bytes' => $validated['free_heap_bytes'],
-                    'sensor_age_ms' => $validated['sensor_age_ms'] ?? null,
-                    'sensor_read_seq' => $validated['sensor_read_seq'] ?? null,
-                    'send_tick_ms' => $validated['send_tick_ms'] ?? null,
+                    'sensor_age_ms' => $validated['sensor_age_ms'],
+                    'sensor_read_seq' => $validated['sensor_read_seq'],
+                    'send_tick_ms' => $validated['send_tick_ms'],
                 ],
-            ], 201);
+            ], $eksperimen->wasRecentlyCreated ? 201 : 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -106,11 +93,71 @@ class ApiController extends Controller
                 'errors' => $e->errors(),
             ], 422);
 
-        } catch (\Exception $e) {
+        } catch (Throwable $e) {
+            Log::error('HTTP ingest failed.', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'device_id' => $request->input('device_id'),
+                'packet_seq' => $request->input('packet_seq'),
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Terjadi kesalahan internal server saat menyimpan data HTTP.',
             ], 500);
         }
+    }
+
+    private function upsertHttpRecord(array $validated, Carbon $timestampServer, Carbon $timestampEsp, float $latencyMs): Eksperimen
+    {
+        $identity = [
+            'device_id' => (int) $validated['device_id'],
+            'protokol' => 'HTTP',
+            'packet_seq' => (int) $validated['packet_seq'],
+        ];
+
+        $attributes = [
+            'suhu' => $validated['suhu'],
+            'kelembapan' => $validated['kelembapan'],
+            'timestamp_esp' => $timestampEsp,
+            'timestamp_server' => $timestampServer,
+            'latency_ms' => $latencyMs,
+            'daya_mw' => $validated['daya'],
+            'rssi_dbm' => $validated['rssi_dbm'],
+            'tx_duration_ms' => $validated['tx_duration_ms'],
+            'payload_bytes' => $validated['payload_bytes'],
+            'uptime_s' => $validated['uptime_s'],
+            'free_heap_bytes' => $validated['free_heap_bytes'],
+            'sensor_age_ms' => $validated['sensor_age_ms'],
+            'sensor_read_seq' => $validated['sensor_read_seq'],
+            'send_tick_ms' => $validated['send_tick_ms'],
+        ];
+
+        try {
+            return Eksperimen::query()->updateOrCreate($identity, $attributes);
+        } catch (QueryException $e) {
+            if (!$this->isDuplicateKeyException($e)) {
+                throw $e;
+            }
+
+            // Jika ada race condition pada unique index, ambil baris yang sudah ada lalu update.
+            $existing = Eksperimen::query()->where($identity)->first();
+            if ($existing === null) {
+                throw $e;
+            }
+
+            $existing->fill($attributes);
+            $existing->save();
+
+            return $existing;
+        }
+    }
+
+    private function isDuplicateKeyException(QueryException $exception): bool
+    {
+        $sqlState = (string) ($exception->errorInfo[0] ?? '');
+        $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+
+        return $sqlState === '23000' || $driverCode === 1062;
     }
 }

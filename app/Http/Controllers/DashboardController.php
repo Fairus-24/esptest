@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Services\StatisticsService;
 use App\Models\Eksperimen;
 use App\Models\Device;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 
@@ -15,30 +18,82 @@ class DashboardController extends Controller
 
     public function showResetPage()
     {
-        return view('reset-data', $this->buildResetPagePayload());
+        return $this->renderResetPage($this->buildResetPagePayload());
     }
 
     // Reset all eksperimen data
-    public function resetData()
+    public function resetData(Request $request)
     {
+        $resetGuard = $this->resolveResetGuardConfig();
+
+        $rules = [
+            'confirm_risk' => ['required', 'accepted'],
+            'confirm_text' => ['required', 'string', 'max:16', 'regex:/^reset$/i'],
+        ];
+        $messages = [
+            'confirm_risk.accepted' => 'Checklist konfirmasi risiko wajib diaktifkan sebelum reset.',
+            'confirm_text.regex' => 'Konfirmasi teks harus tepat: RESET',
+        ];
+        if ($resetGuard['token_required']) {
+            $rules['reset_token'] = ['required', 'string', 'max:128'];
+            $messages['reset_token.required'] = 'Token reset wajib diisi.';
+        }
+
+        $validated = $request->validate($rules, $messages);
+
+        if ($resetGuard['token_required']) {
+            if ($resetGuard['token'] === '') {
+                return back()
+                    ->withErrors(['reset_token' => 'RESET_DATA_TOKEN belum dikonfigurasi di server.'])
+                    ->withInput();
+            }
+
+            $providedToken = trim((string) ($validated['reset_token'] ?? ''));
+            if ($providedToken === '' || !hash_equals($resetGuard['token'], $providedToken)) {
+                return back()
+                    ->withErrors(['reset_token' => 'Token reset tidak valid.'])
+                    ->withInput();
+            }
+        }
+
+        $confirmText = strtoupper(trim((string) ($validated['confirm_text'] ?? '')));
+        if ($confirmText !== 'RESET') {
+            return back()
+                ->withErrors(['confirm_text' => 'Konfirmasi teks harus tepat: RESET'])
+                ->withInput();
+        }
+
         $statusType = 'success';
         $statusMessage = 'Data eksperimen berhasil direset!';
+        $deletedRows = 0;
 
         try {
-            DB::transaction(function () {
+            DB::transaction(function () use (&$deletedRows) {
                 // Gunakan delete agar aman saat ada foreign key constraint.
-                Eksperimen::query()->delete();
+                $deletedRows = Eksperimen::query()->count();
+                if ($deletedRows > 0) {
+                    Eksperimen::query()->delete();
+                }
             });
+
+            if ($deletedRows === 0) {
+                $statusMessage = 'Tidak ada data eksperimen untuk direset.';
+            } else {
+                $statusMessage = "Data eksperimen berhasil direset ({$deletedRows} baris dihapus).";
+            }
         } catch (Throwable $e) {
             $statusType = 'error';
-            $statusMessage = 'Gagal reset data eksperimen: ' . $e->getMessage();
+            $statusMessage = 'Gagal reset data eksperimen karena kesalahan internal server.';
+            Log::error('Reset data eksperimen gagal.', [
+                'message' => $e->getMessage(),
+            ]);
         }
 
         $payload = $this->buildResetPagePayload();
         $payload['statusType'] = $statusType;
         $payload['statusMessage'] = $statusMessage;
 
-        return response()->view('reset-data', $payload);
+        return $this->renderResetPage($payload);
     }
 
     public function __construct(StatisticsService $statisticsService)
@@ -48,12 +103,18 @@ class DashboardController extends Controller
 
     public function index()
     {
+        if (!$this->isDatabaseReachable()) {
+            return response()->view('dashboard', $this->buildDashboardFallbackPayload(
+                'Database MySQL tidak terhubung. Dashboard menampilkan mode aman. Aktifkan MySQL/XAMPP pada 127.0.0.1:3306 agar data realtime kembali normal.'
+            ));
+        }
+
         // Ambil data MQTT dan HTTP sekali saja
         $mqttData = $this->statisticsService->getMqttData();
         $httpData = $this->statisticsService->getHttpData();
 
         // Ambil summary statistik
-        $summary = $this->statisticsService->getSummary();
+        $summary = $this->statisticsService->getSummary($mqttData, $httpData);
         $reliability = $this->statisticsService->getReliability();
 
         // Status koneksi: jika data baru dalam 30 detik terakhir dianggap connected
@@ -62,6 +123,19 @@ class DashboardController extends Controller
         $httpLast = $httpData->max('created_at');
         $mqttConnected = $mqttLast && $now->diffInSeconds($mqttLast) < 30;
         $httpConnected = $httpLast && $now->diffInSeconds($httpLast) < 30;
+        $esp32ConnectedWindowSeconds = 30;
+        $latestEsp32IncomingAt = null;
+        foreach ([$mqttLast, $httpLast] as $candidateTimestamp) {
+            if (!$candidateTimestamp) {
+                continue;
+            }
+
+            if ($latestEsp32IncomingAt === null || $candidateTimestamp->greaterThan($latestEsp32IncomingAt)) {
+                $latestEsp32IncomingAt = $candidateTimestamp;
+            }
+        }
+        $esp32Connected = $latestEsp32IncomingAt
+            && $now->diffInSeconds($latestEsp32IncomingAt) < $esp32ConnectedWindowSeconds;
 
         // Statistik suhu & kelembapan
         $mqttAvgSuhu = $mqttData->whereNotNull('suhu')->avg('suhu');
@@ -159,9 +233,13 @@ class DashboardController extends Controller
 
             $sameSensorReadSeq = isset($latestMqtt->sensor_read_seq, $latestHttp->sensor_read_seq)
                 && ((int) $latestMqtt->sensor_read_seq === (int) $latestHttp->sensor_read_seq);
+            $sameSendTick = isset($latestMqtt->send_tick_ms, $latestHttp->send_tick_ms)
+                && ((int) $latestMqtt->send_tick_ms === (int) $latestHttp->send_tick_ms);
 
-            if ($sameSensorReadSeq) {
-                $protocolDiagnostics['sensor_sync_note'] = 'Peringatan: sensor_read_seq MQTT dan HTTP sama pada sampel terbaru. Ini mengindikasikan kedua payload kemungkinan memakai snapshot sensor yang sama.';
+            if ($sameSensorReadSeq && $sameSendTick) {
+                $protocolDiagnostics['sensor_sync_note'] = 'Peringatan: sensor_read_seq dan send_tick_ms MQTT/HTTP sama pada sampel terbaru. Indikasi kuat payload memakai snapshot sensor yang sama.';
+            } elseif ($sameSensorReadSeq) {
+                $protocolDiagnostics['sensor_sync_note'] = 'Perhatian: sensor_read_seq MQTT dan HTTP sama pada sampel terbaru. Ini bisa terjadi saat fallback snapshot aktif, tetapi idealnya pembacaan antar protokol tetap terpisah.';
             } elseif (abs($deltaSuhu) < 0.01 && abs($deltaKelembapan) < 0.01) {
                 $protocolDiagnostics['sensor_sync_note'] = 'Nilai suhu/kelembapan identik pada sampel terbaru. Data tetap dapat valid jika kondisi lingkungan stabil, namun pastikan sensor_read_seq berbeda antar protokol.';
             } else {
@@ -194,6 +272,7 @@ class DashboardController extends Controller
         ];
         $mqttTotal = $mqttData->count();
         $httpTotal = $httpData->count();
+        $warningConfig = $this->resolveWarningConfig();
 
         $fieldCompleteness = [];
         $dataWarnings = [];
@@ -233,8 +312,16 @@ class DashboardController extends Controller
             }
         }
 
-        if ($mqttTotal !== $httpTotal) {
-            $dataWarnings[] = "Jumlah data tidak seimbang: MQTT {$mqttTotal} vs HTTP {$httpTotal}.";
+        $countDelta = abs($mqttTotal - $httpTotal);
+        $maxCount = max($mqttTotal, $httpTotal);
+        $allowedDelta = max(
+            $warningConfig['balance_allowed_delta'],
+            (int) ceil($maxCount * $warningConfig['balance_allowed_ratio'])
+        );
+        $enoughSamplesForBalanceCheck = $maxCount >= $warningConfig['balance_min_samples'];
+
+        if ($enoughSamplesForBalanceCheck && $countDelta > $allowedDelta) {
+            $dataWarnings[] = "Jumlah data tidak seimbang: MQTT {$mqttTotal} vs HTTP {$httpTotal} (delta {$countDelta}, batas {$allowedDelta}).";
         }
 
         if (($reliability['mqtt_missing_packets'] ?? 0) > 0) {
@@ -249,10 +336,10 @@ class DashboardController extends Controller
         if (($reliability['http_expected_packets'] ?? 0) === 0 && $httpTotal > 0) {
             $dataWarnings[] = "HTTP belum memiliki telemetry packet_seq. Pastikan firmware ESP32 terbaru sudah terpasang.";
         }
-        if (($reliability['mqtt_transmission_health'] ?? 100) < 80 && $mqttTotal > 0) {
+        if (($reliability['mqtt_transmission_health'] ?? 100) < $warningConfig['mqtt_health_min_score'] && $mqttTotal > 0) {
             $dataWarnings[] = "MQTT transmission health rendah ({$reliability['mqtt_transmission_health']}%). Cek RSSI, broker, atau kestabilan jaringan.";
         }
-        if (($reliability['http_transmission_health'] ?? 100) < 80 && $httpTotal > 0) {
+        if (($reliability['http_transmission_health'] ?? 100) < $warningConfig['http_health_min_score'] && $httpTotal > 0) {
             $dataWarnings[] = "HTTP transmission health rendah ({$reliability['http_transmission_health']}%). Cek server API, endpoint, atau kestabilan jaringan.";
         }
         if (($summary['mqtt']['std_daya'] ?? 0) < 0.5 && ($summary['mqtt']['total_data'] ?? 0) >= 20) {
@@ -267,14 +354,15 @@ class DashboardController extends Controller
             $sendTickGap = isset($diagDelta['send_tick_ms']) ? (int) $diagDelta['send_tick_ms'] : null;
             $tempGap = isset($diagDelta['suhu']) ? abs((float) $diagDelta['suhu']) : null;
             $humidityGap = isset($diagDelta['kelembapan']) ? abs((float) $diagDelta['kelembapan']) : null;
+            $sameSnapshotSignature = $sensorReadGap !== null
+                && $sensorReadGap === 0
+                && $sendTickGap !== null
+                && abs($sendTickGap) <= 100;
 
-            if ($sensorReadGap !== null && $sensorReadGap === 0) {
-                $dataWarnings[] = "Validasi protokol: sensor_read_seq MQTT dan HTTP terbaru sama. Indikasi snapshot sensor dipakai bersama, bukan pembacaan terpisah.";
+            if ($sameSnapshotSignature) {
+                $dataWarnings[] = "Validasi protokol: sensor_read_seq dan send_tick_ms MQTT/HTTP hampir identik. Indikasi snapshot sensor dipakai bersama, bukan pembacaan terpisah.";
             }
-            if ($sendTickGap !== null && $sendTickGap === 0) {
-                $dataWarnings[] = "Validasi protokol: send_tick_ms MQTT dan HTTP terbaru sama. Cek firmware agar setiap protokol melakukan pembacaan/kirim terpisah.";
-            }
-            if ($tempGap !== null && $humidityGap !== null && $tempGap < 0.0000005 && $humidityGap < 0.0000005 && $sensorReadGap === 0) {
+            if ($tempGap !== null && $humidityGap !== null && $tempGap < 0.0000005 && $humidityGap < 0.0000005 && $sameSnapshotSignature) {
                 $dataWarnings[] = "Suhu dan kelembapan antar protokol identik hingga presisi tinggi dengan sensor_read_seq yang sama. Periksa potensi data duplikat lintas protokol.";
             }
         }
@@ -403,7 +491,7 @@ class DashboardController extends Controller
 
         return view('dashboard', compact(
             'summary', 'reliability', 'latencyChartData', 'powerChartData', 'mqttTotal', 'httpTotal',
-            'mqttConnected', 'httpConnected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan',
+            'mqttConnected', 'httpConnected', 'esp32Connected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan',
             'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings', 'protocolDiagnostics'
         ));
     }
@@ -450,36 +538,211 @@ class DashboardController extends Controller
         return in_array($resolved, array_unique($localIps), true);
     }
 
-    private function buildResetPagePayload(): array
+    public function buildResetPagePayload(): array
     {
-        $totalRows = Eksperimen::query()->count();
-        $mqttRows = Eksperimen::query()->whereRaw('UPPER(protokol) = ?', ['MQTT'])->count();
-        $httpRows = Eksperimen::query()->whereRaw('UPPER(protokol) = ?', ['HTTP'])->count();
+        $resetGuard = $this->resolveResetGuardConfig();
 
-        $latestRecord = Eksperimen::query()
-            ->select(['id', 'protokol', 'timestamp_server', 'created_at'])
-            ->latest('id')
-            ->first();
+        try {
+            $totalRows = Eksperimen::query()->count();
+            $mqttRows = Eksperimen::query()->whereRaw('UPPER(protokol) = ?', ['MQTT'])->count();
+            $httpRows = Eksperimen::query()->whereRaw('UPPER(protokol) = ?', ['HTTP'])->count();
 
-        $latestWib = '-';
-        if ($latestRecord) {
-            $timestampSource = $latestRecord->timestamp_server ?? $latestRecord->created_at;
-            if ($timestampSource) {
-                try {
-                    $latestWib = (clone $timestampSource)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i:s') . ' WIB';
-                } catch (Throwable) {
-                    $latestWib = '-';
+            $latestRecord = Eksperimen::query()
+                ->select(['id', 'protokol', 'timestamp_server', 'created_at'])
+                ->latest('id')
+                ->first();
+
+            $latestWib = '-';
+            if ($latestRecord) {
+                $timestampSource = $latestRecord->timestamp_server ?? $latestRecord->created_at;
+                if ($timestampSource) {
+                    try {
+                        $latestWib = (clone $timestampSource)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i:s') . ' WIB';
+                    } catch (Throwable) {
+                        $latestWib = '-';
+                    }
                 }
             }
+
+            return [
+                'totalRows' => $totalRows,
+                'mqttRows' => $mqttRows,
+                'httpRows' => $httpRows,
+                'latestWib' => $latestWib,
+                'statusType' => null,
+                'statusMessage' => null,
+                'resetTokenRequired' => $resetGuard['token_required'],
+            ];
+        } catch (Throwable $e) {
+            Log::warning('Reset page fallback: database unavailable.', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'totalRows' => 0,
+                'mqttRows' => 0,
+                'httpRows' => 0,
+                'latestWib' => '-',
+                'statusType' => 'error',
+                'statusMessage' => 'Database tidak terhubung. Jalankan MySQL/XAMPP agar fitur reset dapat digunakan.',
+                'resetTokenRequired' => $resetGuard['token_required'],
+            ];
         }
+    }
+
+    public function renderResetPage(array $payload, int $statusCode = 200): Response
+    {
+        return response()
+            ->view('reset-data', $payload, $statusCode)
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', 'Fri, 01 Jan 1990 00:00:00 GMT');
+    }
+
+    private function resolveWarningConfig(): array
+    {
+        $mqttMinScore = (float) config('dashboard.warnings.mqtt_health_min_score', 70);
+        $httpMinScore = (float) config('dashboard.warnings.http_health_min_score', 70);
+        $balanceMinSamples = (int) config('dashboard.warnings.balance_min_samples', 20);
+        $balanceAllowedDelta = (int) config('dashboard.warnings.balance_allowed_delta', 3);
+        $balanceAllowedRatio = (float) config('dashboard.warnings.balance_allowed_ratio', 0.12);
 
         return [
-            'totalRows' => $totalRows,
-            'mqttRows' => $mqttRows,
-            'httpRows' => $httpRows,
-            'latestWib' => $latestWib,
-            'statusType' => null,
-            'statusMessage' => null,
+            'mqtt_health_min_score' => max(0.0, min(100.0, $mqttMinScore)),
+            'http_health_min_score' => max(0.0, min(100.0, $httpMinScore)),
+            'balance_min_samples' => max(1, $balanceMinSamples),
+            'balance_allowed_delta' => max(0, $balanceAllowedDelta),
+            'balance_allowed_ratio' => max(0.0, $balanceAllowedRatio),
+        ];
+    }
+
+    private function resolveResetGuardConfig(): array
+    {
+        $token = trim((string) config('dashboard.reset.token', ''));
+        $allowWithoutToken = (bool) config('dashboard.reset.allow_without_token', true);
+        $tokenRequired = $token !== ''
+            || (!$allowWithoutToken && !app()->environment(['local', 'testing']));
+
+        return [
+            'token' => $token,
+            'token_required' => $tokenRequired,
+        ];
+    }
+
+    private function isDatabaseReachable(): bool
+    {
+        try {
+            DB::connection()->getPdo();
+            return true;
+        } catch (Throwable $e) {
+            Log::warning('Dashboard fallback: database unavailable.', [
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    private function buildDashboardFallbackPayload(string $warningMessage): array
+    {
+        $emptyTTest = [
+            'valid' => false,
+            'message' => 'Analisis statistik belum tersedia karena database belum terhubung.',
+            'data1' => ['n' => 0, 'mean' => 0.0, 'variance' => 0.0, 'std_dev' => 0.0],
+            'data2' => ['n' => 0, 'mean' => 0.0, 'variance' => 0.0, 'std_dev' => 0.0],
+            't_value' => 0.0,
+            'df' => 0,
+            'critical_value' => 1.96,
+            'is_significant' => false,
+            'p_value' => 1.0,
+            'interpretation' => 'Belum dapat dihitung.',
+        ];
+
+        return [
+            'summary' => [
+                'mqtt' => [
+                    'total_data' => 0,
+                    'avg_latency_ms' => 0.0,
+                    'avg_daya_mw' => 0.0,
+                    'avg_suhu' => 0.0,
+                    'avg_kelembapan' => 0.0,
+                    'std_latency' => 0.0,
+                    'std_daya' => 0.0,
+                    'std_kelembapan' => 0.0,
+                ],
+                'http' => [
+                    'total_data' => 0,
+                    'avg_latency_ms' => 0.0,
+                    'avg_daya_mw' => 0.0,
+                    'avg_suhu' => 0.0,
+                    'avg_kelembapan' => 0.0,
+                    'std_latency' => 0.0,
+                    'std_daya' => 0.0,
+                    'std_kelembapan' => 0.0,
+                ],
+                'ttest_latency' => $emptyTTest,
+                'ttest_daya' => $emptyTTest,
+            ],
+            'reliability' => [
+                'mqtt_reliability' => 0.0,
+                'http_reliability' => 0.0,
+                'mqtt_total_sent' => 0,
+                'http_total_sent' => 0,
+                'reliability_window_limit' => 0,
+                'mqtt_window_size' => 0,
+                'http_window_size' => 0,
+                'mqtt_sequence_reliability' => 0.0,
+                'http_sequence_reliability' => 0.0,
+                'mqtt_data_completeness' => 0.0,
+                'http_data_completeness' => 0.0,
+                'mqtt_transmission_health' => 0.0,
+                'http_transmission_health' => 0.0,
+                'mqtt_expected_packets' => 0,
+                'http_expected_packets' => 0,
+                'mqtt_received_packets' => 0,
+                'http_received_packets' => 0,
+                'mqtt_missing_packets' => 0,
+                'http_missing_packets' => 0,
+            ],
+            'latencyChartData' => [
+                'labels' => [],
+                'time_labels' => [],
+                'full_time_labels' => [],
+                'datasets' => [],
+                'total_points' => 0,
+                'display_timezone' => 'Asia/Jakarta',
+            ],
+            'powerChartData' => [
+                'labels' => [],
+                'time_labels' => [],
+                'full_time_labels' => [],
+                'mqtt' => [],
+                'http' => [],
+                'total_points' => 0,
+                'display_timezone' => 'Asia/Jakarta',
+            ],
+            'mqttTotal' => 0,
+            'httpTotal' => 0,
+            'mqttConnected' => false,
+            'httpConnected' => false,
+            'esp32Connected' => false,
+            'mqttAvgSuhu' => 0.0,
+            'mqttAvgKelembapan' => 0.0,
+            'httpAvgSuhu' => 0.0,
+            'httpAvgKelembapan' => 0.0,
+            'avgSuhu' => 0.0,
+            'avgKelembapan' => 0.0,
+            'fieldCompleteness' => [
+                'MQTT' => ['total' => 0, 'fields' => []],
+                'HTTP' => ['total' => 0, 'fields' => []],
+            ],
+            'dataWarnings' => [$warningMessage],
+            'protocolDiagnostics' => [
+                'mqtt' => ['protocol' => 'MQTT', 'available' => false],
+                'http' => ['protocol' => 'HTTP', 'available' => false],
+                'delta' => null,
+                'pair_available' => false,
+                'sensor_sync_note' => 'Mode aman aktif: dashboard belum dapat mengambil data dari database.',
+            ],
         ];
     }
 }
