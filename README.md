@@ -176,6 +176,7 @@ The project has been updated with the following behavior:
 117. Laravel now trusts reverse-proxy headers and forces HTTPS URL generation when `APP_URL` is `https://...` (or `APP_FORCE_HTTPS=true`), preventing insecure HTTP form-action downgrade on admin login behind Nginx.
 118. Admin views now use relative route URLs for form submissions/navigation as an additional safeguard against mixed-scheme form posts.
 119. Firmware profile defaults are now derived from effective runtime config (`APP_URL` + `MQTT_HOST`) instead of hardcoded Windows LAN/path values, reducing first-run misrouting in production.
+120. Firmware HTTP target is now independently configurable via `ESP_HTTP_BASE_URL` (supports HTTPS) and MQTT broker via `ESP_MQTT_BROKER`, so production Nginx virtual-host/IP mismatch no longer forces HTTP `404` on ESP32.
 
 ## Tech Stack
 
@@ -803,12 +804,15 @@ Update these values in `ESP32_Firmware/src/main.cpp` before flash:
 | Firmware key | Example | Must match |
 | --- | --- | --- |
 | `WIFI_SSID` / `WIFI_PASSWORD` | your WiFi | Active WLAN used by ESP32 |
-| `SERVER_HOST` | `192.168.0.104` | Same host as Laravel + Mosquitto |
+| `SERVER_HOST` | `192.168.0.104` | Legacy shared fallback host (used when HTTP/MQTT override flags are not set) |
+| `ESP_HTTP_BASE_URL` (in `platformio.ini`) | `https://espdht.mufaza.my.id` | Full HTTP base URL for ingest target (supports HTTPS) |
 | `HTTP_ENDPOINT` | `/esptest/public/api/http-data` | Laravel API path through Apache |
-| `MQTT_SERVER` / `MQTT_PORT` | `192.168.0.104`, `1883` | Broker host/port |
+| `ESP_MQTT_BROKER` (in `platformio.ini`) | `202.154.58.51` | Broker host override for MQTT publish path |
+| `MQTT_SERVER` / `MQTT_PORT` | `192.168.0.104`, `1883` | Broker host/port fallback (used when override flag not set) |
 | `MQTT_TOPIC` | `iot/esp32/suhu` | Same as `.env` `MQTT_TOPIC` |
 | `MQTT_USER` / `MQTT_PASSWORD` | `esp32` / `esp32` | Same as broker + `.env` |
 | `ESP_HTTP_INGEST_KEY` (in `platformio.ini`) | `replace-with-strong-secret` | Must match `.env` `HTTP_INGEST_KEY` |
+| `ESP_HTTP_TLS_INSECURE` (in `platformio.ini`) | `1` | `1` lets ESP32 skip cert-chain verification for HTTPS endpoint |
 | `DEVICE_ID` | `1` | Existing row in `devices` table |
 | `DHTPIN` / `DHT_MODEL_PREFERRED` | `4`, `DHTesp::DHT11` | Your sensor wiring and model setting |
 
@@ -887,6 +891,9 @@ pio device monitor
 Build flag note:
 - `ESP32_Firmware/platformio.ini` includes `-DESP_HTTP_INGEST_KEY=\"<your-key>\"`.
 - Set it to the same value as `.env` `HTTP_INGEST_KEY` so HTTP payload requests include valid `X-Ingest-Key`.
+- For production URL, set `-DESP_HTTP_BASE_URL=\"https://your-domain\"` and keep endpoint as `/api/http-data`.
+- If MQTT broker host differs from HTTP host, set `-DESP_MQTT_BROKER=\"<broker-host-or-ip>\"`.
+- For HTTPS without custom CA bundle, keep `-DESP_HTTP_TLS_INSECURE=1`.
 - Firmware stability tuning flags are now available in `platformio.ini`:
   - `ESP_SENSOR_INTERVAL_MS`
   - `ESP_SENSOR_RECOVERY_INTERVAL_MS`
@@ -917,7 +924,7 @@ Use this order on a fresh machine/session so the stack starts cleanly:
 6. Confirm worker log shows active subscription:
    - `storage/logs/mqtt_worker.log`
    - expected line: connected + listening on topic `iot/esp32/suhu`
-7. Flash ESP32 with updated `SERVER_HOST` and credentials.
+7. Flash ESP32 with updated network + target config (`ESP_HTTP_BASE_URL`, `ESP_MQTT_BROKER`/`SERVER_HOST`, credentials, ingest key).
 8. Watch serial monitor:
    - HTTP should return status `201`
    - MQTT should publish successfully (no repeated reconnect failures)
@@ -1425,7 +1432,9 @@ GROUP BY protokol;
 ### Production domain is live but no telemetry rows are inserted
 
 - Check firmware target values (most common root cause):
-  - `SERVER_HOST` must match production domain/host.
+  - `ESP_HTTP_BASE_URL` should point to your real production URL (example: `https://your-domain`).
+  - If firmware still uses direct IP (`http://<ip>`), ensure that IP vhost serves `/api/http-data`; otherwise ESP32 can get Nginx `404` even though domain route works.
+  - `ESP_MQTT_BROKER` (or fallback `MQTT_SERVER`) must match reachable broker host.
   - `HTTP_ENDPOINT` must match deployment path (usually `/api/http-data` for root-domain Nginx proxy).
   - `ESP_HTTP_INGEST_KEY` must match server `.env` `HTTP_INGEST_KEY`.
 - For MQTT mode, verify ESP32 can reach `MQTT_HOST:MQTT_PORT` from its network (public/LAN routing and firewall/NAT must allow it).
@@ -1465,7 +1474,10 @@ GROUP BY protokol;
 
 - This usually means ESP32 is targeting the wrong server IP (often itself).
 - In serial monitor, if WiFi IP is `192.168.0.100`, do not set `SERVER_HOST` to `192.168.0.100` unless your Laravel/Mosquitto host is truly on that IP.
-- Set firmware `SERVER_HOST` to the actual PC host IP (example: `192.168.0.104`), then rebuild and flash:
+- Set firmware target correctly:
+  - `ESP_HTTP_BASE_URL` -> actual HTTP ingest base (`http://<lan-ip>` or `https://<domain>`),
+  - `ESP_MQTT_BROKER` (or `SERVER_HOST`) -> actual broker host.
+- Then rebuild and flash:
   `pio run -t upload`.
 - Keep Laravel worker broker target aligned with ESP32:
   `.env MQTT_HOST` should be the same host as firmware `MQTT_SERVER`.

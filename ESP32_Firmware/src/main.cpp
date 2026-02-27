@@ -1,12 +1,13 @@
 ﻿
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <DHTesp.h>
 
 #ifndef ESP_HTTP_INGEST_KEY
-#define ESP_HTTP_INGEST_KEY ""
+#define ESP_HTTP_INGEST_KEY "a49f402364c2ed5eaaf26f57dde011600d0e5e320546ba13d33adf38e500e3fc"
 #endif
 
 #ifndef ESP_SENSOR_INTERVAL_MS
@@ -41,6 +42,10 @@
 #define ESP_HTTP_READ_TIMEOUT_MS 3500
 #endif
 
+#ifndef ESP_HTTP_TLS_INSECURE
+#define ESP_HTTP_TLS_INSECURE 1
+#endif
+
 
 // ==================== CONFIGURATION ====================
 // WiFi Settings
@@ -49,9 +54,15 @@ const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
 #define SERVER_HOST "202.154.58.51"  // Windows host LAN IP (update if DHCP IP changes)
-const char* HTTP_SERVER = "http://" SERVER_HOST;  // Apache front, proxied to PHP 8.4 server
+#ifndef ESP_HTTP_BASE_URL
+#define ESP_HTTP_BASE_URL "http://" SERVER_HOST
+#endif
+#ifndef ESP_MQTT_BROKER
+#define ESP_MQTT_BROKER SERVER_HOST
+#endif
+const char* HTTP_SERVER = ESP_HTTP_BASE_URL;  // Supports http:// or https:// base URL.
 const char* HTTP_ENDPOINT = "/api/http-data";
-const char* MQTT_SERVER = SERVER_HOST;  // Same subnet as ESP32
+const char* MQTT_SERVER = ESP_MQTT_BROKER;
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";
@@ -683,8 +694,20 @@ void sendHTTP() {
     Serial.print("       Payload: ");
     Serial.println(payload);
 
-    auto beginHttpRequest = [&http, &url]() {
-        http.begin(url);
+    WiFiClient httpClient;
+    WiFiClientSecure httpsClient;
+    auto beginHttpRequest = [&http, &url, &httpClient, &httpsClient]() {
+        bool useHttps = url.startsWith("https://");
+        if (useHttps) {
+#if ESP_HTTP_TLS_INSECURE
+            httpsClient.setInsecure();
+#endif
+            http.begin(httpsClient, url);
+        } else {
+            http.begin(httpClient, url);
+        }
+
+        http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
         http.addHeader("Content-Type", "application/json");
         if (HTTP_INGEST_KEY != nullptr && strlen(HTTP_INGEST_KEY) > 0) {
             http.addHeader("X-Ingest-Key", HTTP_INGEST_KEY);
