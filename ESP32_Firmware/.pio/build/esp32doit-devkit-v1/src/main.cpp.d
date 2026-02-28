@@ -239,4 +239,4 @@
  .pio/libdeps/esp32doit-devkit-v1/ArduinoJson/src/ArduinoJson.h \
  .pio/libdeps/esp32doit-devkit-v1/ArduinoJson/src/ArduinoJson.hpp \
  .pio/libdeps/esp32doit-devkit-v1/ArduinoJson/src/ArduinoJson/Configuration.hpp \
- .pio/libdeps/esp32doit-devkit-v1/DHT\ sensor\ library\ for\ ESPx/DHTesp.h
+ .pio/libdeps/esp32doit-devkit-v1/DHT\ sensor\ library/DHT.h
