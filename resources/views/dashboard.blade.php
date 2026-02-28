@@ -302,6 +302,16 @@
             font-size: 0.7rem;
         }
 
+        .network-protocol-state {
+            display: inline-block;
+            margin-left: 4px;
+            font-size: 0.58rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            opacity: 0.9;
+        }
+
         .network-metric {
             display: flex;
             flex-direction: column;
@@ -2425,8 +2435,48 @@
         }
     </style>
 </head>
-<body>
+    <body>
     @php
+        $mqttConnectionStatus = is_array($mqttConnectionStatus ?? null)
+            ? $mqttConnectionStatus
+            : [
+                'protocol' => 'MQTT',
+                'connected' => false,
+                'state' => 'not_found',
+                'label' => 'Not Found',
+                'detail' => 'Belum ada data telemetry.',
+                'badge_class' => 'is-offline',
+                'row_class' => 'is-offline',
+                'freshness_seconds' => 30,
+                'age_seconds' => null,
+                'last_seen_wib' => '-',
+            ];
+        $httpConnectionStatus = is_array($httpConnectionStatus ?? null)
+            ? $httpConnectionStatus
+            : [
+                'protocol' => 'HTTP',
+                'connected' => false,
+                'state' => 'not_found',
+                'label' => 'Not Found',
+                'detail' => 'Belum ada data telemetry.',
+                'badge_class' => 'is-offline',
+                'row_class' => 'is-offline',
+                'freshness_seconds' => 30,
+                'age_seconds' => null,
+                'last_seen_wib' => '-',
+            ];
+        $esp32ConnectionStatus = is_array($esp32ConnectionStatus ?? null)
+            ? $esp32ConnectionStatus
+            : [
+                'connected' => false,
+                'label' => 'OFF',
+                'detail' => 'Belum ada data telemetry dari perangkat.',
+                'badge_class' => 'is-offline',
+                'freshness_seconds' => 30,
+                'age_seconds' => null,
+                'last_seen_wib' => '-',
+            ];
+
         $computeRealtimeMbitPerSecond = static function ($payloadBytes, $txDurationMs): ?float {
             if ($payloadBytes === null || $txDurationMs === null) {
                 return null;
@@ -2460,12 +2510,39 @@
         $latestMqttRealtime = $protocolDiagnostics['mqtt'] ?? ['available' => false];
         $latestHttpRealtime = $protocolDiagnostics['http'] ?? ['available' => false];
 
-        $mqttRealtimeLatency = $formatRealtimeLatency($latestMqttRealtime['latency_ms'] ?? null);
-        $httpRealtimeLatency = $formatRealtimeLatency($latestHttpRealtime['latency_ms'] ?? null);
-        $mqttRealtimeSpeed = $formatRealtimeSpeed($computeRealtimeMbitPerSecond($latestMqttRealtime['payload_bytes'] ?? null, $latestMqttRealtime['tx_duration_ms'] ?? null));
-        $httpRealtimeSpeed = $formatRealtimeSpeed($computeRealtimeMbitPerSecond($latestHttpRealtime['payload_bytes'] ?? null, $latestHttpRealtime['tx_duration_ms'] ?? null));
-        $mqttRealtimeStamp = $latestMqttRealtime['timestamp_server'] ?? '-';
-        $httpRealtimeStamp = $latestHttpRealtime['timestamp_server'] ?? '-';
+        $mqttRealtimeLatency = ($mqttConnectionStatus['connected'] ?? false)
+            ? $formatRealtimeLatency($latestMqttRealtime['latency_ms'] ?? null)
+            : '-';
+        $httpRealtimeLatency = ($httpConnectionStatus['connected'] ?? false)
+            ? $formatRealtimeLatency($latestHttpRealtime['latency_ms'] ?? null)
+            : '-';
+        $mqttRealtimeSpeed = ($mqttConnectionStatus['connected'] ?? false)
+            ? $formatRealtimeSpeed($computeRealtimeMbitPerSecond($latestMqttRealtime['payload_bytes'] ?? null, $latestMqttRealtime['tx_duration_ms'] ?? null))
+            : '-';
+        $httpRealtimeSpeed = ($httpConnectionStatus['connected'] ?? false)
+            ? $formatRealtimeSpeed($computeRealtimeMbitPerSecond($latestHttpRealtime['payload_bytes'] ?? null, $latestHttpRealtime['tx_duration_ms'] ?? null))
+            : '-';
+
+        $formatProtocolStamp = static function (array $status): string {
+            $label = strtoupper((string) ($status['protocol'] ?? 'PROTO'));
+            $stateLabel = (string) ($status['label'] ?? 'Unknown');
+            $lastSeen = (string) ($status['last_seen_wib'] ?? '-');
+            $age = $status['age_seconds'] ?? null;
+            $freshness = (int) ($status['freshness_seconds'] ?? 30);
+
+            if (($status['state'] ?? '') === 'not_found') {
+                return "{$label}: {$stateLabel} (belum ada data)";
+            }
+            if (($status['connected'] ?? false) !== true) {
+                $ageText = is_numeric($age) ? "{$age} detik" : ">{$freshness} detik";
+                return "{$label}: {$stateLabel} (last {$lastSeen}, age {$ageText})";
+            }
+
+            return "{$label}: {$stateLabel} (last {$lastSeen})";
+        };
+
+        $mqttRealtimeStamp = $formatProtocolStamp($mqttConnectionStatus);
+        $httpRealtimeStamp = $formatProtocolStamp($httpConnectionStatus);
         $isRealtimeWidgetLive = $mqttConnected || $httpConnected;
     @endphp
 
@@ -2478,13 +2555,13 @@
             </button>
         </div>
         <div id="networkWidgetBody" class="network-float-body">
-            <div id="mqttNetworkRow" class="network-protocol-row {{ $mqttConnected ? 'is-online' : 'is-offline' }}">
-                <span class="network-protocol-label"><i class="fas fa-broadcast-tower"></i> MQTT</span>
+            <div id="mqttNetworkRow" class="network-protocol-row {{ $mqttConnectionStatus['row_class'] ?? ($mqttConnected ? 'is-online' : 'is-offline') }}">
+                <span class="network-protocol-label"><i class="fas fa-broadcast-tower"></i> MQTT <small class="network-protocol-state">{{ strtoupper((string) ($mqttConnectionStatus['label'] ?? 'UNKNOWN')) }}</small></span>
                 <span class="network-metric"><small>Ping</small><strong>{{ $mqttRealtimeLatency }}</strong></span>
                 <span class="network-metric"><small>Speed</small><strong>{{ $mqttRealtimeSpeed }}</strong></span>
             </div>
-            <div id="httpNetworkRow" class="network-protocol-row {{ $httpConnected ? 'is-online' : 'is-offline' }}">
-                <span class="network-protocol-label"><i class="fas fa-server"></i> HTTP</span>
+            <div id="httpNetworkRow" class="network-protocol-row {{ $httpConnectionStatus['row_class'] ?? ($httpConnected ? 'is-online' : 'is-offline') }}">
+                <span class="network-protocol-label"><i class="fas fa-server"></i> HTTP <small class="network-protocol-state">{{ strtoupper((string) ($httpConnectionStatus['label'] ?? 'UNKNOWN')) }}</small></span>
                 <span class="network-metric"><small>Ping</small><strong>{{ $httpRealtimeLatency }}</strong></span>
                 <span class="network-metric"><small>Speed</small><strong>{{ $httpRealtimeSpeed }}</strong></span>
             </div>
@@ -2528,14 +2605,14 @@
                     <h1><i class="fas fa-chart-line"></i> IoT Research System</h1>
                     <p>Analisis Komparatif Protokol MQTT vs HTTP</p>
                     <div class="header-subtitle">
-                        <span id="esp32StatusBadge" class="header-badge status-badge {{ $esp32Connected ? 'is-online' : 'is-offline' }}">
-                            <i class="fas fa-microchip"></i> ESP32 {{ $esp32Connected ? 'ON' : 'OFF' }}
+                        <span id="esp32StatusBadge" class="header-badge status-badge {{ $esp32ConnectionStatus['badge_class'] ?? ($esp32Connected ? 'is-online' : 'is-offline') }}" title="{{ $esp32ConnectionStatus['detail'] ?? '' }}">
+                            <i class="fas fa-microchip"></i> ESP32 {{ $esp32ConnectionStatus['label'] ?? ($esp32Connected ? 'ON' : 'OFF') }}
                         </span>
-                        <span id="mqttStatusBadge" class="header-badge status-badge {{ $mqttConnected ? 'is-online' : 'is-offline' }}">
-                            <i class="fas fa-wifi"></i> MQTT {{ $mqttConnected ? 'Connected' : 'Disconnected' }}
+                        <span id="mqttStatusBadge" class="header-badge status-badge {{ $mqttConnectionStatus['badge_class'] ?? ($mqttConnected ? 'is-online' : 'is-offline') }}" title="{{ $mqttConnectionStatus['detail'] ?? '' }}">
+                            <i class="fas fa-wifi"></i> MQTT {{ $mqttConnectionStatus['label'] ?? ($mqttConnected ? 'Connected' : 'Disconnected') }}
                         </span>
-                        <span id="httpStatusBadge" class="header-badge status-badge {{ $httpConnected ? 'is-online' : 'is-offline' }}">
-                            <i class="fas fa-globe"></i> HTTP {{ $httpConnected ? 'Connected' : 'Disconnected' }}
+                        <span id="httpStatusBadge" class="header-badge status-badge {{ $httpConnectionStatus['badge_class'] ?? ($httpConnected ? 'is-online' : 'is-offline') }}" title="{{ $httpConnectionStatus['detail'] ?? '' }}">
+                            <i class="fas fa-globe"></i> HTTP {{ $httpConnectionStatus['label'] ?? ($httpConnected ? 'Connected' : 'Disconnected') }}
                         </span>
                         <span class="header-badge"><i class="fas fa-microscope"></i> T-Test Active</span>
                     </div>

@@ -5,6 +5,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <DHTesp.h>
+#include <cstring>
 
 #ifndef ESP_HTTP_INGEST_KEY
 #define ESP_HTTP_INGEST_KEY "a49f402364c2ed5eaaf26f57dde011600d0e5e320546ba13d33adf38e500e3fc"
@@ -46,6 +47,30 @@
 #define ESP_HTTP_TLS_INSECURE 1
 #endif
 
+#ifndef ESP_REMOTE_DEBUG_ENABLED
+#define ESP_REMOTE_DEBUG_ENABLED 1
+#endif
+
+#ifndef ESP_REMOTE_DEBUG_TOPIC
+#define ESP_REMOTE_DEBUG_TOPIC "iot/esp32/debug"
+#endif
+
+#ifndef ESP_REMOTE_DEBUG_QUEUE_SIZE
+#define ESP_REMOTE_DEBUG_QUEUE_SIZE 20
+#endif
+
+#ifndef ESP_REMOTE_DEBUG_MAX_MESSAGE_LEN
+#define ESP_REMOTE_DEBUG_MAX_MESSAGE_LEN 220
+#endif
+
+#ifndef ESP_REMOTE_DEBUG_FLUSH_BURST
+#define ESP_REMOTE_DEBUG_FLUSH_BURST 3
+#endif
+
+#ifndef ESP_REMOTE_DEBUG_MIN_INTERVAL_MS
+#define ESP_REMOTE_DEBUG_MIN_INTERVAL_MS 120UL
+#endif
+
 
 // ==================== CONFIGURATION ====================
 // WiFi Settings
@@ -68,18 +93,20 @@ const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";
 const char* MQTT_PASSWORD = "esp32";
 const char* HTTP_INGEST_KEY = ESP_HTTP_INGEST_KEY;
+const char* MQTT_DEBUG_TOPIC = ESP_REMOTE_DEBUG_TOPIC;
+const bool REMOTE_DEBUG_ENABLED = ESP_REMOTE_DEBUG_ENABLED != 0;
 
 
 // Device Settings
 #define DHTPIN 4
 DHTesp dht;
 const int DEVICE_ID = 1;
-const DHTesp::DHT_MODEL_t DHT_MODEL_PREFERRED = DHTesp::DHT11;
+const DHTesp::DHT_MODEL_t DHT_MODEL_PREFERRED = DHTesp::AUTO_DETECT;
 
 // Timing Settings
 const unsigned long INTERVAL_SENSOR = ESP_SENSOR_INTERVAL_MS;    // Background sensor read cadence.
-const unsigned long INTERVAL_HTTP = 10000;     // Send HTTP every 10 seconds
-const unsigned long INTERVAL_MQTT = 10000;     // Send MQTT every 10 seconds
+const unsigned long INTERVAL_HTTP = 14000;     // Send HTTP every 14 seconds (less sensor pressure)
+const unsigned long INTERVAL_MQTT = 14000;     // Send MQTT every 14 seconds (less sensor pressure)
 const unsigned long WIFI_TIMEOUT = 10000;      // WiFi connection timeout
 const unsigned long INTERVAL_NTP_RETRY = 30000; // Retry NTP every 30 seconds when unsynced
 const bool ENABLE_BACKGROUND_SENSOR_READ = false; // Disable extra polling to reduce DHT timing collisions.
@@ -143,6 +170,14 @@ uint8_t dhtConsecutiveFail = 0;
 uint8_t dhtReinitCounter = 0;
 DHTesp::DHT_MODEL_t activeDhtModel = DHTesp::DHT11;
 bool dhtModelFallbackAttempted = false;
+struct RemoteDebugEntry {
+    char message[ESP_REMOTE_DEBUG_MAX_MESSAGE_LEN];
+};
+RemoteDebugEntry remoteDebugQueue[ESP_REMOTE_DEBUG_QUEUE_SIZE];
+uint8_t remoteDebugQueueHead = 0;
+uint8_t remoteDebugQueueTail = 0;
+uint8_t remoteDebugQueueCount = 0;
+unsigned long lastRemoteDebugPublishMs = 0;
 
 // ==================== FUNCTION DECLARATIONS ====================
 void setupWiFi();
@@ -190,6 +225,9 @@ const char* dhtModelToString(DHTesp::DHT_MODEL_t model);
 void reinitializeDhtSensor(const char* reason);
 void seedPacketSequenceFromTime();
 void cooperativeDelay(unsigned long durationMs);
+void queueRemoteDebug(const char* level, const String& message);
+void flushRemoteDebugQueue(uint8_t maxMessages = ESP_REMOTE_DEBUG_FLUSH_BURST);
+void publishRemoteStatusSummary();
 
 // ==================== SETUP ====================
 void setup() {
@@ -200,10 +238,11 @@ void setup() {
     Serial.println("==========================================");
     Serial.println("  ESP32 IoT Data Logger - MQTT vs HTTP");
     Serial.println("==========================================");
+    queueRemoteDebug("BOOT", "Firmware boot sequence started");
     
     // Initialize DHT11
     Serial.println("[INIT] Initializing DHT11 sensor...");
-    pinMode(DHTPIN, INPUT_PULLUP);
+    pinMode(DHTPIN, INPUT);
     delay(30);
     activeDhtModel = DHT_MODEL_PREFERRED;
     dht.setup(DHTPIN, activeDhtModel);
@@ -236,6 +275,11 @@ void setup() {
     // Connect to WiFi
     setupWiFi();
     printServerTargetConfig();
+    queueRemoteDebug(
+        "CFG",
+        String("HTTP target=") + String(HTTP_SERVER) + String(HTTP_ENDPOINT)
+        + " MQTT target=" + String(MQTT_SERVER) + ":" + String(MQTT_PORT)
+    );
     
     // Setup MQTT
     mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
@@ -255,6 +299,7 @@ void setup() {
     
     Serial.println("[SETUP] Initialization complete!");
     Serial.println("==========================================\n");
+    queueRemoteDebug("BOOT", "Setup complete, entering main loop");
 }
 
 // ==================== MAIN LOOP ====================
@@ -276,6 +321,7 @@ void loop() {
         }
     } else {
         mqttClient.loop();
+        flushRemoteDebugQueue();
     }
 
     if (!timeSynced && (millis() - lastNtpAttempt >= INTERVAL_NTP_RETRY)) {
@@ -312,6 +358,8 @@ void loop() {
         printStatus();
         lastStatus = millis();
     }
+
+    flushRemoteDebugQueue();
     
     cooperativeDelay(100);  // Small delay to keep WiFi/MQTT task responsive.
 }
@@ -340,10 +388,12 @@ void setupWiFi() {
         Serial.println("       IP: " + WiFi.localIP().toString());
         Serial.println("       RSSI: " + String(WiFi.RSSI()) + " dBm");
         httpConnected = true;
+        queueRemoteDebug("WIFI", String("Connected ip=") + WiFi.localIP().toString() + " rssi=" + String(WiFi.RSSI()));
     } else {
         Serial.println("[WiFi] âœ— Failed to connect after " + String(attempts) + " attempts");
         Serial.println("[WiFi] Check SSID and password!");
         httpConnected = false;
+        queueRemoteDebug("WIFI", String("Connection failed after attempts=") + String(attempts));
     }
 }
 
@@ -363,10 +413,16 @@ bool isServerHostSelfTarget() {
 void printServerTargetConfig() {
     Serial.println("[CONFIG] HTTP target: " + String(HTTP_SERVER) + String(HTTP_ENDPOINT));
     Serial.println("[CONFIG] MQTT target: " + String(MQTT_SERVER) + ":" + String(MQTT_PORT));
+    queueRemoteDebug(
+        "CFG",
+        String("HTTP=") + String(HTTP_SERVER) + String(HTTP_ENDPOINT)
+        + " MQTT=" + String(MQTT_SERVER) + ":" + String(MQTT_PORT)
+    );
 
     if (isServerHostSelfTarget()) {
         Serial.println("[CONFIG] ERROR: SERVER_HOST points to ESP32 IP itself.");
         Serial.println("[CONFIG] Set SERVER_HOST to the PC/Laravel host IP (example: 192.168.0.104).");
+        queueRemoteDebug("ERROR", "SERVER_HOST points to device IP itself");
     }
 }
 
@@ -375,6 +431,7 @@ void cooperativeDelay(unsigned long durationMs) {
     while (millis() - startedAt < durationMs) {
         if (mqttClient.connected()) {
             mqttClient.loop();
+            flushRemoteDebugQueue(1);
         }
 
         unsigned long elapsed = millis() - startedAt;
@@ -387,6 +444,87 @@ void cooperativeDelay(unsigned long durationMs) {
         delay(slice);
         yield();
     }
+}
+
+void queueRemoteDebug(const char* level, const String& message) {
+    if (!REMOTE_DEBUG_ENABLED) {
+        return;
+    }
+
+    String safeLevel = level != nullptr ? String(level) : String("INFO");
+    String safeMessage = message;
+    safeMessage.replace("\r", " ");
+    safeMessage.replace("\n", " ");
+
+    char packet[ESP_REMOTE_DEBUG_MAX_MESSAGE_LEN];
+    snprintf(
+        packet,
+        sizeof(packet),
+        "t=%lu level=%s dev=%d wifi=%d mqtt=%d heap=%u msg=%s",
+        millis(),
+        safeLevel.c_str(),
+        DEVICE_ID,
+        WiFi.status() == WL_CONNECTED ? 1 : 0,
+        mqttClient.connected() ? 1 : 0,
+        (unsigned int) ESP.getFreeHeap(),
+        safeMessage.c_str()
+    );
+    packet[sizeof(packet) - 1] = '\0';
+
+    if (remoteDebugQueueCount >= ESP_REMOTE_DEBUG_QUEUE_SIZE) {
+        remoteDebugQueueHead = (uint8_t) ((remoteDebugQueueHead + 1U) % ESP_REMOTE_DEBUG_QUEUE_SIZE);
+        remoteDebugQueueCount--;
+    }
+
+    strncpy(
+        remoteDebugQueue[remoteDebugQueueTail].message,
+        packet,
+        ESP_REMOTE_DEBUG_MAX_MESSAGE_LEN - 1U
+    );
+    remoteDebugQueue[remoteDebugQueueTail].message[ESP_REMOTE_DEBUG_MAX_MESSAGE_LEN - 1U] = '\0';
+    remoteDebugQueueTail = (uint8_t) ((remoteDebugQueueTail + 1U) % ESP_REMOTE_DEBUG_QUEUE_SIZE);
+    remoteDebugQueueCount++;
+}
+
+void flushRemoteDebugQueue(uint8_t maxMessages) {
+    if (!REMOTE_DEBUG_ENABLED || !mqttClient.connected() || remoteDebugQueueCount == 0) {
+        return;
+    }
+
+    uint8_t budget = maxMessages == 0U ? 1U : maxMessages;
+    while (remoteDebugQueueCount > 0 && budget > 0) {
+        unsigned long nowMs = millis();
+        if (nowMs - lastRemoteDebugPublishMs < ESP_REMOTE_DEBUG_MIN_INTERVAL_MS) {
+            break;
+        }
+
+        const char* payload = remoteDebugQueue[remoteDebugQueueHead].message;
+        if (!mqttClient.publish(MQTT_DEBUG_TOPIC, payload)) {
+            break;
+        }
+
+        remoteDebugQueueHead = (uint8_t) ((remoteDebugQueueHead + 1U) % ESP_REMOTE_DEBUG_QUEUE_SIZE);
+        remoteDebugQueueCount--;
+        lastRemoteDebugPublishMs = nowMs;
+        budget--;
+    }
+}
+
+void publishRemoteStatusSummary() {
+    float httpTotalAttempt = (float) (httpSendSuccess + httpSendFail);
+    float mqttTotalAttempt = (float) (mqttSendSuccess + mqttSendFail);
+    float httpReliability = httpTotalAttempt > 0 ? (httpSendSuccess / httpTotalAttempt) * 100.0f : 0.0f;
+    float mqttReliability = mqttTotalAttempt > 0 ? (mqttSendSuccess / mqttTotalAttempt) * 100.0f : 0.0f;
+
+    String summary = String("status rssi=")
+        + String(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : -127)
+        + " sensor_reads=" + String(sensorReadCount)
+        + " dht_fail_streak=" + String(dhtConsecutiveFail)
+        + " http_rel=" + String(httpReliability, 1)
+        + " mqtt_rel=" + String(mqttReliability, 1)
+        + " queue=" + String(remoteDebugQueueCount);
+
+    queueRemoteDebug("STAT", summary);
 }
 
 // ==================== SENSOR READING ====================
@@ -467,6 +605,14 @@ bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog) {
         }
         Serial.print("), streak=");
         Serial.println(dhtConsecutiveFail);
+        if (dhtConsecutiveFail == 1 || (dhtConsecutiveFail % 3) == 0 || dhtConsecutiveFail >= DHT_FAILS_BEFORE_REINIT) {
+            queueRemoteDebug(
+                "WARN",
+                String(sourceTag != nullptr ? sourceTag : "SENSOR")
+                + " read failed status=" + String(dht.getStatusString())
+                + " streak=" + String(dhtConsecutiveFail)
+            );
+        }
         if (dhtConsecutiveFail >= DHT_FAILS_BEFORE_REINIT) {
             reinitializeDhtSensor("consecutive read/checksum failures");
             dhtConsecutiveFail = 0;
@@ -474,6 +620,7 @@ bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog) {
         return false;
     }
 
+    uint8_t failStreakBeforeSuccess = dhtConsecutiveFail;
     dhtConsecutiveFail = 0;
     float humidity = sample.humidity;
     float temperature = sample.temperature;
@@ -495,12 +642,21 @@ bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog) {
         Serial.println(" mW");
     }
 
+    if (failStreakBeforeSuccess > 0) {
+        queueRemoteDebug("SENSOR", String("Recovered after fail streak=") + String(failStreakBeforeSuccess));
+    }
+
     if (acceptedWithStatusFallback) {
         Serial.print("[");
         Serial.print(sourceTag != nullptr ? sourceTag : "SENSOR");
         Serial.print("] Sensor status=");
         Serial.print(dht.getStatusString());
         Serial.println(", value accepted by compatibility fallback.");
+        queueRemoteDebug(
+            "WARN",
+            String(sourceTag != nullptr ? sourceTag : "SENSOR")
+            + " status fallback accepted status=" + String(dht.getStatusString())
+        );
     }
 
     return true;
@@ -581,6 +737,14 @@ bool captureDedicatedSensorSnapshotForSend(const char* sourceTag, uint32_t* sens
         Serial.print(" ms, budget=");
         Serial.print(standardFallbackBudgetMs);
         Serial.println(" ms)");
+        if (sensorFallbackStandardCount <= 3UL || (sensorFallbackStandardCount % 10UL) == 0UL) {
+            queueRemoteDebug(
+                "WARN",
+                String(sourceTag != nullptr ? sourceTag : "SENSOR")
+                + " using fallback snapshot age_ms=" + String(sensorAgeMs)
+                + " budget_ms=" + String(standardFallbackBudgetMs)
+            );
+        }
         if (sensorAgeMsOut != nullptr) {
             *sensorAgeMsOut = sensorAgeMs;
         }
@@ -601,6 +765,14 @@ bool captureDedicatedSensorSnapshotForSend(const char* sourceTag, uint32_t* sens
             Serial.print(" ms, budget=");
             Serial.print(emergencyFallbackBudgetMs);
             Serial.println(" ms)");
+            if (sensorFallbackEmergencyCount <= 3UL || (sensorFallbackEmergencyCount % 10UL) == 0UL) {
+                queueRemoteDebug(
+                    "WARN",
+                    String(sourceTag != nullptr ? sourceTag : "SENSOR")
+                    + " emergency fallback age_ms=" + String(sensorAgeMs)
+                    + " budget_ms=" + String(emergencyFallbackBudgetMs)
+                );
+            }
             if (sensorAgeMsOut != nullptr) {
                 *sensorAgeMsOut = sensorAgeMs;
             }
@@ -616,6 +788,13 @@ bool captureDedicatedSensorSnapshotForSend(const char* sourceTag, uint32_t* sens
         Serial.print(sensorAgeMs);
         Serial.println(" ms exceeds fallback budget, skipping send.");
         sensorFallbackRejectedCount++;
+        if (sensorFallbackRejectedCount <= 3UL || (sensorFallbackRejectedCount % 5UL) == 0UL) {
+            queueRemoteDebug(
+                "WARN",
+                String(sourceTag != nullptr ? sourceTag : "SENSOR")
+                + " fallback rejected age_ms=" + String(sensorAgeMs)
+            );
+        }
     }
 
     return false;
@@ -647,6 +826,9 @@ void sendHTTP() {
     if (!captureDedicatedSensorSnapshotForSend("HTTP", &sensorAgeMs, &sensorReadSeq)) {
         Serial.println("[HTTP] Sensor snapshot invalid, skipping send");
         httpSendFail++;
+        if (httpSendFail <= 3UL || (httpSendFail % 10UL) == 0UL) {
+            queueRemoteDebug("WARN", String("HTTP skipped: sensor invalid fail_count=") + String(httpSendFail));
+        }
         return;
     }
     if (currentSensorFallbackLevel > 0 && sensorReadSeq <= lastDeliveredSensorReadSeq) {
@@ -767,6 +949,13 @@ void sendHTTP() {
         Serial.println(" mW");
         httpSendSuccess++;
         lastDeliveredSensorReadSeq = max(lastDeliveredSensorReadSeq, sensorReadSeq);
+        queueRemoteDebug(
+            "HTTP",
+            String("success code=") + String(httpCode)
+            + " seq=" + String(packetSeq)
+            + " tx_ms=" + String(txDurationMs, 2)
+            + " sensor_seq=" + String(sensorReadSeq)
+        );
     } else {
         Serial.print("[HTTP] Failed with code: ");
         Serial.println(httpCode);
@@ -783,6 +972,12 @@ void sendHTTP() {
         Serial.print(finalPower, 2);
         Serial.println(" mW");
         httpSendFail++;
+        queueRemoteDebug(
+            "HTTP",
+            String("failed code=") + String(httpCode)
+            + " seq=" + String(packetSeq)
+            + " tx_ms=" + String(txDurationMs, 2)
+        );
     }
 
     http.end();
@@ -806,6 +1001,9 @@ void sendMQTT() {
     if (!captureDedicatedSensorSnapshotForSend("MQTT", &sensorAgeMs, &sensorReadSeq)) {
         Serial.println("[MQTT] Sensor snapshot invalid, skipping send");
         mqttSendFail++;
+        if (mqttSendFail <= 3UL || (mqttSendFail % 10UL) == 0UL) {
+            queueRemoteDebug("WARN", String("MQTT skipped: sensor invalid fail_count=") + String(mqttSendFail));
+        }
         return;
     }
     if (currentSensorFallbackLevel > 0 && sensorReadSeq <= lastDeliveredSensorReadSeq) {
@@ -878,6 +1076,12 @@ void sendMQTT() {
         Serial.println(" mW");
         mqttSendSuccess++;
         lastDeliveredSensorReadSeq = max(lastDeliveredSensorReadSeq, sensorReadSeq);
+        queueRemoteDebug(
+            "MQTT",
+            String("published seq=") + String(packetSeq)
+            + " tx_ms=" + String(txDurationMs, 2)
+            + " sensor_seq=" + String(sensorReadSeq)
+        );
     } else {
         Serial.println("[MQTT] Publish failed");
         Serial.print("       Seq: ");
@@ -890,6 +1094,11 @@ void sendMQTT() {
         Serial.print(finalPower, 2);
         Serial.println(" mW");
         mqttSendFail++;
+        queueRemoteDebug(
+            "MQTT",
+            String("publish failed seq=") + String(packetSeq)
+            + " tx_ms=" + String(txDurationMs, 2)
+        );
     }
 }
 // ==================== MQTT CONNECTION ====================
@@ -916,6 +1125,8 @@ void connectMQTT() {
         Serial.print("       Client ID: ");
         Serial.println(clientId);
         mqttConnected = true;
+        queueRemoteDebug("MQTT", String("connected broker=") + String(MQTT_SERVER) + ":" + String(MQTT_PORT));
+        flushRemoteDebugQueue(ESP_REMOTE_DEBUG_FLUSH_BURST + 2);
         
         // Subscribe to topics if needed
         // mqttClient.subscribe("iot/commands");
@@ -923,6 +1134,7 @@ void connectMQTT() {
         Serial.print("[MQTT] âœ— Connection failed with code: ");
         Serial.println(mqttClient.state());
         mqttConnected = false;
+        queueRemoteDebug("MQTT", String("connect failed state=") + String(mqttClient.state()));
     }
 }
 
@@ -937,6 +1149,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     
     // Handle commands here
     Serial.println("[MQTT] Message processed");
+    queueRemoteDebug("MQTT", String("received command topic=") + String(topic) + " bytes=" + String(length));
 }
 
 // ==================== POWER CALCULATION ====================
@@ -1199,17 +1412,18 @@ void printStatus() {
     Serial.println(" bytes");
 
     Serial.println("==========================================\n");
+    publishRemoteStatusSummary();
 }
 // ==================== TIME SYNC ====================
 void refreshDhtSamplingInterval() {
     unsigned long recommended = (unsigned long) dht.getMinimumSamplingPeriod();
-    unsigned long withGuard = recommended + 400UL;
+    unsigned long withGuard = recommended + 700UL;
     if (activeDhtModel == DHTesp::DHT11) {
-        dhtMinReadIntervalMs = max(2500UL, withGuard);
+        dhtMinReadIntervalMs = max(3400UL, withGuard);
         return;
     }
 
-    dhtMinReadIntervalMs = max(2500UL, withGuard);
+    dhtMinReadIntervalMs = max(3000UL, withGuard);
 }
 
 const char* dhtModelToString(DHTesp::DHT_MODEL_t model) {
@@ -1232,6 +1446,11 @@ void reinitializeDhtSensor(const char* reason) {
     Serial.print("[SENSOR] Reinitializing DHT (");
     Serial.print(reason != nullptr ? reason : "unknown");
     Serial.println(")...");
+    queueRemoteDebug(
+        "WARN",
+        String("Reinitialize DHT reason=") + String(reason != nullptr ? reason : "unknown")
+        + " count=" + String(dhtReinitCounter)
+    );
 
     // If preferred model keeps failing from cold boot (no successful read yet),
     // probe once with AUTO_DETECT to recover from mislabeled/alternate DHT modules.
@@ -1250,6 +1469,7 @@ void reinitializeDhtSensor(const char* reason) {
     refreshDhtSamplingInterval();
     Serial.print("[SENSOR] DHT model after reinit: ");
     Serial.println(dhtModelToString(activeDhtModel));
+    queueRemoteDebug("SENSOR", String("DHT model after reinit=") + String(dhtModelToString(activeDhtModel)));
     cooperativeDelay(dhtMinReadIntervalMs);
 }
 
@@ -1305,6 +1525,7 @@ bool updateTime(bool verbose) {
                 Serial.print("[TIME] âœ“ Time synchronized: ");
                 Serial.println(ctime(&now));
             }
+            queueRemoteDebug("TIME", String("NTP synced epoch=") + String((long) now));
             return true;
         }
 
@@ -1324,6 +1545,7 @@ bool updateTime(bool verbose) {
         Serial.println((long) now);
         Serial.println("[TIME] Will retry automatically every 30 seconds.");
     }
+    queueRemoteDebug("TIME", String("NTP sync failed epoch=") + String((long) now));
 
     return false;
 }

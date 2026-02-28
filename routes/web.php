@@ -34,6 +34,8 @@ Route::prefix('/admin/config')
         Route::get('/', [AdminConfigController::class, 'index'])->name('index');
         Route::post('/runtime', [AdminConfigController::class, 'saveRuntime'])->name('runtime.save');
         Route::post('/devices', [AdminConfigController::class, 'storeDevice'])->name('devices.store');
+        Route::patch('/devices/{device}', [AdminConfigController::class, 'updateDevice'])->name('devices.update');
+        Route::delete('/devices/{device}', [AdminConfigController::class, 'destroyDevice'])->name('devices.destroy');
         Route::post('/devices/{device}/profile', [AdminConfigController::class, 'saveDeviceProfile'])->name('devices.profile.save');
         Route::get('/devices/{device}/firmware/main.cpp', [AdminConfigController::class, 'downloadMain'])->name('devices.firmware.main');
         Route::get('/devices/{device}/firmware/platformio.ini', [AdminConfigController::class, 'downloadPlatformio'])->name('devices.firmware.platformio');

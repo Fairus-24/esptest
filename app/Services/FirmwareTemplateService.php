@@ -8,10 +8,24 @@ use Illuminate\Support\Str;
 
 class FirmwareTemplateService
 {
+    public function findProfileByDeviceId(int $deviceId): ?DeviceFirmwareProfile
+    {
+        return DeviceFirmwareProfile::query()
+            ->where('device_id', $deviceId)
+            ->first();
+    }
+
     public function ensureProfile(Device $device): DeviceFirmwareProfile
     {
         $appUrl = trim((string) config('app.url', 'http://127.0.0.1'));
+        $appScheme = (string) (parse_url($appUrl, PHP_URL_SCHEME) ?: 'http');
         $serverHost = (string) (parse_url($appUrl, PHP_URL_HOST) ?: '127.0.0.1');
+        $appPort = parse_url($appUrl, PHP_URL_PORT);
+        $httpBaseUrl = $appScheme . '://' . $serverHost;
+        if ($appPort !== null) {
+            $httpBaseUrl .= ':' . (int) $appPort;
+        }
+
         $appPath = trim((string) (parse_url($appUrl, PHP_URL_PATH) ?: ''), '/');
         $httpEndpoint = $appPath !== ''
             ? '/' . $appPath . '/api/http-data'
@@ -22,23 +36,50 @@ class FirmwareTemplateService
             $mqttHost = $serverHost;
         }
 
-        return DeviceFirmwareProfile::query()->firstOrCreate(
+        $profile = DeviceFirmwareProfile::query()->firstOrCreate(
             ['device_id' => $device->id],
             [
                 'board' => 'esp32doit-devkit-v1',
                 'wifi_ssid' => 'Free',
                 'wifi_password' => 'gratiskok',
                 'server_host' => $serverHost,
+                'http_base_url' => $httpBaseUrl,
                 'http_endpoint' => $httpEndpoint,
+                'mqtt_broker' => $mqttHost,
                 'mqtt_host' => $mqttHost,
                 'mqtt_port' => 1883,
                 'mqtt_topic' => 'iot/esp32/suhu',
                 'mqtt_user' => 'esp32',
                 'mqtt_password' => 'esp32',
+                'http_tls_insecure' => true,
                 'dht_pin' => 4,
                 'dht_model' => 'DHT11',
             ]
         );
+
+        $backfill = [];
+        if (trim((string) $profile->server_host) === '') {
+            $backfill['server_host'] = $serverHost;
+        }
+        if (trim((string) $profile->http_base_url) === '') {
+            $backfill['http_base_url'] = $httpBaseUrl;
+        }
+        if (trim((string) $profile->mqtt_broker) === '') {
+            $backfill['mqtt_broker'] = $mqttHost;
+        }
+        if (trim((string) $profile->mqtt_host) === '') {
+            $backfill['mqtt_host'] = $mqttHost;
+        }
+        if ($profile->http_tls_insecure === null) {
+            $backfill['http_tls_insecure'] = true;
+        }
+
+        if ($backfill !== []) {
+            $profile->fill($backfill);
+            $profile->save();
+        }
+
+        return $profile;
     }
 
     /**
@@ -73,22 +114,24 @@ class FirmwareTemplateService
         $iniRendered = $iniTemplate;
         $iniRendered = $this->replaceOne($iniRendered, '/^board\s*=\s*.+$/m', 'board = ' . trim((string) $profile->board));
 
-        $escapedIngestKey = $this->escapePlatformio($httpIngestKey);
-        if (preg_match('/-DESP_HTTP_INGEST_KEY=\\\\\".*?\\\\\"/m', $iniRendered) === 1) {
-            $iniRendered = preg_replace(
-                '/-DESP_HTTP_INGEST_KEY=\\\\\".*?\\\\\"/m',
-                '-DESP_HTTP_INGEST_KEY=\\"' . $escapedIngestKey . '\\"',
-                $iniRendered,
-                1
-            ) ?: $iniRendered;
-        } elseif (preg_match('/^build_flags\s*=\s*$/m', $iniRendered) === 1) {
-            $iniRendered = preg_replace(
-                '/^build_flags\s*=\s*$/m',
-                "build_flags =\n    -DESP_HTTP_INGEST_KEY=\\\"" . $escapedIngestKey . "\\\"",
-                $iniRendered,
-                1
-            ) ?: $iniRendered;
+        $httpBaseUrl = rtrim(trim((string) ($profile->http_base_url ?: '')), '/');
+        if ($httpBaseUrl === '') {
+            $httpBaseUrl = trim((string) config('app.url', 'http://127.0.0.1'));
         }
+
+        $mqttBroker = trim((string) ($profile->mqtt_broker ?: ''));
+        if ($mqttBroker === '') {
+            $mqttBroker = trim((string) ($profile->mqtt_host ?: $profile->server_host));
+        }
+
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_HTTP_INGEST_KEY', $httpIngestKey);
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_HTTP_BASE_URL', $httpBaseUrl);
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_MQTT_BROKER', $mqttBroker);
+        $iniRendered = $this->upsertPlatformioPlainFlag(
+            $iniRendered,
+            'ESP_HTTP_TLS_INSECURE',
+            ((bool) $profile->http_tls_insecure) ? '1' : '0'
+        );
 
         $extraFlags = trim((string) $profile->extra_build_flags);
         if ($extraFlags !== '') {
@@ -160,6 +203,45 @@ class FirmwareTemplateService
     private function escapePlatformio(string $value): string
     {
         return str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+    }
+
+    private function upsertPlatformioQuotedFlag(string $content, string $flag, string $value): string
+    {
+        $escapedValue = $this->escapePlatformio($value);
+        $line = '    -D' . $flag . '=\\"' . $escapedValue . '\\"';
+        $pattern = '/^\s*-D' . preg_quote($flag, '/') . '=\\\\\".*?\\\\\"$/m';
+
+        if (preg_match($pattern, $content) === 1) {
+            return preg_replace($pattern, $line, $content, 1) ?: $content;
+        }
+
+        return $this->appendPlatformioBuildFlag($content, $line);
+    }
+
+    private function upsertPlatformioPlainFlag(string $content, string $flag, string $value): string
+    {
+        $line = '    -D' . $flag . '=' . $value;
+        $pattern = '/^\s*-D' . preg_quote($flag, '/') . '=[^\r\n]+$/m';
+
+        if (preg_match($pattern, $content) === 1) {
+            return preg_replace($pattern, $line, $content, 1) ?: $content;
+        }
+
+        return $this->appendPlatformioBuildFlag($content, $line);
+    }
+
+    private function appendPlatformioBuildFlag(string $content, string $line): string
+    {
+        if (preg_match('/^build_flags\s*=\s*$/m', $content) === 1) {
+            return preg_replace(
+                '/^build_flags\s*=\s*$/m',
+                "build_flags =\n" . $line,
+                $content,
+                1
+            ) ?: $content;
+        }
+
+        return rtrim($content) . "\n" . $line . "\n";
     }
 
     private function normalizeDhtModel(string $model): string

@@ -177,6 +177,12 @@ The project has been updated with the following behavior:
 118. Admin views now use relative route URLs for form submissions/navigation as an additional safeguard against mixed-scheme form posts.
 119. Firmware profile defaults are now derived from effective runtime config (`APP_URL` + `MQTT_HOST`) instead of hardcoded Windows LAN/path values, reducing first-run misrouting in production.
 120. Firmware HTTP target is now independently configurable via `ESP_HTTP_BASE_URL` (supports HTTPS) and MQTT broker via `ESP_MQTT_BROKER`, so production Nginx virtual-host/IP mismatch no longer forces HTTP `404` on ESP32.
+121. Admin panel now includes streamlined `Quick Setup Runtime` and full device CRUD (create/select/update/delete with optional experiment purge), so operational setup is faster and safer from GUI.
+122. Device firmware profiles now support production network targets directly (`http_base_url`, `mqtt_broker`, `http_tls_insecure`) and generator auto-syncs them into `platformio.ini` build flags.
+123. Stability-test firmware profile now uses more conservative sensor timing (longer protocol send interval and wider DHT minimum read guard) plus `AUTO_DETECT` preference with plain `INPUT` pin mode to improve compatibility with unstable DHT clone modules.
+124. ESP32 firmware now supports remote runtime debug stream over MQTT topic (`iot/esp32/debug`) with buffered queue + throttled flush, so monitoring can continue without USB serial cable.
+125. Header subtitle + Realtime Link Monitor connection badges now use strict freshness evaluation (`Connected` / `Disconnected` / `Not Found`) so stale telemetry no longer appears as active realtime traffic.
+126. ESP32 ON/OFF badge now follows latest telemetry freshness with optional simulator exclusion when simulation is stopped, preventing false `ON` from old/non-real device rows.
 
 ## Tech Stack
 
@@ -333,6 +339,9 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | `DB_USERNAME` | Yes | `root` | Your MySQL user |
 | `DB_PASSWORD` | Depends | `` | Your MySQL password |
 | `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `1200` | Max latest rows per protocol used for dashboard/statistics window |
+| `DASHBOARD_PROTOCOL_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for MQTT/HTTP `Connected` badge on header + realtime monitor |
+| `DASHBOARD_ESP32_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for ESP32 `ON/OFF` badge |
+| `DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED` | Recommended | `true` | Ignore `SIMULATOR-APP` telemetry for connection badges when simulation is not running |
 | `DASHBOARD_MQTT_HEALTH_LATENCY_TARGET_MS` | Recommended | `1500` | MQTT latency target used by transmission health scoring |
 | `DASHBOARD_MQTT_HEALTH_TX_TARGET_MS` | Recommended | `120` | MQTT TX duration target used by transmission health scoring |
 | `DASHBOARD_HTTP_HEALTH_LATENCY_TARGET_MS` | Recommended | `3000` | HTTP latency target used by transmission health scoring |
@@ -475,6 +484,9 @@ HTTP_ALLOW_INGEST_WITHOUT_KEY=false
 HTTP_INGEST_RATE_LIMIT_PER_MINUTE=240
 
 DASHBOARD_ANALYSIS_WINDOW=1200
+DASHBOARD_PROTOCOL_FRESHNESS_SECONDS=30
+DASHBOARD_ESP32_FRESHNESS_SECONDS=30
+DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED=true
 DASHBOARD_MQTT_HEALTH_LATENCY_TARGET_MS=1500
 DASHBOARD_MQTT_HEALTH_TX_TARGET_MS=120
 DASHBOARD_HTTP_HEALTH_LATENCY_TARGET_MS=3000
@@ -810,6 +822,7 @@ Update these values in `ESP32_Firmware/src/main.cpp` before flash:
 | `ESP_MQTT_BROKER` (in `platformio.ini`) | `202.154.58.51` | Broker host override for MQTT publish path |
 | `MQTT_SERVER` / `MQTT_PORT` | `192.168.0.104`, `1883` | Broker host/port fallback (used when override flag not set) |
 | `MQTT_TOPIC` | `iot/esp32/suhu` | Same as `.env` `MQTT_TOPIC` |
+| `ESP_REMOTE_DEBUG_TOPIC` (in `platformio.ini`) | `iot/esp32/debug` | Optional remote runtime log stream topic |
 | `MQTT_USER` / `MQTT_PASSWORD` | `esp32` / `esp32` | Same as broker + `.env` |
 | `ESP_HTTP_INGEST_KEY` (in `platformio.ini`) | `replace-with-strong-secret` | Must match `.env` `HTTP_INGEST_KEY` |
 | `ESP_HTTP_TLS_INSECURE` (in `platformio.ini`) | `1` | `1` lets ESP32 skip cert-chain verification for HTTPS endpoint |
@@ -822,18 +835,23 @@ Instead of editing firmware files manually, use:
 
 1. `GET /admin/login` (login using `ADMIN_PANEL_TOKEN`).
 2. Open `GET /admin/config`.
-3. (Optional) Save runtime overrides first (MQTT host, ingest key, health thresholds, etc.).
-4. Add/select target device.
-5. Update device firmware profile (board, WiFi, host, topic, DHT model/pin, credentials).
-6. Download generated files or click `Apply ke Workspace Firmware`.
-7. Upload from `ESP32_Firmware/`:
+3. Use `Quick Setup Runtime` for core fields (`APP_URL`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_TOPIC`, `HTTP_INGEST_KEY`, retention).
+4. Add/select target device (optional: clone profile from existing device).
+5. Manage device from GUI (update name/location or delete safely with optional experiment purge).
+6. Update device firmware profile (board, WiFi, HTTP base URL, HTTP endpoint, MQTT broker/topic/credentials, DHT model/pin, TLS mode).
+7. Download generated files or click `Apply ke Workspace Firmware`.
+8. Upload from `ESP32_Firmware/`:
    - `pio run -t upload`
    - `pio device monitor`
 
 Generated output details:
 
 - `main.cpp` includes profile-specific constants (`WIFI_*`, `SERVER_HOST`, `HTTP_ENDPOINT`, `MQTT_*`, `DEVICE_ID`, `DHT*`).
-- `platformio.ini` includes selected `board` and auto-injected `ESP_HTTP_INGEST_KEY` from effective runtime config.
+- `platformio.ini` includes selected `board` and auto-injected network/security flags:
+  - `ESP_HTTP_INGEST_KEY`
+  - `ESP_HTTP_BASE_URL`
+  - `ESP_MQTT_BROKER`
+  - `ESP_HTTP_TLS_INSECURE`
 - when applying directly to workspace, previous firmware files are backed up under `storage/app/firmware_backups/*`.
 
 Important runtime safety:
@@ -878,6 +896,11 @@ Protocol-capture behavior:
 - Sensor outlier jumps are filtered (temperature/humidity sudden unrealistic jump) and retried before accepting snapshot.
 - Delay/wait paths use cooperative scheduling so MQTT keepalive is not starved during long sensor/HTTP waits.
 - Power estimation is deterministic (no random noise term), computed from RSSI, TX duration, payload size, temperature/humidity contribution, and retry/failure context.
+- Current stability-test defaults in repository:
+  - preferred DHT model: `AUTO_DETECT`
+  - DHT pin mode: `INPUT` (not `INPUT_PULLUP`)
+  - protocol send interval: `14s` each (`HTTP` and `MQTT`, staggered)
+  - DHT minimum read spacing guard: larger than previous default (to reduce checksum bursts)
 
 Build and upload:
 
@@ -903,12 +926,35 @@ Build flag note:
   - `ESP_HTTP_POST_RETRY_MAX`
   - `ESP_HTTP_POST_RETRY_BACKOFF_MS`
   - `ESP_HTTP_READ_TIMEOUT_MS`
+  - `ESP_REMOTE_DEBUG_ENABLED`
+  - `ESP_REMOTE_DEBUG_TOPIC`
+  - `ESP_REMOTE_DEBUG_QUEUE_SIZE`
+  - `ESP_REMOTE_DEBUG_MAX_MESSAGE_LEN`
+  - `ESP_REMOTE_DEBUG_FLUSH_BURST`
+  - `ESP_REMOTE_DEBUG_MIN_INTERVAL_MS`
 
 If upload fails because COM port is busy:
 
 - close serial monitor first,
 - confirm target port with `pio device list`,
 - run upload again.
+
+Remote monitor without USB/COM:
+
+```bash
+# Listen remote ESP32 runtime logs from broker
+mosquitto_sub -h 202.154.58.51 -p 1883 -u esp32 -P esp32 -t iot/esp32/debug -v
+```
+
+What you should see:
+- boot/config events (`level=BOOT`, `level=CFG`, `level=WIFI`, `level=TIME`)
+- send results (`level=HTTP`, `level=MQTT`)
+- sensor degradation/recovery (`level=WARN`, `level=SENSOR`)
+- periodic status summary (`level=STAT`)
+
+Notes:
+- debug messages are queued when MQTT is offline and flushed automatically after reconnect.
+- if MQTT path is down, remote debug stream cannot be delivered (same dependency as telemetry).
 
 ## First Boot Flow (End-to-End, Recommended Order)
 
@@ -1067,6 +1113,8 @@ Purpose: runtime configuration management + ESP32 firmware provisioning from GUI
 - `GET /admin/config` -> main admin panel (requires authenticated admin session).
 - `POST /admin/config/runtime` -> save runtime overrides to DB (`app_settings`).
 - `POST /admin/config/devices` -> add new ESP32 device.
+- `PATCH /admin/config/devices/{device}` -> update selected device metadata (name/location).
+- `DELETE /admin/config/devices/{device}` -> delete selected device (supports optional experiment purge confirmation).
 - `POST /admin/config/devices/{device}/profile` -> save firmware profile for selected device.
 - `GET /admin/config/devices/{device}/firmware/main.cpp` -> download generated `main.cpp`.
 - `GET /admin/config/devices/{device}/firmware/platformio.ini` -> download generated `platformio.ini`.
@@ -1219,8 +1267,9 @@ Used for runtime GUI overrides from Admin Config panel (no direct `.env` edit re
 - `device_id` (unique FK -> `devices.id`)
 - `board`
 - `wifi_ssid`, `wifi_password`
-- `server_host`, `http_endpoint`
-- `mqtt_host`, `mqtt_port`, `mqtt_topic`, `mqtt_user`, `mqtt_password`
+- `server_host`, `http_base_url`, `http_endpoint`
+- `mqtt_broker`, `mqtt_host`, `mqtt_port`, `mqtt_topic`, `mqtt_user`, `mqtt_password`
+- `http_tls_insecure`
 - `dht_pin`, `dht_model`
 - `extra_build_flags` (nullable)
 - timestamps
@@ -1428,6 +1477,27 @@ GROUP BY protokol;
 - If ESP32 cannot send HTTP/MQTT, re-check firmware `SERVER_HOST` against your current PC LAN IP (`ipconfig`).
 - Restart worker after host changes so new config is loaded:
   `php mqtt_worker.php`.
+
+### Header/Link monitor still shows `Connected` even though no recent send
+
+- New status logic is freshness-based; ensure these values are not too loose:
+  - `DASHBOARD_PROTOCOL_FRESHNESS_SECONDS` (MQTT/HTTP)
+  - `DASHBOARD_ESP32_FRESHNESS_SECONDS` (ESP32 ON/OFF)
+- If simulation was used before, keep:
+  - `DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED=true`
+  so stale simulator rows do not keep badges `ON/Connected`.
+- After changing runtime overrides or `.env`, clear cache:
+  - `php artisan optimize:clear`
+- Verify latest timestamps in DB really stop moving:
+  - `SELECT protokol, MAX(timestamp_server) FROM eksperimens GROUP BY protokol;`
+
+### Remote debug topic (`iot/esp32/debug`) is empty
+
+- Ensure firmware was re-flashed after enabling remote debug flags in `platformio.ini`.
+- Verify broker/user/topic reachability from another client:
+  `mosquitto_sub -h <broker> -p 1883 -u <user> -P <pass> -t iot/esp32/debug -v`.
+- Confirm ESP32 MQTT session is connected in serial/status report (`MQTT: Connected`).
+- If device keeps reconnecting, prioritize broker reachability and sensor stability first; queued debug logs are only flushed after MQTT reconnect succeeds.
 
 ### Production domain is live but no telemetry rows are inserted
 

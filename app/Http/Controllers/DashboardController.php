@@ -10,6 +10,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
+use Carbon\CarbonInterface;
 
 
 class DashboardController extends Controller
@@ -117,25 +118,39 @@ class DashboardController extends Controller
         $summary = $this->statisticsService->getSummary($mqttData, $httpData);
         $reliability = $this->statisticsService->getReliability();
 
-        // Status koneksi: jika data baru dalam 30 detik terakhir dianggap connected
         $now = now();
-        $mqttLast = $mqttData->max('created_at');
-        $httpLast = $httpData->max('created_at');
-        $mqttConnected = $mqttLast && $now->diffInSeconds($mqttLast) < 30;
-        $httpConnected = $httpLast && $now->diffInSeconds($httpLast) < 30;
-        $esp32ConnectedWindowSeconds = 30;
-        $latestEsp32IncomingAt = null;
-        foreach ([$mqttLast, $httpLast] as $candidateTimestamp) {
-            if (!$candidateTimestamp) {
-                continue;
-            }
+        $connectionConfig = $this->resolveConnectionConfig();
+        $simulationRunning = $this->isSimulationRunningFromStateFile();
+        $excludeSimulatorStatusSource = $connectionConfig['ignore_simulator_when_stopped'] && !$simulationRunning;
+        $excludedDeviceIds = $excludeSimulatorStatusSource
+            ? Device::query()->where('nama_device', 'SIMULATOR-APP')->pluck('id')->map(static fn ($id): int => (int) $id)->all()
+            : [];
 
-            if ($latestEsp32IncomingAt === null || $candidateTimestamp->greaterThan($latestEsp32IncomingAt)) {
-                $latestEsp32IncomingAt = $candidateTimestamp;
-            }
-        }
-        $esp32Connected = $latestEsp32IncomingAt
-            && $now->diffInSeconds($latestEsp32IncomingAt) < $esp32ConnectedWindowSeconds;
+        $latestMqtt = $this->fetchLatestProtocolRow('MQTT', $excludedDeviceIds);
+        $latestHttp = $this->fetchLatestProtocolRow('HTTP', $excludedDeviceIds);
+        $latestEsp32IncomingRow = $this->fetchLatestIncomingRow($excludedDeviceIds);
+
+        $mqttConnectionStatus = $this->buildProtocolConnectionStatus(
+            'MQTT',
+            $latestMqtt,
+            $now,
+            $connectionConfig['protocol_freshness_seconds']
+        );
+        $httpConnectionStatus = $this->buildProtocolConnectionStatus(
+            'HTTP',
+            $latestHttp,
+            $now,
+            $connectionConfig['protocol_freshness_seconds']
+        );
+        $esp32ConnectionStatus = $this->buildEsp32ConnectionStatus(
+            $latestEsp32IncomingRow,
+            $now,
+            $connectionConfig['esp32_freshness_seconds']
+        );
+
+        $mqttConnected = (bool) ($mqttConnectionStatus['connected'] ?? false);
+        $httpConnected = (bool) ($httpConnectionStatus['connected'] ?? false);
+        $esp32Connected = (bool) ($esp32ConnectionStatus['connected'] ?? false);
 
         // Statistik suhu & kelembapan
         $mqttAvgSuhu = $mqttData->whereNotNull('suhu')->avg('suhu');
@@ -164,9 +179,6 @@ class DashboardController extends Controller
                 return '-';
             }
         };
-
-        $latestMqtt = $mqttData->sortByDesc('id')->first();
-        $latestHttp = $httpData->sortByDesc('id')->first();
 
         $buildProtocolDetail = static function ($row, string $protocol) use ($formatToWib) {
             if (!$row) {
@@ -492,7 +504,8 @@ class DashboardController extends Controller
         return view('dashboard', compact(
             'summary', 'reliability', 'latencyChartData', 'powerChartData', 'mqttTotal', 'httpTotal',
             'mqttConnected', 'httpConnected', 'esp32Connected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan',
-            'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings', 'protocolDiagnostics'
+            'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings', 'protocolDiagnostics',
+            'mqttConnectionStatus', 'httpConnectionStatus', 'esp32ConnectionStatus', 'connectionConfig', 'simulationRunning', 'excludeSimulatorStatusSource'
         ));
     }
 
@@ -536,6 +549,170 @@ class DashboardController extends Controller
         }
 
         return in_array($resolved, array_unique($localIps), true);
+    }
+
+    private function resolveConnectionConfig(): array
+    {
+        $protocolFreshness = (int) config('dashboard.connection.protocol_freshness_seconds', 30);
+        $esp32Freshness = (int) config('dashboard.connection.esp32_freshness_seconds', $protocolFreshness);
+        $ignoreSimulatorWhenStopped = (bool) config('dashboard.connection.ignore_simulator_when_stopped', true);
+
+        return [
+            'protocol_freshness_seconds' => max(5, $protocolFreshness),
+            'esp32_freshness_seconds' => max(5, $esp32Freshness),
+            'ignore_simulator_when_stopped' => $ignoreSimulatorWhenStopped,
+        ];
+    }
+
+    private function isSimulationRunningFromStateFile(): bool
+    {
+        $stateFile = storage_path('app/simulation_state.json');
+        if (!is_file($stateFile)) {
+            return false;
+        }
+
+        $raw = @file_get_contents($stateFile);
+        if (!is_string($raw) || trim($raw) === '') {
+            return false;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return false;
+        }
+
+        return (bool) ($decoded['running'] ?? false);
+    }
+
+    private function fetchLatestProtocolRow(string $protocol, array $excludedDeviceIds = []): ?Eksperimen
+    {
+        $query = Eksperimen::query()
+            ->whereRaw('UPPER(protokol) = ?', [strtoupper($protocol)]);
+
+        $query = $this->applyExcludedDeviceFilter($query, $excludedDeviceIds);
+
+        return $query
+            ->orderByRaw('COALESCE(timestamp_server, created_at) DESC')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function fetchLatestIncomingRow(array $excludedDeviceIds = []): ?Eksperimen
+    {
+        $query = Eksperimen::query();
+        $query = $this->applyExcludedDeviceFilter($query, $excludedDeviceIds);
+
+        return $query
+            ->orderByRaw('COALESCE(timestamp_server, created_at) DESC')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function applyExcludedDeviceFilter(\Illuminate\Database\Eloquent\Builder $query, array $excludedDeviceIds): \Illuminate\Database\Eloquent\Builder
+    {
+        if (!empty($excludedDeviceIds)) {
+            $query->whereNotIn('device_id', $excludedDeviceIds);
+        }
+
+        return $query;
+    }
+
+    private function resolveIncomingTimestamp(?Eksperimen $row): ?CarbonInterface
+    {
+        if ($row === null) {
+            return null;
+        }
+
+        $timestamp = $row->timestamp_server ?? $row->created_at;
+        if ($timestamp instanceof CarbonInterface) {
+            return $timestamp;
+        }
+
+        return null;
+    }
+
+    private function calculateAgeSeconds(?CarbonInterface $timestamp, CarbonInterface $now): ?int
+    {
+        if ($timestamp === null) {
+            return null;
+        }
+
+        $ageSeconds = (int) $timestamp->diffInSeconds($now, false);
+        return max(0, $ageSeconds);
+    }
+
+    private function formatTimestampToWib(?CarbonInterface $timestamp): string
+    {
+        if ($timestamp === null) {
+            return '-';
+        }
+
+        try {
+            return (clone $timestamp)->setTimezone('Asia/Jakarta')->format('d-m-Y H:i:s') . ' WIB';
+        } catch (Throwable) {
+            return '-';
+        }
+    }
+
+    private function buildProtocolConnectionStatus(
+        string $protocol,
+        ?Eksperimen $latestRow,
+        CarbonInterface $now,
+        int $freshnessSeconds
+    ): array {
+        $freshnessSeconds = max(5, $freshnessSeconds);
+        $timestamp = $this->resolveIncomingTimestamp($latestRow);
+        $ageSeconds = $this->calculateAgeSeconds($timestamp, $now);
+        $notFound = $latestRow === null || $timestamp === null;
+        $connected = !$notFound && $ageSeconds !== null && $ageSeconds <= $freshnessSeconds;
+        $state = $notFound ? 'not_found' : ($connected ? 'connected' : 'stale');
+        $label = $notFound ? 'Not Found' : ($connected ? 'Connected' : 'Disconnected');
+        $detail = $notFound
+            ? 'Tidak ada data terkirim.'
+            : ($connected
+                ? 'Data baru masih dalam batas realtime.'
+                : "Tidak ada data baru lebih dari {$freshnessSeconds} detik.");
+
+        return [
+            'protocol' => strtoupper($protocol),
+            'connected' => $connected,
+            'state' => $state,
+            'label' => $label,
+            'detail' => $detail,
+            'badge_class' => $connected ? 'is-online' : 'is-offline',
+            'row_class' => $connected ? 'is-online' : 'is-offline',
+            'freshness_seconds' => $freshnessSeconds,
+            'age_seconds' => $ageSeconds,
+            'last_seen_wib' => $this->formatTimestampToWib($timestamp),
+            'latest_id' => $latestRow ? (int) $latestRow->id : null,
+        ];
+    }
+
+    private function buildEsp32ConnectionStatus(
+        ?Eksperimen $latestIncomingRow,
+        CarbonInterface $now,
+        int $freshnessSeconds
+    ): array {
+        $freshnessSeconds = max(5, $freshnessSeconds);
+        $timestamp = $this->resolveIncomingTimestamp($latestIncomingRow);
+        $ageSeconds = $this->calculateAgeSeconds($timestamp, $now);
+        $connected = $timestamp !== null && $ageSeconds !== null && $ageSeconds <= $freshnessSeconds;
+        $detail = $timestamp === null
+            ? 'Belum ada data telemetry dari perangkat.'
+            : ($connected
+                ? 'Perangkat terdeteksi aktif.'
+                : "Perangkat tidak mengirim data baru lebih dari {$freshnessSeconds} detik.");
+
+        return [
+            'connected' => $connected,
+            'label' => $connected ? 'ON' : 'OFF',
+            'detail' => $detail,
+            'badge_class' => $connected ? 'is-online' : 'is-offline',
+            'freshness_seconds' => $freshnessSeconds,
+            'age_seconds' => $ageSeconds,
+            'last_seen_wib' => $this->formatTimestampToWib($timestamp),
+            'latest_id' => $latestIncomingRow ? (int) $latestIncomingRow->id : null,
+        ];
     }
 
     public function buildResetPagePayload(): array
@@ -725,6 +902,49 @@ class DashboardController extends Controller
             'mqttConnected' => false,
             'httpConnected' => false,
             'esp32Connected' => false,
+            'mqttConnectionStatus' => [
+                'protocol' => 'MQTT',
+                'connected' => false,
+                'state' => 'not_found',
+                'label' => 'Not Found',
+                'detail' => 'Belum ada data telemetry.',
+                'badge_class' => 'is-offline',
+                'row_class' => 'is-offline',
+                'freshness_seconds' => 30,
+                'age_seconds' => null,
+                'last_seen_wib' => '-',
+                'latest_id' => null,
+            ],
+            'httpConnectionStatus' => [
+                'protocol' => 'HTTP',
+                'connected' => false,
+                'state' => 'not_found',
+                'label' => 'Not Found',
+                'detail' => 'Belum ada data telemetry.',
+                'badge_class' => 'is-offline',
+                'row_class' => 'is-offline',
+                'freshness_seconds' => 30,
+                'age_seconds' => null,
+                'last_seen_wib' => '-',
+                'latest_id' => null,
+            ],
+            'esp32ConnectionStatus' => [
+                'connected' => false,
+                'label' => 'OFF',
+                'detail' => 'Belum ada data telemetry dari perangkat.',
+                'badge_class' => 'is-offline',
+                'freshness_seconds' => 30,
+                'age_seconds' => null,
+                'last_seen_wib' => '-',
+                'latest_id' => null,
+            ],
+            'connectionConfig' => [
+                'protocol_freshness_seconds' => 30,
+                'esp32_freshness_seconds' => 30,
+                'ignore_simulator_when_stopped' => true,
+            ],
+            'simulationRunning' => false,
+            'excludeSimulatorStatusSource' => true,
             'mqttAvgSuhu' => 0.0,
             'mqttAvgKelembapan' => 0.0,
             'httpAvgSuhu' => 0.0,

@@ -4,6 +4,14 @@ return [
     // Jumlah maksimum sampel terbaru per protokol yang dipakai untuk dashboard/chart/t-test.
     'analysis_window' => (int) env('DASHBOARD_ANALYSIS_WINDOW', 1200),
 
+    // Freshness status koneksi realtime untuk badge header + realtime link monitor.
+    'connection' => [
+        'protocol_freshness_seconds' => (int) env('DASHBOARD_PROTOCOL_FRESHNESS_SECONDS', 30),
+        'esp32_freshness_seconds' => (int) env('DASHBOARD_ESP32_FRESHNESS_SECONDS', 30),
+        // Saat simulasi tidak berjalan, abaikan data device SIMULATOR-APP agar status merefleksikan perangkat fisik.
+        'ignore_simulator_when_stopped' => filter_var(env('DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED', true), FILTER_VALIDATE_BOOL),
+    ],
+
     // Retensi data historis (hari). Set 0 atau nilai negatif untuk menonaktifkan auto-prune.
     'retention_days' => (int) env('DATA_RETENTION_DAYS', 30),
 

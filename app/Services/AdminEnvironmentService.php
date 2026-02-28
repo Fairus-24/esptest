@@ -134,6 +134,32 @@ class AdminEnvironmentService
                 'help' => 'Jumlah hari data dipertahankan oleh scheduler prune.',
             ],
             [
+                'key' => 'DASHBOARD_PROTOCOL_FRESHNESS_SECONDS',
+                'label' => 'Protocol Freshness (sec)',
+                'config_path' => 'dashboard.connection.protocol_freshness_seconds',
+                'type' => 'integer',
+                'group' => 'Analytics',
+                'placeholder' => '30',
+                'help' => 'Batas detik agar status MQTT/HTTP tetap Connected.',
+            ],
+            [
+                'key' => 'DASHBOARD_ESP32_FRESHNESS_SECONDS',
+                'label' => 'ESP32 Freshness (sec)',
+                'config_path' => 'dashboard.connection.esp32_freshness_seconds',
+                'type' => 'integer',
+                'group' => 'Analytics',
+                'placeholder' => '30',
+                'help' => 'Batas detik agar badge ESP32 tetap ON.',
+            ],
+            [
+                'key' => 'DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED',
+                'label' => 'Ignore Simulator When Stopped',
+                'config_path' => 'dashboard.connection.ignore_simulator_when_stopped',
+                'type' => 'boolean',
+                'group' => 'Analytics',
+                'help' => 'Jika true, status realtime mengabaikan data SIMULATOR-APP saat simulasi tidak berjalan.',
+            ],
+            [
                 'key' => 'DASHBOARD_MQTT_HEALTH_MIN_SCORE',
                 'label' => 'MQTT Health Min Score',
                 'config_path' => 'dashboard.warnings.mqtt_health_min_score',
@@ -326,4 +352,3 @@ class AdminEnvironmentService
         };
     }
 }
-
