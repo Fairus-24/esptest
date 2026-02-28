@@ -134,6 +134,24 @@ class DashboardRealtimeStatusTest extends TestCase
             ->assertSee('HTTP Disconnected');
     }
 
+    public function test_dashboard_does_not_filter_real_device_when_simulation_state_points_to_non_simulator_id(): void
+    {
+        $realDevice = $this->createDevice('ESP32-REAL');
+        $freshTimestamp = now()->subSeconds(4);
+
+        $this->insertSimulationStateFile(false, $realDevice->id);
+        $this->insertTelemetry($realDevice, 'MQTT', $freshTimestamp, 9101);
+        $this->insertTelemetry($realDevice, 'HTTP', $freshTimestamp, 9102);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('ESP32 ON')
+            ->assertSee('MQTT Connected')
+            ->assertSee('HTTP Connected')
+            ->assertDontSee('MQTT Filtered')
+            ->assertDontSee('HTTP Filtered');
+    }
+
     private function createDevice(string $name): Device
     {
         return Device::query()->create([
@@ -167,7 +185,7 @@ class DashboardRealtimeStatusTest extends TestCase
         ]);
     }
 
-    private function insertSimulationStateFile(bool $running): void
+    private function insertSimulationStateFile(bool $running, ?int $deviceId = null): void
     {
         $dir = dirname($this->simulationStatePath);
         if (!is_dir($dir)) {
@@ -176,7 +194,7 @@ class DashboardRealtimeStatusTest extends TestCase
 
         file_put_contents($this->simulationStatePath, json_encode([
             'running' => $running,
-            'device_id' => null,
+            'device_id' => $deviceId,
             'interval_seconds' => 5,
         ], JSON_PRETTY_PRINT));
     }

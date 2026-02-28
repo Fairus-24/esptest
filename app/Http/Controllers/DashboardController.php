@@ -623,23 +623,26 @@ class DashboardController extends Controller
             return [];
         }
 
-        $decoded = $this->readSimulationStateFromFile();
-        if (is_array($decoded)) {
-            $simulationDeviceId = isset($decoded['device_id']) && is_numeric($decoded['device_id'])
-                ? (int) $decoded['device_id']
-                : 0;
-            if ($simulationDeviceId > 0) {
-                return [$simulationDeviceId];
-            }
-        }
-
-        return Device::query()
+        $simulatorDeviceIds = Device::query()
             ->where('nama_device', 'SIMULATOR-APP')
             ->pluck('id')
             ->map(static fn ($id): int => (int) $id)
             ->filter(static fn (int $id): bool => $id > 0)
             ->values()
             ->all();
+
+        $decoded = $this->readSimulationStateFromFile();
+        if (is_array($decoded)) {
+            $simulationDeviceId = isset($decoded['device_id']) && is_numeric($decoded['device_id'])
+                ? (int) $decoded['device_id']
+                : 0;
+            // Guard against stale/invalid state file that accidentally points to a real ESP32 device id.
+            if ($simulationDeviceId > 0 && in_array($simulationDeviceId, $simulatorDeviceIds, true)) {
+                return [$simulationDeviceId];
+            }
+        }
+
+        return $simulatorDeviceIds;
     }
 
     private function resolveLatestProtocolRowForStatus(string $protocol, array $excludedDeviceIds): array

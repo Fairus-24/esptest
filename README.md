@@ -185,6 +185,7 @@ The project has been updated with the following behavior:
 126. ESP32 ON/OFF badge now follows latest telemetry freshness with optional simulator exclusion when simulation is stopped, preventing false `ON` from old/non-real device rows.
 127. ESP32 ON/OFF now also considers MQTT debug heartbeat (`MQTT_DEBUG_TOPIC`) so board can remain `ON` even when sensor checksum blocks telemetry row insert.
 128. When simulator exclusion is active and latest protocol row only comes from simulator source, badges now show `Filtered` (instead of misleading `Not Found`) with explicit warning detail.
+129. Dashboard simulator-filter guard now validates `simulation_state.json.device_id` against real `SIMULATOR-APP` records first, so stale/non-simulator IDs no longer force physical ESP32 telemetry into false `Filtered` status.
 
 ## Tech Stack
 
@@ -1151,6 +1152,7 @@ Other dashboard behavior:
 - floating top-right `Realtime Link Monitor` (MQTT/HTTP ping ms + throughput Mb/s from latest real payload telemetry)
 - same monitor now includes browser-measured external ping/speed (per-device internet condition, speedtest-style)
 - monitor is collapsible via `LIVE/IDLE`, defaults minimized, and auto-minimizes on outside click
+- external browser probe now uses timeout + hidden-tab pause + explicit offline fallback to avoid hanging/stale browser-side external metrics
 - modernized header cards for temperature and humidity
 - subtitle status badges now include `ESP32 ON/OFF`, `MQTT Connected/Disconnected`, and `HTTP Connected/Disconnected` in realtime
 - live status badges for MQTT and HTTP connectivity
@@ -1503,6 +1505,7 @@ GROUP BY protokol;
 - Check simulator state and device mapping:
   - `cat storage/app/simulation_state.json`
   - verify `device_id` in state is not your physical ESP32 device id.
+- Current dashboard now validates that state `device_id` is truly a `SIMULATOR-APP` device before excluding it, so stale state ID from non-simulator device should no longer trigger false `Filtered`.
 - If you intentionally want simulator data to affect status badges, set:
   - `DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED=false`
   - then run `php artisan optimize:clear`.

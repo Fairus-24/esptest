@@ -3227,6 +3227,7 @@
             interactionsBound: false,
             externalProbeInFlight: false,
             externalProbeIntervalMs: 15000,
+            externalProbeTimeoutMs: 7000,
             lastExternalProbeAt: 0,
         };
 
@@ -3477,6 +3478,25 @@
             externalStamp.textContent = payload.stampText || 'External: data tidak tersedia.';
         }
 
+        async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
+            const safeTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 6000;
+            if (typeof AbortController === 'undefined') {
+                return fetch(url, options);
+            }
+
+            const controller = new AbortController();
+            const timeoutId = window.setTimeout(() => controller.abort(), safeTimeoutMs);
+
+            try {
+                return await fetch(url, {
+                    ...options,
+                    signal: controller.signal,
+                });
+            } finally {
+                window.clearTimeout(timeoutId);
+            }
+        }
+
         async function probeExternalPingMs() {
             const targets = [
                 `https://www.gstatic.com/generate_204?ts=${Date.now()}`,
@@ -3486,11 +3506,11 @@
             for (const target of targets) {
                 try {
                     const startedAt = performance.now();
-                    await fetch(target, {
+                    await fetchWithTimeout(target, {
                         method: 'GET',
                         mode: 'no-cors',
                         cache: 'no-store',
-                    });
+                    }, networkWidgetState.externalProbeTimeoutMs);
                     const elapsedMs = performance.now() - startedAt;
                     if (Number.isFinite(elapsedMs) && elapsedMs > 0) {
                         return elapsedMs;
@@ -3512,11 +3532,11 @@
             for (const target of targets) {
                 try {
                     const startedAt = performance.now();
-                    const response = await fetch(target, {
+                    const response = await fetchWithTimeout(target, {
                         method: 'GET',
                         mode: 'cors',
                         cache: 'no-store',
-                    });
+                    }, networkWidgetState.externalProbeTimeoutMs);
 
                     if (!response.ok) {
                         continue;
@@ -3541,11 +3561,25 @@
             if (networkWidgetState.externalProbeInFlight) return;
 
             const now = Date.now();
+            if (!force && document.visibilityState === 'hidden') {
+                return;
+            }
+
             if (!force && networkWidgetState.lastExternalProbeAt > 0) {
                 const elapsed = now - networkWidgetState.lastExternalProbeAt;
                 if (elapsed < networkWidgetState.externalProbeIntervalMs - 400) {
                     return;
                 }
+            }
+
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                updateExternalNetworkUi({
+                    pingMs: null,
+                    speedMbit: null,
+                    stampText: 'External: browser terdeteksi offline.',
+                });
+                networkWidgetState.lastExternalProbeAt = now;
+                return;
             }
 
             networkWidgetState.externalProbeInFlight = true;
@@ -4696,7 +4730,12 @@
             bindHelpButtons();
             bindNetworkWidgetInteractions();
             updateExternalNetworkMetrics(true);
-             
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    updateExternalNetworkMetrics(false);
+                }
+            });
+              
             // Animate all stat values immediately on load
             document.querySelectorAll('.stat-value').forEach(el => {
                 const originalText = el.textContent.trim();
