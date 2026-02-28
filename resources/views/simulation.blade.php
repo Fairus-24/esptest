@@ -293,6 +293,7 @@
     @php
         $basePath = rtrim(request()->getBaseUrl(), '/');
         $dashboardPath = $basePath !== '' ? $basePath . '/' : '/';
+        $simulationDashboardPath = $dashboardPath . '?source=simulation';
         $simulationApiBase = ($basePath !== '' ? $basePath : '') . '/simulation';
     @endphp
     <div class="wrap">
@@ -301,7 +302,7 @@
             <p>
                 Halaman ini mensimulasikan alur aplikasi lengkap MQTT vs HTTP secara realtime
                 (packet sequence, latency, daya, reliability, diagnostics, warning, dan chart)
-                menggunakan jalur data yang sama ke dashboard utama.
+                menggunakan jalur data simulasi terpisah dari data real produksi.
             </p>
         </section>
 
@@ -365,12 +366,12 @@
         </section>
 
         <section class="surface">
-            <h2 style="margin:0 0 6px;font-size:1.06rem;font-family:'Space Grotesk','Manrope',sans-serif;">Live Dashboard (Persis Alur Aplikasi)</h2>
+            <h2 style="margin:0 0 6px;font-size:1.06rem;font-family:'Space Grotesk','Manrope',sans-serif;">Live Dashboard Simulasi (Terpisah dari Real)</h2>
             <p style="margin:0;color:#475569;font-size:0.9rem;">
-                Frame di bawah ini adalah dashboard utama aplikasi. Saat simulasi aktif, metrik di dashboard ini bergerak sama seperti data live produksi.
+                Frame di bawah ini membaca sumber telemetry simulasi (`source=simulation`), sehingga tidak bercampur dengan dashboard data real produksi.
             </p>
             <div class="frame-wrap">
-                <iframe src="{{ $dashboardPath }}" title="Dashboard MQTT vs HTTP"></iframe>
+                <iframe src="{{ $simulationDashboardPath }}" title="Dashboard MQTT vs HTTP (Simulation Source)"></iframe>
             </div>
         </section>
     </div>
@@ -486,7 +487,7 @@
 
                 setStatus(
                     status.running
-                        ? `Simulasi aktif (${modeLabel(status.network_mode)}). Generator berjalan dan dashboard utama diperbarui realtime.`
+                        ? `Simulasi aktif (${modeLabel(status.network_mode)}). Generator berjalan dan dashboard simulasi diperbarui realtime.`
                         : 'Simulasi belum aktif. Tekan Start Simulasi untuk mulai.',
                     status.running ? 'ok' : null
                 );

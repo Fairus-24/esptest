@@ -3,11 +3,23 @@
 namespace App\Services;
 
 use App\Models\Eksperimen;
+use App\Models\SimulatedEksperimen;
 use Illuminate\Database\Eloquent\Collection;
 
 class StatisticsService
 {
     private const RELIABILITY_WINDOW_SIZE = 300;
+    private string $telemetryModelClass = Eksperimen::class;
+
+    public function setTelemetrySource(string $source): self
+    {
+        $normalized = strtolower(trim($source));
+        $this->telemetryModelClass = in_array($normalized, ['simulation', 'sim'], true)
+            ? SimulatedEksperimen::class
+            : Eksperimen::class;
+
+        return $this;
+    }
 
     /**
      * Dapatkan data MQTT
@@ -345,7 +357,7 @@ class StatisticsService
 
     private function getRecentProtocolData(string $protocol): Collection
     {
-        return Eksperimen::query()
+        return $this->telemetryQuery()
             ->where('protokol', strtoupper($protocol))
             ->orderByDesc('id')
             ->limit(self::RELIABILITY_WINDOW_SIZE)
@@ -356,13 +368,20 @@ class StatisticsService
 
     private function getProtocolData(string $protocol, int $limit): Collection
     {
-        return Eksperimen::query()
+        return $this->telemetryQuery()
             ->where('protokol', strtoupper($protocol))
             ->orderByDesc('id')
             ->limit($limit)
             ->get()
             ->sortBy('id')
             ->values();
+    }
+
+    private function telemetryQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        $modelClass = $this->telemetryModelClass;
+
+        return $modelClass::query();
     }
 
     private function analysisWindowSize(): int

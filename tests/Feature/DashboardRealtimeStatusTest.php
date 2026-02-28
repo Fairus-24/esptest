@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Device;
+use App\Models\DeviceFirmwareProfile;
 use App\Models\Eksperimen;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -80,7 +81,7 @@ class DashboardRealtimeStatusTest extends TestCase
         $simDevice = $this->createDevice('SIMULATOR-APP');
         $freshTimestamp = now()->subSeconds(4);
 
-        $this->insertSimulationStateFile(false);
+        $this->insertSimulationStateFile(false, $simDevice->id);
         $this->insertTelemetry($simDevice, 'MQTT', $freshTimestamp, 5001);
         $this->insertTelemetry($simDevice, 'HTTP', $freshTimestamp, 6001);
 
@@ -89,6 +90,45 @@ class DashboardRealtimeStatusTest extends TestCase
             ->assertSee('ESP32 OFF')
             ->assertSee('MQTT Filtered')
             ->assertSee('HTTP Filtered');
+    }
+
+    public function test_dashboard_does_not_filter_simulator_label_when_state_file_is_missing(): void
+    {
+        $simNamedDevice = $this->createDevice('SIMULATOR-APP');
+        $freshTimestamp = now()->subSeconds(3);
+
+        $this->insertTelemetry($simNamedDevice, 'MQTT', $freshTimestamp, 6051);
+        $this->insertTelemetry($simNamedDevice, 'HTTP', $freshTimestamp, 6052);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('ESP32 ON')
+            ->assertSee('MQTT Connected')
+            ->assertSee('HTTP Connected')
+            ->assertDontSee('MQTT Filtered')
+            ->assertDontSee('HTTP Filtered');
+    }
+
+    public function test_dashboard_does_not_filter_provisioned_device_even_if_simulator_state_points_to_it(): void
+    {
+        $simNamedDevice = $this->createDevice('SIMULATOR-APP');
+        $freshTimestamp = now()->subSeconds(3);
+
+        DeviceFirmwareProfile::query()->create([
+            'device_id' => $simNamedDevice->id,
+        ]);
+
+        $this->insertSimulationStateFile(false, $simNamedDevice->id);
+        $this->insertTelemetry($simNamedDevice, 'MQTT', $freshTimestamp, 6061);
+        $this->insertTelemetry($simNamedDevice, 'HTTP', $freshTimestamp, 6062);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('ESP32 ON')
+            ->assertSee('MQTT Connected')
+            ->assertSee('HTTP Connected')
+            ->assertDontSee('MQTT Filtered')
+            ->assertDontSee('HTTP Filtered');
     }
 
     public function test_dashboard_includes_simulator_data_when_simulation_is_running(): void
@@ -137,6 +177,7 @@ class DashboardRealtimeStatusTest extends TestCase
     public function test_dashboard_does_not_filter_real_device_when_simulation_state_points_to_non_simulator_id(): void
     {
         $realDevice = $this->createDevice('ESP32-REAL');
+        $this->createDevice('SIMULATOR-APP');
         $freshTimestamp = now()->subSeconds(4);
 
         $this->insertSimulationStateFile(false, $realDevice->id);
@@ -148,6 +189,24 @@ class DashboardRealtimeStatusTest extends TestCase
             ->assertSee('ESP32 ON')
             ->assertSee('MQTT Connected')
             ->assertSee('HTTP Connected')
+            ->assertDontSee('MQTT Filtered')
+            ->assertDontSee('HTTP Filtered');
+    }
+
+    public function test_dashboard_treats_stale_simulator_fallback_as_disconnected_not_filtered(): void
+    {
+        $simDevice = $this->createDevice('SIMULATOR-APP');
+        $staleTimestamp = now()->subSeconds(95);
+
+        $this->insertSimulationStateFile(false, $simDevice->id);
+        $this->insertTelemetry($simDevice, 'MQTT', $staleTimestamp, 9201);
+        $this->insertTelemetry($simDevice, 'HTTP', $staleTimestamp, 9202);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('ESP32 OFF')
+            ->assertSee('MQTT Disconnected')
+            ->assertSee('HTTP Disconnected')
             ->assertDontSee('MQTT Filtered')
             ->assertDontSee('HTTP Filtered');
     }

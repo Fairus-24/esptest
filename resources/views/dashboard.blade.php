@@ -2476,6 +2476,12 @@
                 'age_seconds' => null,
                 'last_seen_wib' => '-',
             ];
+        $telemetrySource = strtolower(trim((string) ($telemetrySource ?? 'real')));
+        $isSimulationTelemetrySource = $telemetrySource === 'simulation';
+        $telemetrySourceLabel = $isSimulationTelemetrySource ? 'SOURCE SIMULATION' : 'SOURCE REAL';
+        $telemetrySourceTitle = $isSimulationTelemetrySource
+            ? 'Dashboard membaca tabel telemetry simulasi (terpisah dari data real).'
+            : 'Dashboard membaca tabel telemetry real produksi.';
 
         $computeRealtimeMbitPerSecond = static function ($payloadBytes, $txDurationMs): ?float {
             if ($payloadBytes === null || $txDurationMs === null) {
@@ -2605,6 +2611,9 @@
                     <h1><i class="fas fa-chart-line"></i> IoT Research System</h1>
                     <p>Analisis Komparatif Protokol MQTT vs HTTP</p>
                     <div class="header-subtitle">
+                        <span id="telemetrySourceBadge" class="header-badge" title="{{ $telemetrySourceTitle }}">
+                            <i class="fas fa-database"></i> {{ $telemetrySourceLabel }}
+                        </span>
                         <span id="esp32StatusBadge" class="header-badge status-badge {{ $esp32ConnectionStatus['badge_class'] ?? ($esp32Connected ? 'is-online' : 'is-offline') }}" title="{{ $esp32ConnectionStatus['detail'] ?? '' }}">
                             <i class="fas fa-microchip"></i> ESP32 {{ $esp32ConnectionStatus['label'] ?? ($esp32Connected ? 'ON' : 'OFF') }}
                         </span>
@@ -3385,6 +3394,12 @@
             if (!currentElement || !nextElement) return;
 
             currentElement.className = nextElement.className;
+            const nextTitle = nextElement.getAttribute('title');
+            if (nextTitle !== null) {
+                currentElement.setAttribute('title', nextTitle);
+            } else {
+                currentElement.removeAttribute('title');
+            }
             if (currentElement.innerHTML !== nextElement.innerHTML) {
                 currentElement.innerHTML = nextElement.innerHTML;
             }
@@ -3673,13 +3688,19 @@
             syncElementById(newDoc, 'avgSuhuDetail', true);
             syncElementById(newDoc, 'avgKelembapanDetail', true);
 
-            ['esp32StatusBadge', 'mqttStatusBadge', 'httpStatusBadge'].forEach((badgeId) => {
+            ['telemetrySourceBadge', 'esp32StatusBadge', 'mqttStatusBadge', 'httpStatusBadge'].forEach((badgeId) => {
                 const currentBadge = document.getElementById(badgeId);
                 const nextBadge = newDoc.getElementById(badgeId);
                 if (!currentBadge || !nextBadge) return;
 
                 currentBadge.className = nextBadge.className;
                 currentBadge.innerHTML = nextBadge.innerHTML;
+                const nextTitle = nextBadge.getAttribute('title');
+                if (nextTitle !== null) {
+                    currentBadge.setAttribute('title', nextTitle);
+                } else {
+                    currentBadge.removeAttribute('title');
+                }
             });
 
             syncElementClassAndHtml(newDoc, 'networkWidgetStatus');

@@ -186,6 +186,10 @@ The project has been updated with the following behavior:
 127. ESP32 ON/OFF now also considers MQTT debug heartbeat (`MQTT_DEBUG_TOPIC`) so board can remain `ON` even when sensor checksum blocks telemetry row insert.
 128. When simulator exclusion is active and latest protocol row only comes from simulator source, badges now show `Filtered` (instead of misleading `Not Found`) with explicit warning detail.
 129. Dashboard simulator-filter guard now validates `simulation_state.json.device_id` against real `SIMULATOR-APP` records first, so stale/non-simulator IDs no longer force physical ESP32 telemetry into false `Filtered` status.
+130. Dashboard status now treats stale simulator fallback as `Disconnected` (not persistent `Filtered`), prefers debug-heartbeat source when telemetry is simulator-filtered, and uses dedicated debug-heartbeat freshness window for ESP32 `ON/OFF` stability.
+131. Simulator exclusion now runs fail-open: dashboard only excludes simulator telemetry when `storage/app/simulation_state.json` contains explicit valid simulator `device_id`; missing/invalid state no longer auto-filters by label only, fresh debug-heartbeat on the same `device_id` cancels false `Filtered`, and provisioned device IDs (have firmware profile) are treated as physical.
+132. Simulation telemetry is now fully isolated from real telemetry: simulator writes to dedicated table `simulated_eksperimens`, default dashboard source remains real table `eksperimens`, and simulation page iframe opens dedicated simulation dashboard source (`/?source=simulation`).
+133. Firmware baseline has been rolled back to stable pre-production profile (snapshot lineage before `cd98b6d`, centered on `5ba91ec`) with minimal modern compatibility patch: required telemetry fields stay complete, HTTP supports `X-Ingest-Key`, and HTTPS target works with optional insecure TLS flag.
 
 ## Tech Stack
 
@@ -344,6 +348,7 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `1200` | Max latest rows per protocol used for dashboard/statistics window |
 | `DASHBOARD_PROTOCOL_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for MQTT/HTTP `Connected` badge on header + realtime monitor |
 | `DASHBOARD_ESP32_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for ESP32 `ON/OFF` badge |
+| `DASHBOARD_ESP32_DEBUG_FRESHNESS_SECONDS` | Recommended | `120` | Freshness threshold for ESP32 `ON/OFF` when source is MQTT debug heartbeat |
 | `DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED` | Recommended | `true` | Ignore `SIMULATOR-APP` telemetry for connection badges when simulation is not running |
 | `DASHBOARD_MQTT_HEALTH_LATENCY_TARGET_MS` | Recommended | `1500` | MQTT latency target used by transmission health scoring |
 | `DASHBOARD_MQTT_HEALTH_TX_TARGET_MS` | Recommended | `120` | MQTT TX duration target used by transmission health scoring |
@@ -491,6 +496,7 @@ HTTP_INGEST_RATE_LIMIT_PER_MINUTE=240
 DASHBOARD_ANALYSIS_WINDOW=1200
 DASHBOARD_PROTOCOL_FRESHNESS_SECONDS=30
 DASHBOARD_ESP32_FRESHNESS_SECONDS=30
+DASHBOARD_ESP32_DEBUG_FRESHNESS_SECONDS=120
 DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED=true
 DASHBOARD_MQTT_HEALTH_LATENCY_TARGET_MS=1500
 DASHBOARD_MQTT_HEALTH_TX_TARGET_MS=120
@@ -643,7 +649,8 @@ Simulation quick start:
 1. Open `http://127.0.0.1/esptest/public/simulation`
 2. Set `interval`, fail-rate (`HTTP`/`MQTT`), and `Network Profile` (`stable`/`normal`/`stress`).
 3. Click `Start Simulasi`.
-4. Observe live behavior in embedded dashboard frame (charts, reliability, warnings, diagnostics) and verify `Network` meta (`profile/mode/health`) on simulation page.
+4. Observe live behavior in embedded simulation dashboard frame (`/?source=simulation`) and verify `Network` meta (`profile/mode/health`) on simulation page.
+5. Real dashboard (`/`) remains isolated and continues reading only real telemetry table (`eksperimens`).
 
 ## Production Deployment (Debian + Nginx + PM2 + Subdomain)
 
@@ -887,25 +894,16 @@ How ESP32 fills each payload field:
 | `mqtt_success_count`/`mqtt_fail_count` | local MQTT counters (diagnostic) |
 
 Protocol-capture behavior:
-- Firmware keeps background sensor polling disabled by default to lower DHT bus contention; HTTP/MQTT now rely on dedicated read-on-send attempts and guarded fallback.
-- Before each send, HTTP and MQTT each force their own direct sensor capture attempt (independent per protocol cycle).
-- If direct read fails, firmware uses staged fallback:
-  - normal fallback (`MAX_SENSOR_FALLBACK_AGE_MS`),
-  - emergency fallback (`MAX_SENSOR_EMERGENCY_AGE_MS`) when DHT is unstable for longer periods.
-- Payload now includes `sensor_fallback_level` (`0=fresh`, `1=normal fallback`, `2=emergency fallback`) for diagnostics.
-- Payload also includes DHT fallback counters (`sensor_fallback_std_count`, `sensor_fallback_emergency_count`, `sensor_fallback_rejected_count`) and `dht_fail_streak` for easier root-cause tracing.
-- If fallback would resend a `sensor_read_seq` that was already delivered, firmware skips that send to prevent duplicate stale snapshots across HTTP/MQTT.
-- Firmware enforces guarded DHT sampling interval and auto-reinit on repeated read failures.
-- DHT min-read spacing now also applies after failed reads (not only after successful snapshots), reducing repeated checksum storms.
-- Background polling no longer retries aggressively after failed read; it now follows controlled recovery cadence to avoid over-hammering DHT bus.
-- Sensor outlier jumps are filtered (temperature/humidity sudden unrealistic jump) and retried before accepting snapshot.
-- Delay/wait paths use cooperative scheduling so MQTT keepalive is not starved during long sensor/HTTP waits.
-- Power estimation is deterministic (no random noise term), computed from RSSI, TX duration, payload size, temperature/humidity contribution, and retry/failure context.
-- Current stability-test defaults in repository:
-  - preferred DHT model: `AUTO_DETECT`
-  - DHT pin mode: `INPUT` (not `INPUT_PULLUP`)
-  - protocol send interval: `14s` each (`HTTP` and `MQTT`, staggered)
-  - DHT minimum read spacing guard: larger than previous default (to reduce checksum bursts)
+- Baseline firmware profile is intentionally conservative and close to pre-production stable behavior.
+- Background sensor polling runs periodically (`ESP_SENSOR_INTERVAL_MS`, default `5s`) to keep latest values fresh.
+- HTTP and MQTT send paths each take direct sensor snapshot before sending; if read fails, send is skipped (no multi-level fallback payload reuse).
+- DHT minimum read guard (`ESP_DHT_MIN_READ_INTERVAL_MS`, default `1500ms`) prevents over-polling.
+- Power estimate remains deterministic from signal/tx/payload/runtime counters.
+- Current stable defaults used in repository:
+  - DHT type: `DHT11`
+  - protocol send interval: `10s` each (`HTTP` and `MQTT`)
+  - sensor polling interval: `8s` (`ESP_SENSOR_INTERVAL_MS` in current `platformio.ini`)
+  - HTTP read timeout: `3500ms` (`ESP_HTTP_READ_TIMEOUT_MS`)
 
 Build and upload:
 
@@ -922,21 +920,16 @@ Build flag note:
 - For production URL, set `-DESP_HTTP_BASE_URL=\"https://your-domain\"` and keep endpoint as `/api/http-data`.
 - If MQTT broker host differs from HTTP host, set `-DESP_MQTT_BROKER=\"<broker-host-or-ip>\"`.
 - For HTTPS without custom CA bundle, keep `-DESP_HTTP_TLS_INSECURE=1`.
-- Firmware stability tuning flags are now available in `platformio.ini`:
+- Stable-profile tuning flags available in current `platformio.ini`:
   - `ESP_SENSOR_INTERVAL_MS`
-  - `ESP_SENSOR_RECOVERY_INTERVAL_MS`
-  - `ESP_SENSOR_SNAPSHOT_MAX_AGE_MS`
-  - `ESP_SENSOR_FALLBACK_MAX_AGE_MS`
-  - `ESP_SENSOR_EMERGENCY_MAX_AGE_MS`
-  - `ESP_HTTP_POST_RETRY_MAX`
-  - `ESP_HTTP_POST_RETRY_BACKOFF_MS`
   - `ESP_HTTP_READ_TIMEOUT_MS`
-  - `ESP_REMOTE_DEBUG_ENABLED`
-  - `ESP_REMOTE_DEBUG_TOPIC`
-  - `ESP_REMOTE_DEBUG_QUEUE_SIZE`
-  - `ESP_REMOTE_DEBUG_MAX_MESSAGE_LEN`
-  - `ESP_REMOTE_DEBUG_FLUSH_BURST`
-  - `ESP_REMOTE_DEBUG_MIN_INTERVAL_MS`
+  - `ESP_HTTP_BASE_URL`
+  - `ESP_HTTP_ENDPOINT`
+  - `ESP_HTTP_INGEST_KEY`
+  - `ESP_MQTT_BROKER`
+  - `ESP_MQTT_PORT`
+  - `ESP_MQTT_TOPIC`
+  - `ESP_HTTP_TLS_INSECURE`
 
 If upload fails because COM port is busy:
 
@@ -1092,6 +1085,12 @@ Security notes:
 ### GET `/`
 
 Dashboard entry route (served via Apache path `/esptest/public` in this setup).
+- Source default: real telemetry table (`eksperimens`).
+
+### GET `/?source=simulation`
+
+Dashboard simulation source route.
+- Reads simulation telemetry table (`simulated_eksperimens`) and is intended for simulation page iframe.
 
 ### Simulation Routes (`/simulation`)
 
@@ -1102,11 +1101,12 @@ Purpose: simulate full MQTT-vs-HTTP application behavior without physical ESP32.
 - `POST /simulation/start` -> start simulator engine. Optional JSON: `interval_seconds`, `http_fail_rate`, `mqtt_fail_rate`, `network_profile`, `reset_before_start`.
 - `POST /simulation/stop` -> stop simulator engine.
 - `POST /simulation/tick` -> force one manual simulation tick.
-- `POST /simulation/reset` -> clear simulator rows only (`SIMULATOR-APP` device), keep real device rows intact.
+- `POST /simulation/reset` -> clear simulator rows only in simulation table (`simulated_eksperimens`), keep real rows in `eksperimens` intact.
 - `GET /simulasi` -> shortcut redirect to `/simulation`.
 
 Data safety note:
-- simulator state now validates `device_id` against `SIMULATOR-APP`; stale/non-simulator IDs in state file are ignored and auto-corrected.
+- simulator state validates `device_id` against `SIMULATOR-APP`; stale/non-simulator IDs in state file are ignored and auto-corrected.
+- simulator writes/reads no longer share telemetry table with real device data.
 
 ### Admin Config Routes (`/admin/*`)
 
@@ -1489,6 +1489,7 @@ GROUP BY protokol;
 - New status logic is freshness-based; ensure these values are not too loose:
   - `DASHBOARD_PROTOCOL_FRESHNESS_SECONDS` (MQTT/HTTP)
   - `DASHBOARD_ESP32_FRESHNESS_SECONDS` (ESP32 ON/OFF)
+  - `DASHBOARD_ESP32_DEBUG_FRESHNESS_SECONDS` (ESP32 ON/OFF when heartbeat source is `iot/esp32/debug`)
 - If simulation was used before, keep:
   - `DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED=true`
   so stale simulator rows do not keep badges `ON/Connected`.
@@ -1505,18 +1506,28 @@ GROUP BY protokol;
 - Check simulator state and device mapping:
   - `cat storage/app/simulation_state.json`
   - verify `device_id` in state is not your physical ESP32 device id.
-- Current dashboard now validates that state `device_id` is truly a `SIMULATOR-APP` device before excluding it, so stale state ID from non-simulator device should no longer trigger false `Filtered`.
+- Current dashboard now excludes simulator data only when state file contains explicit valid simulator `device_id`; if state file is missing/invalid, dashboard fail-opens (no label-only simulator filter).
+- Fresh MQTT debug-heartbeat on the same `device_id` is treated as physical activity signal and cancels simulator exclusion for that ID.
+- Device IDs with firmware profile (`device_firmware_profiles`) are treated as physical/provisioned and are not force-filtered as simulator status source.
+- If simulator-only row is already stale, status now falls back to `Disconnected` instead of staying `Filtered`.
 - If you intentionally want simulator data to affect status badges, set:
   - `DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED=false`
   - then run `php artisan optimize:clear`.
 
+### Real vs simulation telemetry must stay isolated
+
+- Real dashboard (`/`) reads only `eksperimens`.
+- Simulation dashboard source (`/?source=simulation`) reads only `simulated_eksperimens`.
+- Quick verification SQL:
+  - `SELECT device_id, protokol, COUNT(*) FROM eksperimens GROUP BY device_id, protokol;`
+  - `SELECT device_id, protokol, COUNT(*) FROM simulated_eksperimens GROUP BY device_id, protokol;`
+- If legacy simulator rows are still in `eksperimens`, migrate/clean them before relying on realtime status comparisons.
+
 ### Remote debug topic (`iot/esp32/debug`) is empty
 
-- Ensure firmware was re-flashed after enabling remote debug flags in `platformio.ini`.
-- Verify broker/user/topic reachability from another client:
-  `mosquitto_sub -h <broker> -p 1883 -u <user> -P <pass> -t iot/esp32/debug -v`.
-- Confirm ESP32 MQTT session is connected in serial/status report (`MQTT: Connected`).
-- If device keeps reconnecting, prioritize broker reachability and sensor stability first; queued debug logs are only flushed after MQTT reconnect succeeds.
+- Current rollback stable firmware profile does not actively publish remote debug stream by default.
+- If you stay on this profile, empty `iot/esp32/debug` is expected behavior.
+- Dashboard ESP32 ON/OFF should therefore rely on realtime telemetry freshness (not debug-heartbeat fallback) for this profile.
 
 ### Production domain is live but no telemetry rows are inserted
 
@@ -1598,9 +1609,9 @@ GROUP BY protokol;
 
 ### ESP32 crash: `Guru Meditation Error (Interrupt wdt timeout on CPU1)`
 
-- Root cause from decoded backtrace: blocking DHT pulse-read path (`DHT::expectPulse` / `digitalRead`) can starve CPU interrupts long enough to trigger WDT.
-- Current firmware now uses `DHTesp` (ESP32-focused driver) for sensor reads to avoid this watchdog panic pattern.
-- Rebuild + flash latest firmware from this repository:
+- On rollback stable profile, firmware uses conservative polling cadence and DHT min-read guard.
+- If WDT still appears, common causes are wiring noise, unstable power, or too-frequent sensor access outside this firmware.
+- Rebuild + flash latest firmware profile from this repository:
   - `cd ESP32_Firmware`
   - `pio run -t upload`
 - If flashing fails with `COMx is busy`, close Serial Monitor/port consumer first, then upload again.
@@ -1608,20 +1619,14 @@ GROUP BY protokol;
 ### ESP32 shows `Time synchronized: Thu Jan 1 1970` (or epoch near zero)
 
 - This indicates NTP is not actually synced (internet/NTP route unavailable), even if WiFi is connected.
-- Current firmware now rejects fake epoch success and will retry NTP automatically every 30 seconds.
+- In rollback stable profile, telemetry send path will skip publish/post when epoch is still invalid.
 - Ensure your network allows outbound UDP/123 to NTP servers.
-- Keep ESP32 online for at least 1-2 retry cycles; once epoch is valid, HTTP/MQTT sends proceed normally.
+- Reboot device after internet/NTP route is restored so setup time-sync runs again.
 
 ### ESP32 repeatedly logs `Sensor read failed (CHECKSUM)`
 
-- Firmware now retries sensor reads and auto-reinitializes DHT driver after repeated failures.
-- Firmware now prioritizes dedicated read-on-send and keeps background polling disabled by default to avoid extra DHT contention.
-- Compatibility fallback now accepts plausible DHT values even when status is noisy, and logs this explicitly.
-- Firmware now has staged fallback (`normal` + `emergency`) so telemetry can continue while DHT recovery is in progress.
-- Firmware recovery now keeps preferred model `DHT11` during normal reinit (no recurring auto flip loop) and uses longer guarded read interval for stability.
-- If no successful read is obtained from cold boot after repeated reinit cycles, firmware now tries one `AUTO_DETECT` probe fail-safe before returning to preferred model strategy.
-- Firmware now tracks fallback counters and fail streak in payload (`dht_fail_streak`, `sensor_fallback_*_count`) so prolonged instability can be identified quickly.
-- Firmware now rejects duplicate fallback deliveries with the same `sensor_read_seq` to avoid stale cross-protocol duplicates during prolonged sensor instability.
+- Rollback stable profile does direct DHT11 reads and skips send when read fails.
+- There is no staged fallback payload reuse in this profile; send resumes when sensor read returns valid values.
 - If checksum errors still persist continuously, verify hardware:
   - DHT data pin wiring to the configured GPIO (`DHTPIN`).
   - Shared GND between ESP32 and sensor.
@@ -1629,9 +1634,10 @@ GROUP BY protokol;
 
 ### ESP32 badge shows `OFF` while board is still powered on
 
-- In current build, ESP32 status can use two sources:
+- Dashboard ESP32 status can use two sources:
   - fresh telemetry row (`eksperimens`)
   - fresh MQTT debug heartbeat from `MQTT_DEBUG_TOPIC` (default `iot/esp32/debug`)
+- On rollback stable firmware profile, debug heartbeat stream is not published by default, so status mainly follows telemetry freshness.
 - Ensure worker subscribes debug topic and updates heartbeat file:
   - `storage/app/esp32_debug_heartbeat.json`
 - If status still stale after deploy:
@@ -1643,21 +1649,13 @@ GROUP BY protokol;
 ### ESP32 repeatedly logs `Sensor read failed (TIMEOUT)`
 
 - This usually indicates sensor bus timing/wiring instability or too-frequent polling.
-- Current firmware already mitigates this by:
-  - retrying each read,
-  - reinitializing DHT after consecutive failures,
-  - prioritizing guarded direct read-on-demand (background polling disabled by default),
-  - using last known valid snapshot fallback (`sensor_age_ms`) only within strict stale-age budget when fresh read fails.
+- Rollback stable profile mitigates this with conservative polling interval + DHT min-read guard.
 - If timeout remains dominant, prioritize hardware checks (power stability, short signal wire, pull-up resistor, and correct sensor type selection).
 
 ### ESP32 WiFi connected but MQTT often disconnects
 
 - Root cause is often blocking loops (sensor retry + HTTP retry/timeout) that starve MQTT keepalive processing.
-- Current firmware mitigates this by:
-  - cooperative delay slices that keep calling `mqttClient.loop()` during waits,
-  - MQTT keepalive/socket timeout tuning (`setKeepAlive(45)`, `setSocketTimeout(4)`),
-  - disabling WiFi modem sleep (`WiFi.setSleep(false)`),
-  - reducing HTTP retry budget/timeouts so one HTTP failure does not block loop too long.
+- Rollback stable profile keeps logic simpler: lightweight loop, periodic reconnect attempts, and fixed interval sends.
 - If disconnect persists, verify broker reachability from ESP32 subnet and credentials (`MQTT_USER`/`MQTT_PASSWORD`).
 
 ### ESP32 upload fails (`COMx access denied`)
@@ -1686,6 +1684,7 @@ MOSQUITTO_AUTO_START=false
 - `app/Services/FirmwareTemplateService.php`
 - `app/Http/Controllers/SimulationController.php`
 - `app/Services/ApplicationSimulationService.php`
+- `app/Models/SimulatedEksperimen.php`
 - `app/Providers/AppServiceProvider.php`
 - `app/Services/LaravelHttpAutoStarter.php`
 - `app/Services/MosquittoAutoStarter.php`
@@ -1707,6 +1706,7 @@ MOSQUITTO_AUTO_START=false
 - `app/Http/Controllers/ApiController.php`
 - `routes/web.php`
 - `routes/console.php`
+- `database/migrations/2026_03_01_000000_create_simulated_eksperimens_table.php`
 - `ESP32_Firmware/src/main.cpp`
 
 ## Maintenance Policy
@@ -1721,7 +1721,7 @@ For research and educational use.
 
 ---
 
-Last updated: 2026-02-27
+Last updated: 2026-03-01
 
 ## UI Footer Redesign (2026)
 

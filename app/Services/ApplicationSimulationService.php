@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\Device;
-use App\Models\Eksperimen;
+use App\Models\SimulatedEksperimen;
 use Carbon\Carbon;
 
 class ApplicationSimulationService
@@ -24,10 +24,10 @@ class ApplicationSimulationService
         $deviceId = $this->resolveSimulatorDeviceId(isset($state['device_id']) ? (int) $state['device_id'] : null);
 
         $mqttRows = $deviceId > 0
-            ? Eksperimen::query()->where('device_id', $deviceId)->where('protokol', 'MQTT')->count()
+            ? SimulatedEksperimen::query()->where('device_id', $deviceId)->where('protokol', 'MQTT')->count()
             : 0;
         $httpRows = $deviceId > 0
-            ? Eksperimen::query()->where('device_id', $deviceId)->where('protokol', 'HTTP')->count()
+            ? SimulatedEksperimen::query()->where('device_id', $deviceId)->where('protokol', 'HTTP')->count()
             : 0;
 
         return [
@@ -216,7 +216,7 @@ class ApplicationSimulationService
         }
 
         $timestampEsp = $now->copy()->subMilliseconds((int) round($latencyMs));
-        Eksperimen::query()->updateOrCreate(
+        SimulatedEksperimen::query()->updateOrCreate(
             [
                 'device_id' => (int) $state['device_id'],
                 'protokol' => strtoupper($protocol),
@@ -519,7 +519,7 @@ class ApplicationSimulationService
 
     private function deleteSimulatorRows(int $deviceId): void
     {
-        Eksperimen::query()->where('device_id', $deviceId)->delete();
+        SimulatedEksperimen::query()->where('device_id', $deviceId)->delete();
     }
 
     private function loadState(): array

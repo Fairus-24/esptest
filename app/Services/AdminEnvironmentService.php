@@ -152,6 +152,15 @@ class AdminEnvironmentService
                 'help' => 'Batas detik agar badge ESP32 tetap ON.',
             ],
             [
+                'key' => 'DASHBOARD_ESP32_DEBUG_FRESHNESS_SECONDS',
+                'label' => 'ESP32 Debug Freshness (sec)',
+                'config_path' => 'dashboard.connection.esp32_debug_freshness_seconds',
+                'type' => 'integer',
+                'group' => 'Analytics',
+                'placeholder' => '120',
+                'help' => 'Batas detik untuk mode ESP32 ON saat sumber status berasal dari MQTT debug heartbeat.',
+            ],
+            [
                 'key' => 'DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED',
                 'label' => 'Ignore Simulator When Stopped',
                 'config_path' => 'dashboard.connection.ignore_simulator_when_stopped',

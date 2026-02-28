@@ -8,6 +8,8 @@ return [
     'connection' => [
         'protocol_freshness_seconds' => (int) env('DASHBOARD_PROTOCOL_FRESHNESS_SECONDS', 30),
         'esp32_freshness_seconds' => (int) env('DASHBOARD_ESP32_FRESHNESS_SECONDS', 30),
+        // Heartbeat debug diberi jendela lebih longgar agar ESP32 tetap terdeteksi ON saat telemetry sensor sementara gagal kirim.
+        'esp32_debug_freshness_seconds' => (int) env('DASHBOARD_ESP32_DEBUG_FRESHNESS_SECONDS', 120),
         // Saat simulasi tidak berjalan, abaikan data device SIMULATOR-APP agar status merefleksikan perangkat fisik.
         'ignore_simulator_when_stopped' => filter_var(env('DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED', true), FILTER_VALIDATE_BOOL),
     ],

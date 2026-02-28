@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Device;
 use App\Models\Eksperimen;
+use App\Models\SimulatedEksperimen;
 use App\Services\ApplicationSimulationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -48,11 +49,11 @@ class SimulationFlowTest extends TestCase
 
         $this->assertGreaterThanOrEqual(
             1,
-            Eksperimen::query()->where('device_id', $simDeviceId)->where('protokol', 'HTTP')->count()
+            SimulatedEksperimen::query()->where('device_id', $simDeviceId)->where('protokol', 'HTTP')->count()
         );
         $this->assertGreaterThanOrEqual(
             1,
-            Eksperimen::query()->where('device_id', $simDeviceId)->where('protokol', 'MQTT')->count()
+            SimulatedEksperimen::query()->where('device_id', $simDeviceId)->where('protokol', 'MQTT')->count()
         );
 
         $this->post('/simulation/stop')
@@ -87,6 +88,41 @@ class SimulationFlowTest extends TestCase
 
         $afterTickCount = app(ApplicationSimulationService::class)->status()['tick_count'] ?? 0;
         $this->assertGreaterThan($beforeTickCount, $afterTickCount);
+    }
+
+    public function test_simulation_data_isolated_from_real_dashboard_source(): void
+    {
+        $this->post('/simulation/start', [
+            'interval_seconds' => 1,
+            'http_fail_rate' => 0,
+            'mqtt_fail_rate' => 0,
+            'network_profile' => 'normal',
+            'reset_before_start' => true,
+        ])->assertOk();
+
+        $this->post('/simulation/tick')->assertOk();
+
+        $simDeviceId = Device::query()->where('nama_device', 'SIMULATOR-APP')->value('id');
+        $this->assertNotNull($simDeviceId);
+
+        $this->assertDatabaseHas('simulated_eksperimens', [
+            'device_id' => $simDeviceId,
+            'protokol' => 'MQTT',
+        ]);
+        $this->assertDatabaseMissing('eksperimens', [
+            'device_id' => $simDeviceId,
+            'protokol' => 'MQTT',
+        ]);
+
+        $this->get('/?source=simulation')
+            ->assertOk()
+            ->assertSee('SOURCE SIMULATION')
+            ->assertSee('MQTT Connected');
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('SOURCE REAL')
+            ->assertDontSee('SOURCE SIMULATION');
     }
 
     public function test_simulation_reset_only_clears_simulator_device_rows(): void
@@ -138,11 +174,11 @@ class SimulationFlowTest extends TestCase
             'protokol' => 'HTTP',
             'packet_seq' => 1,
         ]);
-        $this->assertDatabaseMissing('eksperimens', [
+        $this->assertDatabaseMissing('simulated_eksperimens', [
             'device_id' => $simDeviceId,
             'protokol' => 'HTTP',
         ]);
-        $this->assertDatabaseMissing('eksperimens', [
+        $this->assertDatabaseMissing('simulated_eksperimens', [
             'device_id' => $simDeviceId,
             'protokol' => 'MQTT',
         ]);
@@ -178,7 +214,7 @@ class SimulationFlowTest extends TestCase
             'sensor_read_seq' => 51,
             'send_tick_ms' => 7070,
         ]);
-        Eksperimen::query()->create([
+        SimulatedEksperimen::query()->create([
             'device_id' => $simDevice->id,
             'protokol' => 'MQTT',
             'suhu' => 27.9,
@@ -219,7 +255,7 @@ class SimulationFlowTest extends TestCase
             'protokol' => 'HTTP',
             'packet_seq' => 11,
         ]);
-        $this->assertDatabaseMissing('eksperimens', [
+        $this->assertDatabaseMissing('simulated_eksperimens', [
             'device_id' => $simDevice->id,
             'protokol' => 'MQTT',
             'packet_seq' => 22,
