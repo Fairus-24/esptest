@@ -10,6 +10,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
+use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
 
@@ -122,30 +123,36 @@ class DashboardController extends Controller
         $connectionConfig = $this->resolveConnectionConfig();
         $simulationRunning = $this->isSimulationRunningFromStateFile();
         $excludeSimulatorStatusSource = $connectionConfig['ignore_simulator_when_stopped'] && !$simulationRunning;
-        $excludedDeviceIds = $excludeSimulatorStatusSource
-            ? Device::query()->where('nama_device', 'SIMULATOR-APP')->pluck('id')->map(static fn ($id): int => (int) $id)->all()
-            : [];
+        $excludedDeviceIds = $this->resolveExcludedDeviceIdsForStatus($excludeSimulatorStatusSource);
 
-        $latestMqtt = $this->fetchLatestProtocolRow('MQTT', $excludedDeviceIds);
-        $latestHttp = $this->fetchLatestProtocolRow('HTTP', $excludedDeviceIds);
-        $latestEsp32IncomingRow = $this->fetchLatestIncomingRow($excludedDeviceIds);
+        $latestMqttResolution = $this->resolveLatestProtocolRowForStatus('MQTT', $excludedDeviceIds);
+        $latestHttpResolution = $this->resolveLatestProtocolRowForStatus('HTTP', $excludedDeviceIds);
+        $latestIncomingResolution = $this->resolveLatestIncomingRowForStatus($excludedDeviceIds);
+        $latestMqtt = $latestMqttResolution['row'] ?? null;
+        $latestHttp = $latestHttpResolution['row'] ?? null;
+        $latestEsp32IncomingRow = $latestIncomingResolution['row'] ?? null;
+        $latestEsp32DebugHeartbeat = $this->resolveEsp32DebugHeartbeat($excludedDeviceIds, $now);
 
         $mqttConnectionStatus = $this->buildProtocolConnectionStatus(
             'MQTT',
             $latestMqtt,
             $now,
-            $connectionConfig['protocol_freshness_seconds']
+            $connectionConfig['protocol_freshness_seconds'],
+            $latestMqttResolution
         );
         $httpConnectionStatus = $this->buildProtocolConnectionStatus(
             'HTTP',
             $latestHttp,
             $now,
-            $connectionConfig['protocol_freshness_seconds']
+            $connectionConfig['protocol_freshness_seconds'],
+            $latestHttpResolution
         );
         $esp32ConnectionStatus = $this->buildEsp32ConnectionStatus(
             $latestEsp32IncomingRow,
             $now,
-            $connectionConfig['esp32_freshness_seconds']
+            $connectionConfig['esp32_freshness_seconds'],
+            $latestEsp32DebugHeartbeat,
+            $latestIncomingResolution
         );
 
         $mqttConnected = (bool) ($mqttConnectionStatus['connected'] ?? false);
@@ -288,6 +295,22 @@ class DashboardController extends Controller
 
         $fieldCompleteness = [];
         $dataWarnings = [];
+
+        if (($latestMqttResolution['filtered_fallback'] ?? false) === true) {
+            $deviceId = $latestMqttResolution['filtered_device_id'] ?? null;
+            $deviceHint = is_int($deviceId) && $deviceId > 0 ? " (device_id {$deviceId})" : '';
+            $dataWarnings[] = "MQTT telemetry terdeteksi{$deviceHint}, tetapi saat ini ditandai sebagai sumber simulator yang sedang diabaikan. Status ditampilkan sebagai FILTERED.";
+        }
+        if (($latestHttpResolution['filtered_fallback'] ?? false) === true) {
+            $deviceId = $latestHttpResolution['filtered_device_id'] ?? null;
+            $deviceHint = is_int($deviceId) && $deviceId > 0 ? " (device_id {$deviceId})" : '';
+            $dataWarnings[] = "HTTP telemetry terdeteksi{$deviceHint}, tetapi saat ini ditandai sebagai sumber simulator yang sedang diabaikan. Status ditampilkan sebagai FILTERED.";
+        }
+        if (($latestIncomingResolution['filtered_fallback'] ?? false) === true && !($latestEsp32DebugHeartbeat['available'] ?? false)) {
+            $deviceId = $latestIncomingResolution['filtered_device_id'] ?? null;
+            $deviceHint = is_int($deviceId) && $deviceId > 0 ? " (device_id {$deviceId})" : '';
+            $dataWarnings[] = "ESP32 ON/OFF memakai mode konservatif: telemetry terbaru hanya berasal dari sumber simulator{$deviceHint} yang diabaikan.";
+        }
 
         foreach ($protocolDataMap as $protocol => $protocolData) {
             $qualityScope = $protocolData->whereNotNull('packet_seq');
@@ -608,6 +631,119 @@ class DashboardController extends Controller
             ->first();
     }
 
+    private function resolveEsp32DebugHeartbeat(array $excludedDeviceIds, CarbonInterface $now): array
+    {
+        $heartbeatPath = storage_path('app/esp32_debug_heartbeat.json');
+        if (!is_file($heartbeatPath)) {
+            return [
+                'available' => false,
+                'timestamp' => null,
+                'age_seconds' => null,
+                'device_id' => null,
+                'source_topic' => null,
+                'last_message' => null,
+            ];
+        }
+
+        $raw = @file_get_contents($heartbeatPath);
+        if (!is_string($raw) || trim($raw) === '') {
+            return [
+                'available' => false,
+                'timestamp' => null,
+                'age_seconds' => null,
+                'device_id' => null,
+                'source_topic' => null,
+                'last_message' => null,
+            ];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [
+                'available' => false,
+                'timestamp' => null,
+                'age_seconds' => null,
+                'device_id' => null,
+                'source_topic' => null,
+                'last_message' => null,
+            ];
+        }
+
+        $latestTimestamp = null;
+        $latestDeviceId = null;
+        $latestSourceTopic = null;
+        $latestMessage = null;
+
+        $devices = isset($decoded['devices']) && is_array($decoded['devices'])
+            ? $decoded['devices']
+            : [];
+
+        foreach ($devices as $devicePayload) {
+            if (!is_array($devicePayload)) {
+                continue;
+            }
+
+            $deviceId = isset($devicePayload['device_id']) && is_numeric($devicePayload['device_id'])
+                ? (int) $devicePayload['device_id']
+                : null;
+
+            if ($deviceId !== null && in_array($deviceId, $excludedDeviceIds, true)) {
+                continue;
+            }
+
+            $timestampRaw = isset($devicePayload['last_seen_utc']) ? (string) $devicePayload['last_seen_utc'] : '';
+            if ($timestampRaw === '') {
+                continue;
+            }
+
+            try {
+                $timestamp = Carbon::parse($timestampRaw, 'UTC');
+            } catch (Throwable) {
+                continue;
+            }
+
+            if ($latestTimestamp === null || $timestamp->greaterThan($latestTimestamp)) {
+                $latestTimestamp = $timestamp;
+                $latestDeviceId = $deviceId;
+                $latestSourceTopic = isset($devicePayload['source_topic']) ? (string) $devicePayload['source_topic'] : null;
+                $latestMessage = isset($devicePayload['last_message']) ? (string) $devicePayload['last_message'] : null;
+            }
+        }
+
+        if ($latestTimestamp === null && empty($excludedDeviceIds)) {
+            $globalLastSeen = isset($decoded['last_seen_utc']) ? (string) $decoded['last_seen_utc'] : '';
+            if ($globalLastSeen !== '') {
+                try {
+                    $latestTimestamp = Carbon::parse($globalLastSeen, 'UTC');
+                    $latestSourceTopic = isset($decoded['source_topic']) ? (string) $decoded['source_topic'] : null;
+                    $latestMessage = null;
+                } catch (Throwable) {
+                    $latestTimestamp = null;
+                }
+            }
+        }
+
+        if ($latestTimestamp === null) {
+            return [
+                'available' => false,
+                'timestamp' => null,
+                'age_seconds' => null,
+                'device_id' => null,
+                'source_topic' => null,
+                'last_message' => null,
+            ];
+        }
+
+        return [
+            'available' => true,
+            'timestamp' => $latestTimestamp,
+            'age_seconds' => $this->calculateAgeSeconds($latestTimestamp, $now),
+            'device_id' => $latestDeviceId,
+            'source_topic' => $latestSourceTopic,
+            'last_message' => $latestMessage,
+        ];
+    }
+
     private function applyExcludedDeviceFilter(\Illuminate\Database\Eloquent\Builder $query, array $excludedDeviceIds): \Illuminate\Database\Eloquent\Builder
     {
         if (!empty($excludedDeviceIds)) {
@@ -691,26 +827,65 @@ class DashboardController extends Controller
     private function buildEsp32ConnectionStatus(
         ?Eksperimen $latestIncomingRow,
         CarbonInterface $now,
-        int $freshnessSeconds
+        int $freshnessSeconds,
+        array $debugHeartbeat = []
     ): array {
         $freshnessSeconds = max(5, $freshnessSeconds);
-        $timestamp = $this->resolveIncomingTimestamp($latestIncomingRow);
-        $ageSeconds = $this->calculateAgeSeconds($timestamp, $now);
-        $connected = $timestamp !== null && $ageSeconds !== null && $ageSeconds <= $freshnessSeconds;
-        $detail = $timestamp === null
-            ? 'Belum ada data telemetry dari perangkat.'
-            : ($connected
-                ? 'Perangkat terdeteksi aktif.'
-                : "Perangkat tidak mengirim data baru lebih dari {$freshnessSeconds} detik.");
+        $telemetryTimestamp = $this->resolveIncomingTimestamp($latestIncomingRow);
+        $telemetryAgeSeconds = $this->calculateAgeSeconds($telemetryTimestamp, $now);
+
+        $heartbeatTimestamp = ($debugHeartbeat['timestamp'] ?? null) instanceof CarbonInterface
+            ? $debugHeartbeat['timestamp']
+            : null;
+        $heartbeatAgeSeconds = $this->calculateAgeSeconds($heartbeatTimestamp, $now);
+        $heartbeatDeviceId = isset($debugHeartbeat['device_id']) && is_numeric($debugHeartbeat['device_id'])
+            ? (int) $debugHeartbeat['device_id']
+            : null;
+
+        $effectiveTimestamp = $telemetryTimestamp;
+        $source = 'telemetry';
+        if ($heartbeatTimestamp !== null && ($effectiveTimestamp === null || $heartbeatTimestamp->greaterThan($effectiveTimestamp))) {
+            $effectiveTimestamp = $heartbeatTimestamp;
+            $source = 'debug_heartbeat';
+        }
+
+        $ageSeconds = $this->calculateAgeSeconds($effectiveTimestamp, $now);
+        $connected = $effectiveTimestamp !== null && $ageSeconds !== null && $ageSeconds <= $freshnessSeconds;
+        $lastSeenWib = $this->formatTimestampToWib($effectiveTimestamp);
+
+        if ($effectiveTimestamp === null) {
+            $detail = 'Belum ada telemetry maupun heartbeat debug dari perangkat.';
+        } elseif ($connected && $source === 'debug_heartbeat') {
+            $deviceHint = $heartbeatDeviceId !== null ? " device #{$heartbeatDeviceId}" : '';
+            if ($telemetryTimestamp === null) {
+                $detail = "Perangkat aktif via MQTT debug heartbeat{$deviceHint}, tetapi telemetry sensor belum masuk.";
+            } elseif ($telemetryAgeSeconds !== null && $telemetryAgeSeconds > $freshnessSeconds) {
+                $detail = "Perangkat aktif via debug heartbeat{$deviceHint}, namun telemetry terakhir {$telemetryAgeSeconds} detik lalu (indikasi sensor/bacaan gagal).";
+            } else {
+                $detail = "Perangkat aktif via telemetry dan debug heartbeat{$deviceHint}.";
+            }
+        } elseif ($connected) {
+            $detail = 'Perangkat terdeteksi aktif dari telemetry.';
+        } elseif ($source === 'debug_heartbeat') {
+            $detail = "Heartbeat debug terakhir {$ageSeconds} detik lalu. Perangkat tidak lagi realtime.";
+        } else {
+            $detail = "Perangkat tidak mengirim data baru lebih dari {$freshnessSeconds} detik.";
+        }
 
         return [
             'connected' => $connected,
             'label' => $connected ? 'ON' : 'OFF',
             'detail' => $detail,
             'badge_class' => $connected ? 'is-online' : 'is-offline',
+            'source' => $source,
             'freshness_seconds' => $freshnessSeconds,
             'age_seconds' => $ageSeconds,
-            'last_seen_wib' => $this->formatTimestampToWib($timestamp),
+            'last_seen_wib' => $lastSeenWib,
+            'telemetry_last_seen_wib' => $this->formatTimestampToWib($telemetryTimestamp),
+            'telemetry_age_seconds' => $telemetryAgeSeconds,
+            'debug_last_seen_wib' => $this->formatTimestampToWib($heartbeatTimestamp),
+            'debug_age_seconds' => $heartbeatAgeSeconds,
+            'debug_device_id' => $heartbeatDeviceId,
             'latest_id' => $latestIncomingRow ? (int) $latestIncomingRow->id : null,
         ];
     }
@@ -931,11 +1106,17 @@ class DashboardController extends Controller
             'esp32ConnectionStatus' => [
                 'connected' => false,
                 'label' => 'OFF',
-                'detail' => 'Belum ada data telemetry dari perangkat.',
+                'detail' => 'Belum ada telemetry maupun heartbeat debug dari perangkat.',
                 'badge_class' => 'is-offline',
+                'source' => 'none',
                 'freshness_seconds' => 30,
                 'age_seconds' => null,
                 'last_seen_wib' => '-',
+                'telemetry_last_seen_wib' => '-',
+                'telemetry_age_seconds' => null,
+                'debug_last_seen_wib' => '-',
+                'debug_age_seconds' => null,
+                'debug_device_id' => null,
                 'latest_id' => null,
             ],
             'connectionConfig' => [

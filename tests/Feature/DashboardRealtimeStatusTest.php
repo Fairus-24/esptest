@@ -13,13 +13,16 @@ class DashboardRealtimeStatusTest extends TestCase
     use RefreshDatabase;
 
     private string $simulationStatePath;
+    private string $heartbeatPath;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->simulationStatePath = storage_path('app/simulation_state.json');
+        $this->heartbeatPath = storage_path('app/esp32_debug_heartbeat.json');
         @unlink($this->simulationStatePath);
+        @unlink($this->heartbeatPath);
 
         config()->set('dashboard.connection.protocol_freshness_seconds', 30);
         config()->set('dashboard.connection.esp32_freshness_seconds', 30);
@@ -29,6 +32,7 @@ class DashboardRealtimeStatusTest extends TestCase
     protected function tearDown(): void
     {
         @unlink($this->simulationStatePath);
+        @unlink($this->heartbeatPath);
         parent::tearDown();
     }
 
@@ -103,6 +107,33 @@ class DashboardRealtimeStatusTest extends TestCase
             ->assertSee('HTTP Connected');
     }
 
+    public function test_dashboard_marks_esp32_on_from_fresh_debug_heartbeat_even_without_fresh_telemetry(): void
+    {
+        $device = $this->createDevice('ESP32-REAL-HEARTBEAT');
+        $this->insertTelemetry($device, 'MQTT', now()->subSeconds(120), 9001);
+        $this->insertTelemetry($device, 'HTTP', now()->subSeconds(120), 9002);
+
+        $this->writeHeartbeatFile([
+            'updated_at_utc' => now()->toIso8601String(),
+            'last_seen_utc' => now()->toIso8601String(),
+            'source_topic' => 'iot/esp32/debug',
+            'devices' => [
+                (string) $device->id => [
+                    'device_id' => $device->id,
+                    'last_seen_utc' => now()->subSeconds(4)->toIso8601String(),
+                    'source_topic' => 'iot/esp32/debug',
+                    'last_message' => 't=123 level=WARN dev=' . $device->id . ' msg=Sensor checksum',
+                ],
+            ],
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('ESP32 ON')
+            ->assertSee('MQTT Disconnected')
+            ->assertSee('HTTP Disconnected');
+    }
+
     private function createDevice(string $name): Device
     {
         return Device::query()->create([
@@ -149,5 +180,17 @@ class DashboardRealtimeStatusTest extends TestCase
             'interval_seconds' => 5,
         ], JSON_PRETTY_PRINT));
     }
-}
 
+    private function writeHeartbeatFile(array $payload): void
+    {
+        $dir = dirname($this->heartbeatPath);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        file_put_contents(
+            $this->heartbeatPath,
+            json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+        );
+    }
+}

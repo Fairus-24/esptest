@@ -8,6 +8,7 @@ return [
     ))),
     'port' => (int) env('MQTT_PORT', 1883),
     'topic' => env('MQTT_TOPIC', 'iot/esp32/suhu'),
+    'debug_topic' => env('MQTT_DEBUG_TOPIC', 'iot/esp32/debug'),
     'client_id' => env('MQTT_CLIENT_ID', 'laravel-mqtt-worker'),
     'username' => env('MQTT_USERNAME', 'esp32'),
     'password' => env('MQTT_PASSWORD', 'esp32'),

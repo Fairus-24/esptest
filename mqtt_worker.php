@@ -54,6 +54,7 @@ if (!is_array($fallbackHosts)) {
 }
 $port = (int) config('mqtt.port', 1883);
 $topic = (string) config('mqtt.topic', 'iot/esp32/suhu');
+$debugTopic = trim((string) config('mqtt.debug_topic', 'iot/esp32/debug'));
 $clientIdBase = (string) config('mqtt.client_id', 'laravel-mqtt-worker');
 $username = (string) config('mqtt.username', 'esp32');
 $password = (string) config('mqtt.password', 'esp32');
@@ -96,6 +97,64 @@ $settings = (new ConnectionSettings())
     ->setKeepAliveInterval($keepAlive);
 
 $knownDeviceIds = [];
+$heartbeatPath = storage_path('app/esp32_debug_heartbeat.json');
+
+$updateHeartbeatFromDebug = static function (string $incomingTopic, string $message) use ($heartbeatPath, $log): void {
+    $now = Carbon::now('UTC');
+    $deviceId = null;
+
+    if (preg_match('/\bdev=(\d+)\b/i', $message, $matches) === 1) {
+        $deviceId = (int) $matches[1];
+    }
+
+    if ($deviceId === null) {
+        $decoded = json_decode($message, true);
+        if (is_array($decoded) && isset($decoded['device_id']) && is_numeric($decoded['device_id'])) {
+            $deviceId = (int) $decoded['device_id'];
+        }
+    }
+
+    if (!is_dir(dirname($heartbeatPath))) {
+        @mkdir(dirname($heartbeatPath), 0775, true);
+    }
+
+    $state = [
+        'updated_at_utc' => $now->toIso8601String(),
+        'last_seen_utc' => $now->toIso8601String(),
+        'source_topic' => $incomingTopic,
+        'devices' => [],
+    ];
+
+    if (is_file($heartbeatPath)) {
+        $raw = @file_get_contents($heartbeatPath);
+        $parsed = is_string($raw) ? json_decode($raw, true) : null;
+        if (is_array($parsed)) {
+            $state = array_merge($state, $parsed);
+            if (!isset($state['devices']) || !is_array($state['devices'])) {
+                $state['devices'] = [];
+            }
+        }
+    }
+
+    $state['updated_at_utc'] = $now->toIso8601String();
+    $state['last_seen_utc'] = $now->toIso8601String();
+    $state['source_topic'] = $incomingTopic;
+
+    if ($deviceId !== null && $deviceId > 0) {
+        $deviceKey = (string) $deviceId;
+        $state['devices'][$deviceKey] = [
+            'device_id' => $deviceId,
+            'last_seen_utc' => $now->toIso8601String(),
+            'source_topic' => $incomingTopic,
+            'last_message' => substr($message, 0, 280),
+        ];
+    }
+
+    $encoded = json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    if (!is_string($encoded) || @file_put_contents($heartbeatPath, $encoded, LOCK_EX) === false) {
+        $log('[WARN] Gagal memperbarui file heartbeat debug ESP32.');
+    }
+};
 
 $savePayload = static function (string $message) use (&$knownDeviceIds, $log): void {
     $data = json_decode($message, true);
@@ -243,7 +302,7 @@ $savePayload = static function (string $message) use (&$knownDeviceIds, $log): v
     $log("[DB] MQTT data saved. device_id={$deviceId}, packet_seq={$packetSeq}, suhu={$suhu}, kelembapan={$kelembapan}, daya={$daya}, latency_ms={$latencyMs}, rssi_dbm={$rssiDbm}, tx_duration_ms={$txDurationMs}, payload_bytes={$payloadBytes}, sensor_age_ms=" . ($sensorAgeMs ?? '-') . ", sensor_read_seq=" . ($sensorReadSeq ?? '-') . ", send_tick_ms=" . ($sendTickMs ?? '-'));
 };
 
-$log('[MQTT] Worker starting. Broker candidates=' . implode(', ', $brokerHosts) . ", Port={$port}, Topic={$topic}");
+$log('[MQTT] Worker starting. Broker candidates=' . implode(', ', $brokerHosts) . ", Port={$port}, Topic={$topic}, DebugTopic=" . ($debugTopic !== '' ? $debugTopic : '-'));
 
 while (true) {
     $mqtt = null;
@@ -264,6 +323,16 @@ while (true) {
                 $log('[ERROR] Gagal simpan payload: ' . $e->getMessage());
             }
         }, $qos);
+
+        if ($debugTopic !== '') {
+            $mqtt->subscribe($debugTopic, static function (string $incomingTopic, string $message) use ($updateHeartbeatFromDebug): void {
+                try {
+                    $updateHeartbeatFromDebug($incomingTopic, $message);
+                } catch (\Throwable) {
+                    // Ignore debug heartbeat parsing errors to keep worker telemetry path stable.
+                }
+            }, $qos);
+        }
 
         $mqtt->loop(true);
     } catch (\Throwable $e) {

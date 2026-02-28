@@ -183,6 +183,7 @@ The project has been updated with the following behavior:
 124. ESP32 firmware now supports remote runtime debug stream over MQTT topic (`iot/esp32/debug`) with buffered queue + throttled flush, so monitoring can continue without USB serial cable.
 125. Header subtitle + Realtime Link Monitor connection badges now use strict freshness evaluation (`Connected` / `Disconnected` / `Not Found`) so stale telemetry no longer appears as active realtime traffic.
 126. ESP32 ON/OFF badge now follows latest telemetry freshness with optional simulator exclusion when simulation is stopped, preventing false `ON` from old/non-real device rows.
+127. ESP32 ON/OFF now also considers MQTT debug heartbeat (`MQTT_DEBUG_TOPIC`) so board can remain `ON` even when sensor checksum blocks telemetry row insert.
 
 ## Tech Stack
 
@@ -367,6 +368,7 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | `MQTT_FALLBACK_HOSTS` | Recommended | `localhost,127.0.0.1` | Local fallback targets |
 | `MQTT_PORT` | Yes | `1883` | Mosquitto listener port |
 | `MQTT_TOPIC` | Yes | `iot/esp32/suhu` | Must match firmware topic |
+| `MQTT_DEBUG_TOPIC` | Recommended | `iot/esp32/debug` | Topic heartbeat debug ESP32 (used for ESP32 ON/OFF fallback) |
 | `MQTT_CLIENT_ID` | Yes | `laravel-mqtt-worker` | Base client ID; worker appends PID/hash |
 | `MQTT_USERNAME` | Yes | `esp32` | Broker credential |
 | `MQTT_PASSWORD` | Yes | `esp32` | Broker credential |
@@ -462,6 +464,7 @@ MQTT_HOST=192.168.0.104
 MQTT_FALLBACK_HOSTS=localhost,127.0.0.1
 MQTT_PORT=1883
 MQTT_TOPIC=iot/esp32/suhu
+MQTT_DEBUG_TOPIC=iot/esp32/debug
 MQTT_CLIENT_ID=laravel-mqtt-worker
 MQTT_USERNAME=esp32
 MQTT_PASSWORD=esp32
@@ -1607,6 +1610,19 @@ GROUP BY protokol;
   - DHT data pin wiring to the configured GPIO (`DHTPIN`).
   - Shared GND between ESP32 and sensor.
   - Pull-up resistor (typically 10k) on data line if your DHT module does not include one.
+
+### ESP32 badge shows `OFF` while board is still powered on
+
+- In current build, ESP32 status can use two sources:
+  - fresh telemetry row (`eksperimens`)
+  - fresh MQTT debug heartbeat from `MQTT_DEBUG_TOPIC` (default `iot/esp32/debug`)
+- Ensure worker subscribes debug topic and updates heartbeat file:
+  - `storage/app/esp32_debug_heartbeat.json`
+- If status still stale after deploy:
+  - verify `.env` contains `MQTT_DEBUG_TOPIC=iot/esp32/debug`
+  - restart worker process so new config/subscription is loaded
+  - run `php artisan optimize:clear`
+- MQTT/HTTP protocol badges remain based on telemetry rows only (heartbeat does not force protocol `Connected`).
 
 ### ESP32 repeatedly logs `Sensor read failed (TIMEOUT)`
 
