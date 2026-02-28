@@ -75,7 +75,7 @@ class DashboardRealtimeStatusTest extends TestCase
             ->assertSee('HTTP Connected');
     }
 
-    public function test_dashboard_ignores_simulator_data_when_simulation_is_stopped(): void
+    public function test_dashboard_marks_filtered_when_only_simulator_data_exists_and_simulation_is_stopped(): void
     {
         $simDevice = $this->createDevice('SIMULATOR-APP');
         $freshTimestamp = now()->subSeconds(4);
@@ -87,8 +87,8 @@ class DashboardRealtimeStatusTest extends TestCase
         $this->get('/')
             ->assertOk()
             ->assertSee('ESP32 OFF')
-            ->assertSee('MQTT Not Found')
-            ->assertSee('HTTP Not Found');
+            ->assertSee('MQTT Filtered')
+            ->assertSee('HTTP Filtered');
     }
 
     public function test_dashboard_includes_simulator_data_when_simulation_is_running(): void

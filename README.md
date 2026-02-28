@@ -184,6 +184,7 @@ The project has been updated with the following behavior:
 125. Header subtitle + Realtime Link Monitor connection badges now use strict freshness evaluation (`Connected` / `Disconnected` / `Not Found`) so stale telemetry no longer appears as active realtime traffic.
 126. ESP32 ON/OFF badge now follows latest telemetry freshness with optional simulator exclusion when simulation is stopped, preventing false `ON` from old/non-real device rows.
 127. ESP32 ON/OFF now also considers MQTT debug heartbeat (`MQTT_DEBUG_TOPIC`) so board can remain `ON` even when sensor checksum blocks telemetry row insert.
+128. When simulator exclusion is active and latest protocol row only comes from simulator source, badges now show `Filtered` (instead of misleading `Not Found`) with explicit warning detail.
 
 ## Tech Stack
 
@@ -1493,6 +1494,18 @@ GROUP BY protokol;
   - `php artisan optimize:clear`
 - Verify latest timestamps in DB really stop moving:
   - `SELECT protokol, MAX(timestamp_server) FROM eksperimens GROUP BY protokol;`
+
+### Header shows `Filtered` even though protocol is sending
+
+- `Filtered` means latest row is detected but belongs to simulator source currently excluded by:
+  - `DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED=true`
+  - simulation state `running=false`
+- Check simulator state and device mapping:
+  - `cat storage/app/simulation_state.json`
+  - verify `device_id` in state is not your physical ESP32 device id.
+- If you intentionally want simulator data to affect status badges, set:
+  - `DASHBOARD_IGNORE_SIMULATOR_WHEN_STOPPED=false`
+  - then run `php artisan optimize:clear`.
 
 ### Remote debug topic (`iot/esp32/debug`) is empty
 

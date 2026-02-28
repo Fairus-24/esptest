@@ -589,22 +589,133 @@ class DashboardController extends Controller
 
     private function isSimulationRunningFromStateFile(): bool
     {
-        $stateFile = storage_path('app/simulation_state.json');
-        if (!is_file($stateFile)) {
-            return false;
-        }
-
-        $raw = @file_get_contents($stateFile);
-        if (!is_string($raw) || trim($raw) === '') {
-            return false;
-        }
-
-        $decoded = json_decode($raw, true);
+        $decoded = $this->readSimulationStateFromFile();
         if (!is_array($decoded)) {
             return false;
         }
 
         return (bool) ($decoded['running'] ?? false);
+    }
+
+    private function readSimulationStateFromFile(): ?array
+    {
+        $stateFile = storage_path('app/simulation_state.json');
+        if (!is_file($stateFile)) {
+            return null;
+        }
+
+        $raw = @file_get_contents($stateFile);
+        if (!is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        return $decoded;
+    }
+
+    private function resolveExcludedDeviceIdsForStatus(bool $excludeSimulatorStatusSource): array
+    {
+        if (!$excludeSimulatorStatusSource) {
+            return [];
+        }
+
+        $decoded = $this->readSimulationStateFromFile();
+        if (is_array($decoded)) {
+            $simulationDeviceId = isset($decoded['device_id']) && is_numeric($decoded['device_id'])
+                ? (int) $decoded['device_id']
+                : 0;
+            if ($simulationDeviceId > 0) {
+                return [$simulationDeviceId];
+            }
+        }
+
+        return Device::query()
+            ->where('nama_device', 'SIMULATOR-APP')
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->values()
+            ->all();
+    }
+
+    private function resolveLatestProtocolRowForStatus(string $protocol, array $excludedDeviceIds): array
+    {
+        $row = $this->fetchLatestProtocolRow($protocol, $excludedDeviceIds);
+        if ($row !== null) {
+            return [
+                'row' => $row,
+                'filtered_fallback' => false,
+                'filtered_device_id' => null,
+            ];
+        }
+
+        if ($excludedDeviceIds === []) {
+            return [
+                'row' => null,
+                'filtered_fallback' => false,
+                'filtered_device_id' => null,
+            ];
+        }
+
+        $fallbackRow = $this->fetchLatestProtocolRow($protocol, []);
+        if ($fallbackRow === null) {
+            return [
+                'row' => null,
+                'filtered_fallback' => false,
+                'filtered_device_id' => null,
+            ];
+        }
+
+        $fallbackDeviceId = is_numeric($fallbackRow->device_id) ? (int) $fallbackRow->device_id : null;
+        $isFilteredFallback = $fallbackDeviceId !== null && in_array($fallbackDeviceId, $excludedDeviceIds, true);
+
+        return [
+            'row' => $fallbackRow,
+            'filtered_fallback' => $isFilteredFallback,
+            'filtered_device_id' => $isFilteredFallback ? $fallbackDeviceId : null,
+        ];
+    }
+
+    private function resolveLatestIncomingRowForStatus(array $excludedDeviceIds): array
+    {
+        $row = $this->fetchLatestIncomingRow($excludedDeviceIds);
+        if ($row !== null) {
+            return [
+                'row' => $row,
+                'filtered_fallback' => false,
+                'filtered_device_id' => null,
+            ];
+        }
+
+        if ($excludedDeviceIds === []) {
+            return [
+                'row' => null,
+                'filtered_fallback' => false,
+                'filtered_device_id' => null,
+            ];
+        }
+
+        $fallbackRow = $this->fetchLatestIncomingRow([]);
+        if ($fallbackRow === null) {
+            return [
+                'row' => null,
+                'filtered_fallback' => false,
+                'filtered_device_id' => null,
+            ];
+        }
+
+        $fallbackDeviceId = is_numeric($fallbackRow->device_id) ? (int) $fallbackRow->device_id : null;
+        $isFilteredFallback = $fallbackDeviceId !== null && in_array($fallbackDeviceId, $excludedDeviceIds, true);
+
+        return [
+            'row' => $fallbackRow,
+            'filtered_fallback' => $isFilteredFallback,
+            'filtered_device_id' => $isFilteredFallback ? $fallbackDeviceId : null,
+        ];
     }
 
     private function fetchLatestProtocolRow(string $protocol, array $excludedDeviceIds = []): ?Eksperimen
@@ -759,9 +870,17 @@ class DashboardController extends Controller
             return null;
         }
 
-        $timestamp = $row->timestamp_server ?? $row->created_at;
+        $timestamp = $row->timestamp_server ?? $row->created_at ?? $row->updated_at;
         if ($timestamp instanceof CarbonInterface) {
             return $timestamp;
+        }
+
+        if (is_string($timestamp) && trim($timestamp) !== '') {
+            try {
+                return Carbon::parse($timestamp, 'UTC');
+            } catch (Throwable) {
+                return null;
+            }
         }
 
         return null;
@@ -794,20 +913,43 @@ class DashboardController extends Controller
         string $protocol,
         ?Eksperimen $latestRow,
         CarbonInterface $now,
-        int $freshnessSeconds
+        int $freshnessSeconds,
+        array $sourceContext = []
     ): array {
         $freshnessSeconds = max(5, $freshnessSeconds);
         $timestamp = $this->resolveIncomingTimestamp($latestRow);
         $ageSeconds = $this->calculateAgeSeconds($timestamp, $now);
-        $notFound = $latestRow === null || $timestamp === null;
-        $connected = !$notFound && $ageSeconds !== null && $ageSeconds <= $freshnessSeconds;
-        $state = $notFound ? 'not_found' : ($connected ? 'connected' : 'stale');
-        $label = $notFound ? 'Not Found' : ($connected ? 'Connected' : 'Disconnected');
-        $detail = $notFound
-            ? 'Tidak ada data terkirim.'
-            : ($connected
-                ? 'Data baru masih dalam batas realtime.'
-                : "Tidak ada data baru lebih dari {$freshnessSeconds} detik.");
+        $hasRow = $latestRow !== null;
+        $timestampMissing = $hasRow && $timestamp === null;
+        $isFilteredFallback = (bool) ($sourceContext['filtered_fallback'] ?? false);
+        $filteredDeviceId = isset($sourceContext['filtered_device_id']) && is_numeric($sourceContext['filtered_device_id'])
+            ? (int) $sourceContext['filtered_device_id']
+            : null;
+
+        if ($isFilteredFallback) {
+            $state = 'filtered';
+            $label = 'Filtered';
+            $connected = false;
+            $deviceHint = $filteredDeviceId !== null && $filteredDeviceId > 0 ? " device #{$filteredDeviceId}" : '';
+            $detail = "Data protocol terbaru berasal dari sumber simulator{$deviceHint} yang sedang dikecualikan.";
+        } elseif (!$hasRow) {
+            $state = 'not_found';
+            $label = 'Not Found';
+            $connected = false;
+            $detail = 'Tidak ada data terkirim.';
+        } else {
+            $connected = !$timestampMissing && $ageSeconds !== null && $ageSeconds <= $freshnessSeconds;
+            $state = $connected ? 'connected' : 'stale';
+            $label = $connected ? 'Connected' : 'Disconnected';
+
+            if ($connected) {
+                $detail = 'Data baru masih dalam batas realtime.';
+            } elseif ($timestampMissing) {
+                $detail = 'Data ditemukan, tetapi timestamp telemetry tidak valid/kosong.';
+            } else {
+                $detail = "Tidak ada data baru lebih dari {$freshnessSeconds} detik.";
+            }
+        }
 
         return [
             'protocol' => strtoupper($protocol),
@@ -820,6 +962,8 @@ class DashboardController extends Controller
             'freshness_seconds' => $freshnessSeconds,
             'age_seconds' => $ageSeconds,
             'last_seen_wib' => $this->formatTimestampToWib($timestamp),
+            'filtered_fallback' => $isFilteredFallback,
+            'filtered_device_id' => $filteredDeviceId,
             'latest_id' => $latestRow ? (int) $latestRow->id : null,
         ];
     }
@@ -828,11 +972,16 @@ class DashboardController extends Controller
         ?Eksperimen $latestIncomingRow,
         CarbonInterface $now,
         int $freshnessSeconds,
-        array $debugHeartbeat = []
+        array $debugHeartbeat = [],
+        array $telemetryContext = []
     ): array {
         $freshnessSeconds = max(5, $freshnessSeconds);
         $telemetryTimestamp = $this->resolveIncomingTimestamp($latestIncomingRow);
         $telemetryAgeSeconds = $this->calculateAgeSeconds($telemetryTimestamp, $now);
+        $telemetryFilteredFallback = (bool) ($telemetryContext['filtered_fallback'] ?? false);
+        $telemetryFilteredDeviceId = isset($telemetryContext['filtered_device_id']) && is_numeric($telemetryContext['filtered_device_id'])
+            ? (int) $telemetryContext['filtered_device_id']
+            : null;
 
         $heartbeatTimestamp = ($debugHeartbeat['timestamp'] ?? null) instanceof CarbonInterface
             ? $debugHeartbeat['timestamp']
@@ -851,9 +1000,21 @@ class DashboardController extends Controller
 
         $ageSeconds = $this->calculateAgeSeconds($effectiveTimestamp, $now);
         $connected = $effectiveTimestamp !== null && $ageSeconds !== null && $ageSeconds <= $freshnessSeconds;
+        if ($source === 'telemetry' && $telemetryFilteredFallback) {
+            $connected = false;
+        }
         $lastSeenWib = $this->formatTimestampToWib($effectiveTimestamp);
 
-        if ($effectiveTimestamp === null) {
+        if ($source === 'telemetry' && $telemetryFilteredFallback) {
+            $deviceHint = $telemetryFilteredDeviceId !== null ? " device #{$telemetryFilteredDeviceId}" : '';
+            if ($telemetryTimestamp === null) {
+                $detail = "Belum ada telemetry perangkat fisik. Data terbaru berasal dari sumber simulator{$deviceHint} yang sedang dikecualikan.";
+            } elseif ($telemetryAgeSeconds !== null) {
+                $detail = "Telemetry terbaru {$telemetryAgeSeconds} detik lalu berasal dari sumber simulator{$deviceHint} yang sedang dikecualikan.";
+            } else {
+                $detail = "Telemetry terbaru berasal dari sumber simulator{$deviceHint} yang sedang dikecualikan.";
+            }
+        } elseif ($effectiveTimestamp === null) {
             $detail = 'Belum ada telemetry maupun heartbeat debug dari perangkat.';
         } elseif ($connected && $source === 'debug_heartbeat') {
             $deviceHint = $heartbeatDeviceId !== null ? " device #{$heartbeatDeviceId}" : '';
@@ -886,6 +1047,8 @@ class DashboardController extends Controller
             'debug_last_seen_wib' => $this->formatTimestampToWib($heartbeatTimestamp),
             'debug_age_seconds' => $heartbeatAgeSeconds,
             'debug_device_id' => $heartbeatDeviceId,
+            'filtered_fallback' => $telemetryFilteredFallback,
+            'filtered_device_id' => $telemetryFilteredDeviceId,
             'latest_id' => $latestIncomingRow ? (int) $latestIncomingRow->id : null,
         ];
     }
