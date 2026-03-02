@@ -3000,7 +3000,7 @@
                 @if(count($latencyChartData['labels']) > 0)
                     <div class="chart-toolbar">
                         <div class="chart-toolbar-info" id="latencyToolbarInfo">
-                            Total data point: {{ $formatChartTotalCount($latencyChartData['total_points']) }} | Default(min): {{ min(10, $latencyChartData['total_points']) }} data | View saat ini: {{ min(10, $latencyChartData['total_points']) }} data
+                            Total data point: {{ $formatChartTotalCount($latencyChartData['total_records'] ?? $latencyChartData['total_points']) }} | Default(min): {{ min(10, $latencyChartData['total_points']) }} data | View saat ini: {{ min(10, $latencyChartData['total_points']) }} data
                         </div>
                         <div class="zoom-controls">
                             <button type="button" id="latencyZoomOut" class="zoom-btn" aria-label="Zoom Out">-</button>
@@ -3030,7 +3030,7 @@
                 @if(count($powerChartData['labels']) > 0)
                     <div class="chart-toolbar">
                         <div class="chart-toolbar-info" id="powerToolbarInfo">
-                            Total data point: {{ $formatChartTotalCount($powerChartData['total_points']) }} | Default(min): {{ min(15, $powerChartData['total_points']) }} data | View saat ini: {{ min(15, $powerChartData['total_points']) }} data
+                            Total data point: {{ $formatChartTotalCount($powerChartData['total_records'] ?? $powerChartData['total_points']) }} | Default(min): {{ min(15, $powerChartData['total_points']) }} data | View saat ini: {{ min(15, $powerChartData['total_points']) }} data
                         </div>
                         <div class="zoom-controls">
                             <button type="button" id="powerZoomOut" class="zoom-btn" aria-label="Zoom Out">-</button>
@@ -3229,6 +3229,7 @@
 
         const latencyRuntimeState = {
             totalPoints: 0,
+            totalRecords: 0,
             minWindowPoints: 1,
             maxWindowPoints: 1,
             currentWindowSpan: 10,
@@ -3240,6 +3241,7 @@
 
         const powerRuntimeState = {
             totalPoints: 0,
+            totalRecords: 0,
             minWindowPoints: 1,
             maxWindowPoints: 1,
             currentWindowSpan: 10,
@@ -3377,6 +3379,7 @@
                     full_time_labels: Array.isArray(latencyData.full_time_labels) ? latencyData.full_time_labels : [],
                     datasets: Array.isArray(latencyData.datasets) ? latencyData.datasets : [],
                     total_points: Number(latencyData.total_points || (Array.isArray(latencyData.labels) ? latencyData.labels.length : 0)),
+                    total_records: Number(latencyData.total_records || latencyData.total_points || (Array.isArray(latencyData.labels) ? latencyData.labels.length : 0)),
                 },
                 powerData: {
                     labels: Array.isArray(powerData.labels) ? powerData.labels : [],
@@ -3385,6 +3388,7 @@
                     mqtt: Array.isArray(powerData.mqtt) ? powerData.mqtt : [],
                     http: Array.isArray(powerData.http) ? powerData.http : [],
                     total_points: Number(powerData.total_points || (Array.isArray(powerData.labels) ? powerData.labels.length : 0)),
+                    total_records: Number(powerData.total_records || powerData.total_points || (Array.isArray(powerData.labels) ? powerData.labels.length : 0)),
                 }
             };
         }
@@ -3886,7 +3890,7 @@
                 minView,
                 maxView
             );
-            const totalDisplay = formatChartTotalCount(total);
+            const totalDisplay = formatChartTotalCount(latencyRuntimeState.totalRecords || total);
 
             toolbarInfo.textContent = `Total data point: ${totalDisplay} | Default(min): ${minView} data | View saat ini: ${currentSpan} data`;
         }
@@ -4111,7 +4115,9 @@
 
             latestLatencyData = latencyData;
             const totalPoints = Math.max(0, Number(latencyData.total_points || (latencyData.labels ? latencyData.labels.length : 0)));
+            const totalRecords = Math.max(0, Number(latencyData.total_records || totalPoints));
             latencyRuntimeState.totalPoints = totalPoints;
+            latencyRuntimeState.totalRecords = totalRecords;
 
             const defaultWindowPoints = Math.max(1, Math.min(10, Math.max(totalPoints, 1)));
             latencyRuntimeState.minWindowPoints = totalPoints > 0 ? Math.min(defaultWindowPoints, totalPoints) : 1;
@@ -4278,7 +4284,7 @@
                 minView,
                 maxView
             );
-            const totalDisplay = formatChartTotalCount(total);
+            const totalDisplay = formatChartTotalCount(powerRuntimeState.totalRecords || total);
 
             toolbarInfo.textContent = `Total data point: ${totalDisplay} | Default(min): ${minView} data | View saat ini: ${currentSpan} data`;
         }
@@ -4499,7 +4505,9 @@
             if (!powerCtx) return;
 
             const totalPoints = Math.max(0, Number(powerData.total_points || (Array.isArray(powerData.labels) ? powerData.labels.length : 0)));
+            const totalRecords = Math.max(0, Number(powerData.total_records || totalPoints));
             powerRuntimeState.totalPoints = totalPoints;
+            powerRuntimeState.totalRecords = totalRecords;
 
             const defaultWindowPoints = Math.max(1, Math.min(15, Math.max(totalPoints, 1)));
             powerRuntimeState.minWindowPoints = totalPoints > 0 ? Math.min(defaultWindowPoints, totalPoints) : 1;

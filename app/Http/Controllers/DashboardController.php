@@ -416,14 +416,15 @@ class DashboardController extends Controller
 
         $dataWarnings = array_values(array_unique($dataWarnings));
 
-        // Prepare data untuk Chart.js - Latency Comparison (per data point, line chart)
-        // X-axis dibuat berdasarkan urutan data supaya jumlah titik selalu sama dengan total data point.
+        // Prepare data untuk Chart.js - Latency Comparison.
+        // X-axis dibucket per slot waktu (detik WIB) agar MQTT/HTTP pada waktu yang sama berada di posisi x yang sama.
         $latencyChartData = [
-            'labels' => [], // index 1..N (N = total data points)
-            'time_labels' => [], // short time label per index
-            'full_time_labels' => [], // full time label per index
+            'labels' => [], // index 1..N (N = total slot waktu unik)
+            'time_labels' => [], // short time label per slot
+            'full_time_labels' => [], // full time label per slot
             'datasets' => [],
             'total_points' => 0,
+            'total_records' => 0,
             'display_timezone' => 'Asia/Jakarta',
         ];
 
@@ -455,19 +456,41 @@ class DashboardController extends Controller
             ->values();
 
         $datasetsByKey = [];
-        $sequence = 0;
+        $datasetPointIndexBySlot = [];
+        $slotIndexByKey = [];
+        $slotSequence = 0;
+        $resolveTimeSlot = static function (array $point): array {
+            $timestampDisplay = $point['timestamp_display'] ?? null;
+            if ($timestampDisplay instanceof CarbonInterface) {
+                return [
+                    'key' => 'ts:' . $timestampDisplay->format('Y-m-d H:i:s'),
+                    'short' => $timestampDisplay->format('H:i:s') . ' WIB',
+                    'full' => $timestampDisplay->format('d-m-Y H:i:s') . ' WIB',
+                ];
+            }
+
+            return [
+                'key' => 'row:' . (string) ($point['id'] ?? 0),
+                'short' => '-',
+                'full' => '-',
+            ];
+        };
+
         foreach ($latencyPoints as $point) {
-            $sequence++;
             $isMqtt = $point['protocol'] === 'MQTT';
             $protocol = $isMqtt ? 'MQTT' : 'HTTP';
             $datasetKey = $protocol . '|' . $point['device_id'];
-            $timestampDisplay = $point['timestamp_display'];
-            $shortTime = $timestampDisplay ? $timestampDisplay->format('H:i:s') . ' WIB' : '-';
-            $fullTime = $timestampDisplay ? $timestampDisplay->format('d-m-Y H:i:s') . ' WIB' : '-';
-
-            $latencyChartData['labels'][] = $sequence;
-            $latencyChartData['time_labels'][] = $shortTime;
-            $latencyChartData['full_time_labels'][] = $fullTime;
+            $slotMeta = $resolveTimeSlot($point);
+            $slotKey = $slotMeta['key'];
+            if (!isset($slotIndexByKey[$slotKey])) {
+                $slotSequence++;
+                $slotIndexByKey[$slotKey] = $slotSequence;
+                $latencyChartData['labels'][] = $slotSequence;
+                $latencyChartData['time_labels'][] = $slotMeta['short'];
+                $latencyChartData['full_time_labels'][] = $slotMeta['full'];
+            }
+            $slotIndex = $slotIndexByKey[$slotKey];
+            $fullTime = $slotMeta['full'];
 
             if (!isset($datasetsByKey[$datasetKey])) {
                 $datasetsByKey[$datasetKey] = [
@@ -480,18 +503,31 @@ class DashboardController extends Controller
                 ];
             }
 
-            $datasetsByKey[$datasetKey]['data'][] = [
-                'x' => $sequence,
+            if (!isset($datasetPointIndexBySlot[$datasetKey])) {
+                $datasetPointIndexBySlot[$datasetKey] = [];
+            }
+
+            $pointPayload = [
+                'x' => $slotIndex,
                 'y' => $point['latency_ms'],
                 'device' => $point['device_name'],
                 'timestamp' => $fullTime,
-                'point_index' => $sequence,
+                'point_index' => $slotIndex,
             ];
+
+            if (isset($datasetPointIndexBySlot[$datasetKey][$slotIndex])) {
+                $existingIndex = $datasetPointIndexBySlot[$datasetKey][$slotIndex];
+                $datasetsByKey[$datasetKey]['data'][$existingIndex] = $pointPayload;
+            } else {
+                $datasetsByKey[$datasetKey]['data'][] = $pointPayload;
+                $datasetPointIndexBySlot[$datasetKey][$slotIndex] = count($datasetsByKey[$datasetKey]['data']) - 1;
+            }
         }
 
         $latencyChartData['datasets'] = array_values($datasetsByKey);
-        $latencyChartData['total_points'] = $sequence;
-        // Prepare data untuk Chart.js - Power Comparison (per data point, urutan realtime)
+        $latencyChartData['total_points'] = $slotSequence;
+        $latencyChartData['total_records'] = $latencyPoints->count();
+        // Prepare data untuk Chart.js - Power Comparison (mengikuti slot waktu yang sama dengan latency)
         $powerChartData = [
             'labels' => [],
             'time_labels' => [],
@@ -499,26 +535,40 @@ class DashboardController extends Controller
             'mqtt' => [],
             'http' => [],
             'total_points' => 0,
+            'total_records' => 0,
             'display_timezone' => 'Asia/Jakarta',
         ];
-        $powerSequence = 0;
-        foreach ($latencyPoints as $point) {
-            $powerSequence++;
-            $timestampDisplay = $point['timestamp_display'];
-            $shortTime = $timestampDisplay ? $timestampDisplay->format('H:i:s') . ' WIB' : '-';
-            $fullTime = $timestampDisplay ? $timestampDisplay->format('d-m-Y H:i:s') . ' WIB' : '-';
 
-            $powerChartData['labels'][] = $powerSequence;
-            $powerChartData['time_labels'][] = $shortTime;
-            $powerChartData['full_time_labels'][] = $fullTime;
-            $powerChartData['mqtt'][] = $point['protocol'] === 'MQTT'
-                ? ($point['daya_mw'] !== null ? round($point['daya_mw'], 2) : null)
-                : null;
-            $powerChartData['http'][] = $point['protocol'] === 'HTTP'
-                ? ($point['daya_mw'] !== null ? round($point['daya_mw'], 2) : null)
-                : null;
+        $powerChartData['labels'] = $latencyChartData['labels'];
+        $powerChartData['time_labels'] = $latencyChartData['time_labels'];
+        $powerChartData['full_time_labels'] = $latencyChartData['full_time_labels'];
+        $powerChartData['total_points'] = $latencyChartData['total_points'];
+        $powerChartData['total_records'] = $latencyChartData['total_records'];
+
+        $powerChartData['mqtt'] = array_fill(0, $powerChartData['total_points'], null);
+        $powerChartData['http'] = array_fill(0, $powerChartData['total_points'], null);
+
+        foreach ($latencyPoints as $point) {
+            $slotMeta = $resolveTimeSlot($point);
+            $slotKey = $slotMeta['key'];
+            if (!isset($slotIndexByKey[$slotKey])) {
+                continue;
+            }
+
+            $slotIndex = (int) $slotIndexByKey[$slotKey];
+            if ($slotIndex < 1 || $slotIndex > $powerChartData['total_points']) {
+                continue;
+            }
+
+            $bucketIndex = $slotIndex - 1;
+            $roundedPower = $point['daya_mw'] !== null ? round($point['daya_mw'], 2) : null;
+
+            if ($point['protocol'] === 'MQTT') {
+                $powerChartData['mqtt'][$bucketIndex] = $roundedPower;
+            } elseif ($point['protocol'] === 'HTTP') {
+                $powerChartData['http'][$bucketIndex] = $roundedPower;
+            }
         }
-        $powerChartData['total_points'] = $powerSequence;
         $telemetrySource = $this->telemetrySource;
 
         return view('dashboard', compact(
@@ -1439,6 +1489,7 @@ class DashboardController extends Controller
                 'full_time_labels' => [],
                 'datasets' => [],
                 'total_points' => 0,
+                'total_records' => 0,
                 'display_timezone' => 'Asia/Jakarta',
             ],
             'powerChartData' => [
@@ -1448,6 +1499,7 @@ class DashboardController extends Controller
                 'mqtt' => [],
                 'http' => [],
                 'total_points' => 0,
+                'total_records' => 0,
                 'display_timezone' => 'Asia/Jakarta',
             ],
             'mqttTotal' => 0,

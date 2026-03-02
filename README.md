@@ -202,6 +202,7 @@ The project has been updated with the following behavior:
 143. Simulation page/service is now fail-safe: if simulation storage is not ready (e.g. missing `simulated_eksperimens` table on production), `/simulation` no longer throws HTTP 500; UI shows explicit storage warning, auto-disables simulation controls, and simulation status APIs return structured fallback payload.
 144. Simulation UI now uses a single Start/Stop toggle button, shows reset button only when simulation data exists, supports `auto_shuffle` network profile, and manual tick can run one cycle even when simulator status is `STOPPED`.
 145. Simulation page now places `Kembali ke Dashboard Utama` on top-left, `Last Tick` is formatted as `YYYY-MM-DD  |  HH:mm:ss WIB+07:00`, and embedded simulation dashboard (`/?source=simulation&embedded=1`) hides `Reset Data Eksperimen`, `Admin Config & Firmware`, and `Mode Simulasi Keseluruhan Aplikasi`.
+146. Comparative latency/power charts now use a shared time-slot x-axis (WIB, second-level bucket), so MQTT and HTTP points with the same timestamp are plotted at the same horizontal position; toolbar `Total data point` remains based on real record count.
 
 ## Tech Stack
 
@@ -1175,6 +1176,7 @@ Other dashboard behavior:
 - dedicated `/reset-data` management page with synchronized dashboard palette and guarded reset confirmation
 - floating top-right `Realtime Link Monitor` (MQTT/HTTP ping ms + throughput Mb/s from latest real payload telemetry)
 - same monitor now includes browser-measured external ping/speed (per-device internet condition, speedtest-style)
+- comparative chart x-axis is grouped by shared WIB second slot, so same-time MQTT/HTTP samples are aligned on the same x position
 - monitor is collapsible via `LIVE/IDLE`, defaults minimized, and auto-minimizes on outside click
 - external browser probe now uses timeout + hidden-tab pause + explicit offline fallback to avoid hanging/stale browser-side external metrics
 - modernized header cards for temperature and humidity
