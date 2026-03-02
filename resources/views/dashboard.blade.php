@@ -2657,6 +2657,7 @@
             };
             $formatStatCount = static fn ($value): string => $formatCompactCount($value, 99999);
             $formatQualityCount = static fn ($value): string => $formatCompactCount($value, 999);
+            $formatChartTotalCount = static fn ($value): string => $formatCompactCount($value, 9999);
         @endphp
         <!-- Statistics Cards -->
         <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Real-Time Metrics</h2>
@@ -2996,7 +2997,7 @@
                 @if(count($latencyChartData['labels']) > 0)
                     <div class="chart-toolbar">
                         <div class="chart-toolbar-info" id="latencyToolbarInfo">
-                            Total data point: {{ $latencyChartData['total_points'] }} | Default(min): {{ min(10, $latencyChartData['total_points']) }} data | View saat ini: {{ min(10, $latencyChartData['total_points']) }} data
+                            Total data point: {{ $formatChartTotalCount($latencyChartData['total_points']) }} | Default(min): {{ min(10, $latencyChartData['total_points']) }} data | View saat ini: {{ min(10, $latencyChartData['total_points']) }} data
                         </div>
                         <div class="zoom-controls">
                             <button type="button" id="latencyZoomOut" class="zoom-btn" aria-label="Zoom Out">-</button>
@@ -3026,7 +3027,7 @@
                 @if(count($powerChartData['labels']) > 0)
                     <div class="chart-toolbar">
                         <div class="chart-toolbar-info" id="powerToolbarInfo">
-                            Total data point: {{ $powerChartData['total_points'] }} | Default(min): {{ min(15, $powerChartData['total_points']) }} data | View saat ini: {{ min(15, $powerChartData['total_points']) }} data
+                            Total data point: {{ $formatChartTotalCount($powerChartData['total_points']) }} | Default(min): {{ min(15, $powerChartData['total_points']) }} data | View saat ini: {{ min(15, $powerChartData['total_points']) }} data
                         </div>
                         <div class="zoom-controls">
                             <button type="button" id="powerZoomOut" class="zoom-btn" aria-label="Zoom Out">-</button>
@@ -3066,7 +3067,7 @@
                                     <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran data latency terhadap rata-rata.</p>
                                     <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku; menunjukkan tingkat variasi data.</p>
                                 </div>
-                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['n'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['mqtt']['total_data'] ?? 0) }}</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['mean'] }} ms</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['std_dev'] }} ms</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['variance'] }}</span></div>
@@ -3082,7 +3083,7 @@
                                     <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran data latency terhadap rata-rata.</p>
                                     <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku; menunjukkan tingkat variasi data.</p>
                                 </div>
-                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['n'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['http']['total_data'] ?? 0) }}</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['mean'] }} ms</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['std_dev'] }} ms</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['variance'] }}</span></div>
@@ -3127,7 +3128,7 @@
                                         <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran konsumsi daya terhadap rata-rata.</p>
                                         <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku untuk melihat variasi daya.</p>
                                     </div>
-                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['n'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['mqtt']['total_data'] ?? 0) }}</span></div>
                                     <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['mean'] }} mW</span></div>
                                     <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['std_dev'] }} mW</span></div>
                                     <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['variance'] }}</span></div>
@@ -3143,7 +3144,7 @@
                                         <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran konsumsi daya terhadap rata-rata.</p>
                                         <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku untuk melihat variasi daya.</p>
                                     </div>
-                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['n'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['http']['total_data'] ?? 0) }}</span></div>
                                     <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['mean'] }} mW</span></div>
                                     <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['std_dev'] }} mW</span></div>
                                     <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['variance'] }}</span></div>
@@ -3854,6 +3855,15 @@
             }
         }
 
+        function formatChartTotalCount(value) {
+            const numeric = Math.max(0, Math.round(Number(value || 0)));
+            if (numeric > 9999) {
+                return `${Math.round(numeric / 1000)}K`;
+            }
+
+            return String(numeric);
+        }
+
         function updateLatencyToolbarInfo() {
             const toolbarInfo = document.getElementById('latencyToolbarInfo');
             if (!toolbarInfo) return;
@@ -3871,8 +3881,9 @@
                 minView,
                 maxView
             );
+            const totalDisplay = formatChartTotalCount(total);
 
-            toolbarInfo.textContent = `Total data point: ${total} | Default(min): ${minView} data | View saat ini: ${currentSpan} data`;
+            toolbarInfo.textContent = `Total data point: ${totalDisplay} | Default(min): ${minView} data | View saat ini: ${currentSpan} data`;
         }
 
         function markLatencyUserAction() {
@@ -4262,8 +4273,9 @@
                 minView,
                 maxView
             );
+            const totalDisplay = formatChartTotalCount(total);
 
-            toolbarInfo.textContent = `Total data point: ${total} | Default(min): ${minView} data | View saat ini: ${currentSpan} data`;
+            toolbarInfo.textContent = `Total data point: ${totalDisplay} | Default(min): ${minView} data | View saat ini: ${currentSpan} data`;
         }
 
         function markPowerUserAction() {

@@ -126,6 +126,7 @@ unsigned long httpSendFail = 0;
 unsigned long mqttSendSuccess = 0;
 unsigned long mqttSendFail = 0;
 unsigned long lastMQTTAttempt = 0;  // Prevent MQTT connection spam
+unsigned long lastNtpSyncAttempt = 0;
 
 // ==================== FUNCTION DECLARATIONS ====================
 void setupWiFi();
@@ -191,6 +192,7 @@ void setup() {
     
     // Synchronize time with NTP
     updateTime();
+    lastNtpSyncAttempt = millis();
     
     Serial.println("[SETUP] Initialization complete!");
     Serial.println("==========================================\n");
@@ -213,6 +215,13 @@ void loop() {
         }
     } else {
         mqttClient.loop();
+    }
+
+    // Keep trying NTP sync until epoch is valid.
+    if ((long) time(nullptr) < 1640995200L && (millis() - lastNtpSyncAttempt >= 30000UL)) {
+        Serial.println("[TIME] Epoch belum valid, retry sinkronisasi NTP...");
+        updateTime();
+        lastNtpSyncAttempt = millis();
     }
     
     // Read sensor data periodically
@@ -912,8 +921,12 @@ void updateTime() {
     }
     
     Serial.println("");
-    Serial.print("[TIME] âœ“ Time synchronized: ");
-    Serial.println(ctime(&now));
+    if (now >= 1640995200L) {
+        Serial.print("[TIME] OK Time synchronized: ");
+        Serial.println(ctime(&now));
+    } else {
+        Serial.println("[TIME] WARNING: NTP belum valid (epoch masih awal). Akan dicoba lagi otomatis.");
+    }
 }
 
 

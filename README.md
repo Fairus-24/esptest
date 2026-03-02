@@ -195,6 +195,9 @@ The project has been updated with the following behavior:
 136. Quality dropdown totals and field counters now use real protocol totals from database scope (no `take(200)` cap), with compact `K` formatting above `999` while preserving exact raw counts in tooltip.
 137. Firmware generator now injects `ESP_HTTP_ENDPOINT` build flag from device profile, so generated firmware endpoint stays consistent with runtime API path.
 138. ESP32 HTTP sender now has endpoint fallback logic: when configured endpoint returns `404`, firmware retries once on the alternate path (`/api/http-data` <-> `/esptest/public/api/http-data`) before marking failure.
+139. Comparative Analysis toolbar now formats `Total data point` in compact `K` only when value is greater than `9,999` (for both latency and power charts), while `Default(min)` and `View saat ini` remain raw counts.
+140. Statistical Analysis `Sample Size (N)` now displays real total dataset counts per protocol (MQTT/HTTP) without compact `K` notation.
+141. NTP sync state in firmware is now validated against real Unix epoch (no false `1970` success), and firmware auto-retries NTP sync every 30 seconds until valid to reduce startup telemetry gaps that can trigger temporary dashboard `Disconnected/OFF`.
 
 ## Tech Stack
 
@@ -834,9 +837,9 @@ Update these values in `ESP32_Firmware/src/main.cpp` before flash:
 | --- | --- | --- |
 | `WIFI_SSID` / `WIFI_PASSWORD` | your WiFi | Active WLAN used by ESP32 |
 | `SERVER_HOST` | `192.168.0.104` | Legacy shared fallback host (used when HTTP/MQTT override flags are not set) |
-| `ESP_HTTP_BASE_URL` (in `platformio.ini`) | `http://192.168.0.104/esptest/public` | Full HTTP base URL for ingest target (`APP_URL` host/path) |
+| `ESP_HTTP_BASE_URL` (in `platformio.ini`) | `https://espdht.mufaza.my.id` | Full HTTP base URL for ingest target (`APP_URL` host/path) |
 | `HTTP_ENDPOINT` | `/api/http-data` | Laravel ingest route path (or include subpath only if your deployment is not at domain root) |
-| `ESP_MQTT_BROKER` (in `platformio.ini`) | `192.168.0.104` | Broker host override for MQTT publish path |
+| `ESP_MQTT_BROKER` (in `platformio.ini`) | `202.154.58.51` | Broker host override for MQTT publish path |
 | `MQTT_SERVER` / `MQTT_PORT` | `192.168.0.104`, `1883` | Broker host/port fallback (used when override flag not set) |
 | `MQTT_TOPIC` | `iot/esp32/suhu` | Same as `.env` `MQTT_TOPIC` |
 | `ESP_REMOTE_DEBUG_TOPIC` (in `platformio.ini`) | `iot/esp32/debug` | Optional remote runtime log stream topic |
@@ -1629,7 +1632,7 @@ GROUP BY protokol;
 - This indicates NTP is not actually synced (internet/NTP route unavailable), even if WiFi is connected.
 - In rollback stable profile, telemetry send path will skip publish/post when epoch is still invalid.
 - Ensure your network allows outbound UDP/123 to NTP servers.
-- Reboot device after internet/NTP route is restored so setup time-sync runs again.
+- Current firmware auto-retries NTP sync every 30 seconds until epoch becomes valid, so reboot is no longer mandatory after route recovery.
 
 ### ESP32 repeatedly logs `Sensor read failed (CHECKSUM)`
 
@@ -1673,6 +1676,22 @@ GROUP BY protokol;
 
 ```bash
 pio run -t upload
+```
+
+### ESP32 serial monitor appears frozen (`macet`)
+
+- Most cases are COM port lock conflicts (another `pio device monitor` / terminal still attached).
+- On Windows, close all serial tools then verify lock-free state with:
+
+```powershell
+Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'pio device monitor|COM[0-9]+' } | Select-Object ProcessId,Name,CommandLine
+```
+
+- If needed, stop stale monitor process then reopen:
+
+```powershell
+Stop-Process -Id <PID> -Force
+pio device monitor --port COM5 --baud 115200
 ```
 
 ### Broker conflict / multiple Mosquitto instances
