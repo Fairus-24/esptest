@@ -206,6 +206,7 @@ The project has been updated with the following behavior:
 147. Compact `K` counters now use floor formatting (example: `6872 => 6K`, `115999 => 115K`), and chart payload now has dedicated window control (`DASHBOARD_CHART_WINDOW`, default unlimited) so chart `Total data point` no longer appears capped by `DASHBOARD_ANALYSIS_WINDOW`.
 148. Reset page/server cleanup: reset token guard has been removed from runtime flow and admin runtime overrides; reset now validates only checkbox + exact `RESET` typing.
 149. Admin authentication now uses Google OAuth callback flow with strict email allow-list (`ADMIN_GOOGLE_ALLOWED_EMAIL`) and no admin token form.
+150. Admin login page copy has been simplified (no visible allow-list email text on login screen) while backend allow-list validation remains enforced.
 
 ## Tech Stack
 

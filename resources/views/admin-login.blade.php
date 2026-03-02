@@ -74,7 +74,7 @@
 <body>
     <div class="card">
         <h1>Admin Configuration Login</h1>
-        <p>Login admin menggunakan akun Google yang diizinkan untuk membuka panel konfigurasi runtime, provisioning device ESP32, dan generator firmware.</p>
+        <p>Login admin untuk membuka panel konfigurasi runtime, provisioning device ESP32, dan generator firmware.</p>
 
         @if (session('admin_error'))
             <div class="alert err">{{ session('admin_error') }}</div>
@@ -96,7 +96,7 @@
 
         <div class="hint">
             @if ($googleLoginConfigured)
-                Hanya email <strong>{{ $allowedGoogleEmail }}</strong> yang diizinkan.
+                Lanjutkan dengan akun Google admin.
             @else
                 Google OAuth belum dikonfigurasi lengkap di server.
             @endif
