@@ -1,8 +1,10 @@
 <?php
 
 return [
-    // Jumlah maksimum sampel terbaru per protokol yang dipakai untuk dashboard/chart/t-test.
+    // Jumlah maksimum sampel terbaru per protokol untuk statistik dashboard + t-test.
     'analysis_window' => (int) env('DASHBOARD_ANALYSIS_WINDOW', 1200),
+    // Batas data chart per protokol. 0 = tanpa batas (pakai seluruh data real/simulation).
+    'chart_window' => (int) env('DASHBOARD_CHART_WINDOW', 0),
 
     // Freshness status koneksi realtime untuk badge header + realtime link monitor.
     'connection' => [

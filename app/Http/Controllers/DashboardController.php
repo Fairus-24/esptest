@@ -123,6 +123,9 @@ class DashboardController extends Controller
         // Ambil data MQTT dan HTTP sekali saja
         $mqttData = $this->statisticsService->getMqttData();
         $httpData = $this->statisticsService->getHttpData();
+        $chartWindowSize = $this->resolveChartWindowSize();
+        $mqttChartData = $this->getChartProtocolData('MQTT', $chartWindowSize);
+        $httpChartData = $this->getChartProtocolData('HTTP', $chartWindowSize);
 
         // Ambil summary statistik
         $summary = $this->statisticsService->getSummary($mqttData, $httpData);
@@ -429,8 +432,8 @@ class DashboardController extends Controller
         ];
 
         $deviceNames = Device::pluck('nama_device', 'id');
-        $latencyPoints = $mqttData
-            ->merge($httpData)
+        $latencyPoints = $mqttChartData
+            ->merge($httpChartData)
             ->map(function ($point) use ($deviceNames, $displayTimezone, $excludedDeviceIds) {
                 $timestampRaw = $point->timestamp_server ?? $point->created_at;
                 $timestampSort = $timestampRaw ? (clone $timestampRaw) : null;
@@ -578,6 +581,31 @@ class DashboardController extends Controller
             'mqttConnectionStatus', 'httpConnectionStatus', 'esp32ConnectionStatus', 'connectionConfig', 'simulationRunning', 'excludeSimulatorStatusSource',
             'telemetrySource'
         ));
+    }
+
+    private function getChartProtocolData(string $protocol, int $chartWindowSize): \Illuminate\Support\Collection
+    {
+        $query = $this->telemetryQuery()
+            ->whereRaw('UPPER(protokol) = ?', [strtoupper($protocol)]);
+
+        if ($chartWindowSize > 0) {
+            return $query
+                ->orderByDesc('id')
+                ->limit($chartWindowSize)
+                ->get()
+                ->sortBy('id')
+                ->values();
+        }
+
+        return $query
+            ->orderBy('id')
+            ->get()
+            ->values();
+    }
+
+    private function resolveChartWindowSize(): int
+    {
+        return max(0, (int) config('dashboard.chart_window', 0));
     }
 
     private function configureTelemetrySource(string $source): void

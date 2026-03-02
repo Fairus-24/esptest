@@ -203,6 +203,7 @@ The project has been updated with the following behavior:
 144. Simulation UI now uses a single Start/Stop toggle button, shows reset button only when simulation data exists, supports `auto_shuffle` network profile, and manual tick can run one cycle even when simulator status is `STOPPED`.
 145. Simulation page now places `Kembali ke Dashboard Utama` on top-left, `Last Tick` is formatted as `YYYY-MM-DD  |  HH:mm:ss WIB+07:00`, and embedded simulation dashboard (`/?source=simulation&embedded=1`) hides `Reset Data Eksperimen`, `Admin Config & Firmware`, and `Mode Simulasi Keseluruhan Aplikasi`.
 146. Comparative latency/power charts now use a shared time-slot x-axis (WIB, second-level bucket), so MQTT and HTTP points with the same timestamp are plotted at the same horizontal position; toolbar `Total data point` remains based on real record count.
+147. Compact `K` counters now use floor formatting (example: `6872 => 6K`, `115999 => 115K`), and chart payload now has dedicated window control (`DASHBOARD_CHART_WINDOW`, default unlimited) so chart `Total data point` no longer appears capped by `DASHBOARD_ANALYSIS_WINDOW`.
 
 ## Tech Stack
 
@@ -358,7 +359,8 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | `DB_DATABASE` | Yes | `esptest` | From database created in step 4 |
 | `DB_USERNAME` | Yes | `root` | Your MySQL user |
 | `DB_PASSWORD` | Depends | `` | Your MySQL password |
-| `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `1200` | Rolling window size for charts/statistics; total counters and quality totals now use full real rows |
+| `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `1200` | Rolling window size for statistics/t-test/reliability calculations |
+| `DASHBOARD_CHART_WINDOW` | Optional | `0` | Chart data window per protocol (`0` = unlimited/full dataset, `>0` = latest N rows per protocol) |
 | `DASHBOARD_PROTOCOL_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for MQTT/HTTP `Connected` badge on header + realtime monitor |
 | `DASHBOARD_ESP32_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for ESP32 `ON/OFF` badge |
 | `DASHBOARD_ESP32_DEBUG_FRESHNESS_SECONDS` | Recommended | `120` | Freshness threshold for ESP32 `ON/OFF` when source is MQTT debug heartbeat |
@@ -507,6 +509,7 @@ HTTP_ALLOW_INGEST_WITHOUT_KEY=false
 HTTP_INGEST_RATE_LIMIT_PER_MINUTE=240
 
 DASHBOARD_ANALYSIS_WINDOW=1200
+DASHBOARD_CHART_WINDOW=0
 DASHBOARD_PROTOCOL_FRESHNESS_SECONDS=30
 DASHBOARD_ESP32_FRESHNESS_SECONDS=30
 DASHBOARD_ESP32_DEBUG_FRESHNESS_SECONDS=120

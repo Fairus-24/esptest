@@ -2651,7 +2651,7 @@
             $formatCompactCount = static function ($value, int $threshold): string {
                 $numeric = max(0, (int) $value);
                 if ($numeric > $threshold) {
-                    return (string) round($numeric / 1000) . 'K';
+                    return (string) floor($numeric / 1000) . 'K';
                 }
 
                 return (string) $numeric;
@@ -3867,7 +3867,7 @@
         function formatChartTotalCount(value) {
             const numeric = Math.max(0, Math.round(Number(value || 0)));
             if (numeric > 9999) {
-                return `${Math.round(numeric / 1000)}K`;
+                return `${Math.floor(numeric / 1000)}K`;
             }
 
             return String(numeric);
