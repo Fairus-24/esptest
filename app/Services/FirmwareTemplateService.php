@@ -92,19 +92,24 @@ class FirmwareTemplateService
         $iniTemplate = file_get_contents(base_path('ESP32_Firmware/platformio.ini')) ?: '';
 
         $httpIngestKey = (string) ($runtimeState['HTTP_INGEST_KEY']['current_value'] ?? config('http_server.ingest_key', ''));
+        $httpEndpoint = trim((string) ($profile->http_endpoint ?: ''));
+        if ($httpEndpoint === '') {
+            $httpEndpoint = '/api/http-data';
+        }
+        $httpEndpoint = '/' . ltrim($httpEndpoint, '/');
 
         $mainRendered = $mainTemplate;
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* WIFI_SSID = ".*?";/', 'const char* WIFI_SSID = "' . $this->escapeCpp((string) $profile->wifi_ssid) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* WIFI_PASSWORD = ".*?";/', 'const char* WIFI_PASSWORD = "' . $this->escapeCpp((string) $profile->wifi_password) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* WIFI_SSID = [^;]+;/', 'const char* WIFI_SSID = "' . $this->escapeCpp((string) $profile->wifi_ssid) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* WIFI_PASSWORD = [^;]+;/', 'const char* WIFI_PASSWORD = "' . $this->escapeCpp((string) $profile->wifi_password) . '";');
         $mainRendered = $this->replaceOne($mainRendered, '/#define SERVER_HOST ".*?"/', '#define SERVER_HOST "' . $this->escapeCpp((string) $profile->server_host) . '"');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* HTTP_ENDPOINT = ".*?";/', 'const char* HTTP_ENDPOINT = "' . $this->escapeCpp((string) $profile->http_endpoint) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* HTTP_ENDPOINT = [^;]+;/', 'const char* HTTP_ENDPOINT = "' . $this->escapeCpp($httpEndpoint) . '";');
         $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_SERVER = .*?;/', 'const char* MQTT_SERVER = "' . $this->escapeCpp((string) $profile->mqtt_host) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const int MQTT_PORT = \d+;/', 'const int MQTT_PORT = ' . max(1, (int) $profile->mqtt_port) . ';');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_TOPIC = ".*?";/', 'const char* MQTT_TOPIC = "' . $this->escapeCpp((string) $profile->mqtt_topic) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_USER = ".*?";/', 'const char* MQTT_USER = "' . $this->escapeCpp((string) $profile->mqtt_user) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_PASSWORD = ".*?";/', 'const char* MQTT_PASSWORD = "' . $this->escapeCpp((string) $profile->mqtt_password) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const int DEVICE_ID = \d+;/', 'const int DEVICE_ID = ' . (int) $device->id . ';');
-        $mainRendered = $this->replaceOne($mainRendered, '/#define DHTPIN \d+/', '#define DHTPIN ' . max(0, (int) $profile->dht_pin));
+        $mainRendered = $this->replaceOne($mainRendered, '/const int MQTT_PORT = [^;]+;/', 'const int MQTT_PORT = ' . max(1, (int) $profile->mqtt_port) . ';');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_TOPIC = [^;]+;/', 'const char* MQTT_TOPIC = "' . $this->escapeCpp((string) $profile->mqtt_topic) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_USER = [^;]+;/', 'const char* MQTT_USER = "' . $this->escapeCpp((string) $profile->mqtt_user) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_PASSWORD = [^;]+;/', 'const char* MQTT_PASSWORD = "' . $this->escapeCpp((string) $profile->mqtt_password) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const int DEVICE_ID = [^;]+;/', 'const int DEVICE_ID = ' . (int) $device->id . ';');
+        $mainRendered = $this->replaceOne($mainRendered, '/^#define DHTPIN .+$/m', '#define DHTPIN ' . max(0, (int) $profile->dht_pin));
         $mainRendered = $this->replaceOne(
             $mainRendered,
             '/const DHTesp::DHT_MODEL_t DHT_MODEL_PREFERRED = DHTesp::[A-Z0-9_]+;/',
@@ -118,7 +123,6 @@ class FirmwareTemplateService
         if ($httpBaseUrl === '') {
             $httpBaseUrl = trim((string) config('app.url', 'http://127.0.0.1'));
         }
-
         $mqttBroker = trim((string) ($profile->mqtt_broker ?: ''));
         if ($mqttBroker === '') {
             $mqttBroker = trim((string) ($profile->mqtt_host ?: $profile->server_host));
@@ -126,6 +130,7 @@ class FirmwareTemplateService
 
         $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_HTTP_INGEST_KEY', $httpIngestKey);
         $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_HTTP_BASE_URL', $httpBaseUrl);
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_HTTP_ENDPOINT', $httpEndpoint);
         $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_MQTT_BROKER', $mqttBroker);
         $iniRendered = $this->upsertPlatformioPlainFlag(
             $iniRendered,

@@ -127,6 +127,9 @@ class DashboardController extends Controller
         // Ambil summary statistik
         $summary = $this->statisticsService->getSummary($mqttData, $httpData);
         $reliability = $this->statisticsService->getReliability();
+        $protocolTotals = $this->resolveProtocolTotals();
+        $summary['mqtt']['total_data'] = $protocolTotals['MQTT'];
+        $summary['http']['total_data'] = $protocolTotals['HTTP'];
 
         $now = now();
         $connectionConfig = $this->resolveConnectionConfig();
@@ -296,12 +299,8 @@ class DashboardController extends Controller
             'send_tick_ms' => 'Send Tick',
         ];
 
-        $protocolDataMap = [
-            'MQTT' => $mqttData,
-            'HTTP' => $httpData,
-        ];
-        $mqttTotal = $mqttData->count();
-        $httpTotal = $httpData->count();
+        $mqttTotal = (int) ($summary['mqtt']['total_data'] ?? 0);
+        $httpTotal = (int) ($summary['http']['total_data'] ?? 0);
         $warningConfig = $this->resolveWarningConfig();
 
         $fieldCompleteness = [];
@@ -323,35 +322,19 @@ class DashboardController extends Controller
             $dataWarnings[] = "ESP32 ON/OFF memakai mode konservatif: telemetry terbaru hanya berasal dari sumber simulator{$deviceHint} yang diabaikan.";
         }
 
-        foreach ($protocolDataMap as $protocol => $protocolData) {
-            $qualityScope = $protocolData->whereNotNull('packet_seq');
-            if ($qualityScope->isEmpty()) {
-                $qualityScope = $protocolData;
-            }
-            $qualityScope = $qualityScope->sortByDesc('id')->take(200)->values();
-
-            $total = $qualityScope->count();
-            $fieldCompleteness[$protocol] = [
-                'total' => $total,
-                'fields' => [],
-            ];
+        foreach (['MQTT', 'HTTP'] as $protocol) {
+            $protocolMeta = $this->buildFieldCompletenessForProtocol($protocol, $requiredFields);
+            $fieldCompleteness[$protocol] = $protocolMeta;
+            $total = (int) ($protocolMeta['total'] ?? 0);
 
             if ($total === 0) {
                 $dataWarnings[] = "{$protocol}: belum ada data masuk.";
                 continue;
             }
 
-            foreach ($requiredFields as $fieldKey => $fieldLabel) {
-                $missing = $qualityScope->whereNull($fieldKey)->count();
-                $valid = $total - $missing;
-
-                $fieldCompleteness[$protocol]['fields'][$fieldKey] = [
-                    'label' => $fieldLabel,
-                    'valid' => $valid,
-                    'missing' => $missing,
-                    'total' => $total,
-                ];
-
+            foreach (($protocolMeta['fields'] ?? []) as $fieldMeta) {
+                $fieldLabel = (string) ($fieldMeta['label'] ?? 'Field');
+                $missing = (int) ($fieldMeta['missing'] ?? 0);
                 if ($missing > 0) {
                     $dataWarnings[] = "{$protocol} {$fieldLabel}: {$missing}/{$total} data kosong.";
                 }
@@ -1285,6 +1268,65 @@ class DashboardController extends Controller
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache')
             ->header('Expires', 'Fri, 01 Jan 1990 00:00:00 GMT');
+    }
+
+    private function resolveProtocolTotals(): array
+    {
+        return [
+            'MQTT' => $this->countProtocolRows('MQTT'),
+            'HTTP' => $this->countProtocolRows('HTTP'),
+        ];
+    }
+
+    private function countProtocolRows(string $protocol): int
+    {
+        return (int) $this->telemetryQuery()
+            ->whereRaw('UPPER(protokol) = ?', [strtoupper($protocol)])
+            ->count();
+    }
+
+    private function buildFieldCompletenessForProtocol(string $protocol, array $requiredFields): array
+    {
+        $protocolUpper = strtoupper($protocol);
+        $baseQuery = $this->telemetryQuery()->whereRaw('UPPER(protokol) = ?', [$protocolUpper]);
+
+        $hasPacketSequence = (clone $baseQuery)->whereNotNull('packet_seq')->exists();
+        $scopeQuery = $hasPacketSequence
+            ? (clone $baseQuery)->whereNotNull('packet_seq')
+            : (clone $baseQuery);
+
+        $aggregateQuery = clone $scopeQuery;
+        $grammar = $aggregateQuery->getQuery()->getGrammar();
+        $selectParts = ['COUNT(*) as total_rows'];
+
+        foreach (array_keys($requiredFields) as $fieldKey) {
+            $wrappedField = $grammar->wrap($fieldKey);
+            $selectParts[] = "SUM(CASE WHEN {$wrappedField} IS NULL THEN 1 ELSE 0 END) AS missing_{$fieldKey}";
+        }
+
+        $aggregate = $aggregateQuery
+            ->selectRaw(implode(', ', $selectParts))
+            ->first();
+
+        $total = (int) ($aggregate?->total_rows ?? 0);
+        $fields = [];
+
+        foreach ($requiredFields as $fieldKey => $fieldLabel) {
+            $missingKey = 'missing_' . $fieldKey;
+            $missing = (int) ($aggregate?->{$missingKey} ?? 0);
+            $valid = max(0, $total - $missing);
+            $fields[$fieldKey] = [
+                'label' => $fieldLabel,
+                'valid' => $valid,
+                'missing' => $missing,
+                'total' => $total,
+            ];
+        }
+
+        return [
+            'total' => $total,
+            'fields' => $fields,
+        ];
     }
 
     private function resolveWarningConfig(): array

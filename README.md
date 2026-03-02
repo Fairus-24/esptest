@@ -190,6 +190,11 @@ The project has been updated with the following behavior:
 131. Simulator exclusion now runs fail-open: dashboard only excludes simulator telemetry when `storage/app/simulation_state.json` contains explicit valid simulator `device_id`; missing/invalid state no longer auto-filters by label only, fresh debug-heartbeat on the same `device_id` cancels false `Filtered`, and provisioned device IDs (have firmware profile) are treated as physical.
 132. Simulation telemetry is now fully isolated from real telemetry: simulator writes to dedicated table `simulated_eksperimens`, default dashboard source remains real table `eksperimens`, and simulation page iframe opens dedicated simulation dashboard source (`/?source=simulation`).
 133. Firmware baseline has been rolled back to stable pre-production profile (snapshot lineage before `cd98b6d`, centered on `5ba91ec`) with minimal modern compatibility patch: required telemetry fields stay complete, HTTP supports `X-Ingest-Key`, and HTTPS target works with optional insecure TLS flag.
+134. HTTP firmware target now defaults to `/api/http-data` and workspace `platformio.ini` explicitly sets `ESP_HTTP_ENDPOINT="/api/http-data"`, preventing production `404` caused by stale `/esptest/public/...` endpoint path.
+135. Realtime metric `Total Data` cards now show real table totals (not limited by `DASHBOARD_ANALYSIS_WINDOW`) and keep layout stable with compact `K` formatting when value is above `99,999`.
+136. Quality dropdown totals and field counters now use real protocol totals from database scope (no `take(200)` cap), with compact `K` formatting above `999` while preserving exact raw counts in tooltip.
+137. Firmware generator now injects `ESP_HTTP_ENDPOINT` build flag from device profile, so generated firmware endpoint stays consistent with runtime API path.
+138. ESP32 HTTP sender now has endpoint fallback logic: when configured endpoint returns `404`, firmware retries once on the alternate path (`/api/http-data` <-> `/esptest/public/api/http-data`) before marking failure.
 
 ## Tech Stack
 
@@ -345,7 +350,7 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | `DB_DATABASE` | Yes | `esptest` | From database created in step 4 |
 | `DB_USERNAME` | Yes | `root` | Your MySQL user |
 | `DB_PASSWORD` | Depends | `` | Your MySQL password |
-| `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `1200` | Max latest rows per protocol used for dashboard/statistics window |
+| `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `1200` | Rolling window size for charts/statistics; total counters and quality totals now use full real rows |
 | `DASHBOARD_PROTOCOL_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for MQTT/HTTP `Connected` badge on header + realtime monitor |
 | `DASHBOARD_ESP32_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for ESP32 `ON/OFF` badge |
 | `DASHBOARD_ESP32_DEBUG_FRESHNESS_SECONDS` | Recommended | `120` | Freshness threshold for ESP32 `ON/OFF` when source is MQTT debug heartbeat |
@@ -829,9 +834,9 @@ Update these values in `ESP32_Firmware/src/main.cpp` before flash:
 | --- | --- | --- |
 | `WIFI_SSID` / `WIFI_PASSWORD` | your WiFi | Active WLAN used by ESP32 |
 | `SERVER_HOST` | `192.168.0.104` | Legacy shared fallback host (used when HTTP/MQTT override flags are not set) |
-| `ESP_HTTP_BASE_URL` (in `platformio.ini`) | `https://espdht.mufaza.my.id` | Full HTTP base URL for ingest target (supports HTTPS) |
-| `HTTP_ENDPOINT` | `/esptest/public/api/http-data` | Laravel API path through Apache |
-| `ESP_MQTT_BROKER` (in `platformio.ini`) | `202.154.58.51` | Broker host override for MQTT publish path |
+| `ESP_HTTP_BASE_URL` (in `platformio.ini`) | `http://192.168.0.104/esptest/public` | Full HTTP base URL for ingest target (`APP_URL` host/path) |
+| `HTTP_ENDPOINT` | `/api/http-data` | Laravel ingest route path (or include subpath only if your deployment is not at domain root) |
+| `ESP_MQTT_BROKER` (in `platformio.ini`) | `192.168.0.104` | Broker host override for MQTT publish path |
 | `MQTT_SERVER` / `MQTT_PORT` | `192.168.0.104`, `1883` | Broker host/port fallback (used when override flag not set) |
 | `MQTT_TOPIC` | `iot/esp32/suhu` | Same as `.env` `MQTT_TOPIC` |
 | `ESP_REMOTE_DEBUG_TOPIC` (in `platformio.ini`) | `iot/esp32/debug` | Optional remote runtime log stream topic |
@@ -862,6 +867,7 @@ Generated output details:
 - `platformio.ini` includes selected `board` and auto-injected network/security flags:
   - `ESP_HTTP_INGEST_KEY`
   - `ESP_HTTP_BASE_URL`
+  - `ESP_HTTP_ENDPOINT`
   - `ESP_MQTT_BROKER`
   - `ESP_HTTP_TLS_INSECURE`
 - when applying directly to workspace, previous firmware files are backed up under `storage/app/firmware_backups/*`.
@@ -917,7 +923,9 @@ pio device monitor
 Build flag note:
 - `ESP32_Firmware/platformio.ini` includes `-DESP_HTTP_INGEST_KEY=\"<your-key>\"`.
 - Set it to the same value as `.env` `HTTP_INGEST_KEY` so HTTP payload requests include valid `X-Ingest-Key`.
-- For production URL, set `-DESP_HTTP_BASE_URL=\"https://your-domain\"` and keep endpoint as `/api/http-data`.
+- Local XAMPP subpath mode: set `-DESP_HTTP_BASE_URL=\"http://<lan-ip>/esptest/public\"` and keep endpoint `/api/http-data`.
+- For production URL, set `-DESP_HTTP_BASE_URL=\"https://your-domain\"` and keep endpoint `/api/http-data`.
+- On mixed deployments, firmware now auto-retries alternate endpoint path once if it receives `404` from configured endpoint.
 - If MQTT broker host differs from HTTP host, set `-DESP_MQTT_BROKER=\"<broker-host-or-ip>\"`.
 - For HTTPS without custom CA bundle, keep `-DESP_HTTP_TLS_INSECURE=1`.
 - Stable-profile tuning flags available in current `platformio.ini`:
@@ -1313,7 +1321,7 @@ $body = @{
 } | ConvertTo-Json -Compress
 
 Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1/esptest/public/api/http-data" `
+  -Uri "http://127.0.0.1/api/http-data" `
   -Headers @{ "X-Ingest-Key" = "replace-with-strong-secret" } `
   -ContentType "application/json" `
   -Body $body

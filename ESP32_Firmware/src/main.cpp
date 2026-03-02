@@ -25,7 +25,7 @@ const char* WIFI_PASSWORD = ESP_WIFI_PASSWORD;
 #define ESP_HTTP_BASE_URL "http://" SERVER_HOST
 #endif
 #ifndef ESP_HTTP_ENDPOINT
-#define ESP_HTTP_ENDPOINT "/esptest/public/api/http-data"
+#define ESP_HTTP_ENDPOINT "/api/http-data"
 #endif
 #ifndef ESP_MQTT_BROKER
 #define ESP_MQTT_BROKER SERVER_HOST
@@ -370,10 +370,19 @@ void sendHTTP() {
         return;
     }
 
-    HTTPClient http;
-    String url = String(HTTP_SERVER) + String(HTTP_ENDPOINT);
-    const bool isHttps = url.startsWith("https://");
-    WiFiClientSecure secureClient;
+    String primaryEndpoint = String(HTTP_ENDPOINT);
+    if (primaryEndpoint.length() == 0) {
+        primaryEndpoint = "/api/http-data";
+    } else if (!primaryEndpoint.startsWith("/")) {
+        primaryEndpoint = "/" + primaryEndpoint;
+    }
+
+    String fallbackEndpoint = primaryEndpoint;
+    if (primaryEndpoint.equalsIgnoreCase("/api/http-data")) {
+        fallbackEndpoint = "/esptest/public/api/http-data";
+    } else if (primaryEndpoint.equalsIgnoreCase("/esptest/public/api/http-data")) {
+        fallbackEndpoint = "/api/http-data";
+    }
 
     uint32_t packetSeq = ++httpPacketSeq;
     int rssiDbm = WiFi.RSSI();
@@ -392,34 +401,75 @@ void sendHTTP() {
         return;
     }
 
-    Serial.print("[HTTP] Sending to: ");
-    Serial.println(url);
     Serial.print("       Payload: ");
     Serial.println(payload);
 
-    if (isHttps) {
-#if ESP_HTTP_TLS_INSECURE != 0
-        secureClient.setInsecure();
-        http.begin(secureClient, url);
-#else
-        Serial.println("[HTTP] HTTPS target terdeteksi tanpa CA bundle. Aktifkan ESP_HTTP_TLS_INSECURE=1 bila diperlukan.");
-        httpSendFail++;
-        return;
-#endif
-    } else {
-        http.begin(url);
-    }
-    http.addHeader("Content-Type", "application/json");
-    if (HTTP_INGEST_KEY != nullptr && strlen(HTTP_INGEST_KEY) > 0) {
-        http.addHeader("X-Ingest-Key", HTTP_INGEST_KEY);
-    }
-    http.setConnectTimeout(5000);
-    http.setTimeout((uint16_t) ESP_HTTP_READ_TIMEOUT_MS);
+    int httpCode = -1;
+    String responseBody = "";
+    float txDurationMs = 0.0f;
+    bool success = false;
+    bool fallbackTried = false;
+    String usedEndpoint = primaryEndpoint;
 
-    unsigned long txStart = millis();
-    int httpCode = http.POST(payload);
-    float txDurationMs = (float) (millis() - txStart);
-    bool success = (httpCode >= 200 && httpCode < 300);
+    for (int attempt = 0; attempt < 2; attempt++) {
+        const bool shouldTryFallback = (attempt == 1);
+        if (shouldTryFallback && fallbackEndpoint == primaryEndpoint) {
+            break;
+        }
+
+        String endpointToUse = shouldTryFallback ? fallbackEndpoint : primaryEndpoint;
+        String url = String(HTTP_SERVER) + endpointToUse;
+        const bool isHttps = url.startsWith("https://");
+
+        Serial.print("[HTTP] Sending to: ");
+        Serial.println(url);
+
+        HTTPClient http;
+        WiFiClientSecure secureClient;
+
+        if (isHttps) {
+#if ESP_HTTP_TLS_INSECURE != 0
+            secureClient.setInsecure();
+            http.begin(secureClient, url);
+#else
+            Serial.println("[HTTP] HTTPS target terdeteksi tanpa CA bundle. Aktifkan ESP_HTTP_TLS_INSECURE=1 bila diperlukan.");
+            httpSendFail++;
+            return;
+#endif
+        } else {
+            http.begin(url);
+        }
+        http.addHeader("Content-Type", "application/json");
+        if (HTTP_INGEST_KEY != nullptr && strlen(HTTP_INGEST_KEY) > 0) {
+            http.addHeader("X-Ingest-Key", HTTP_INGEST_KEY);
+        }
+        http.setConnectTimeout(5000);
+        http.setTimeout((uint16_t) ESP_HTTP_READ_TIMEOUT_MS);
+
+        unsigned long txStart = millis();
+        httpCode = http.POST(payload);
+        txDurationMs = (float) (millis() - txStart);
+        responseBody = http.getString();
+        success = (httpCode >= 200 && httpCode < 300);
+        usedEndpoint = endpointToUse;
+
+        http.end();
+
+        if (success) {
+            break;
+        }
+
+        if (!shouldTryFallback && httpCode == 404 && fallbackEndpoint != primaryEndpoint) {
+            fallbackTried = true;
+            Serial.print("[HTTP] Endpoint ");
+            Serial.print(endpointToUse);
+            Serial.print(" returned 404, retrying fallback endpoint ");
+            Serial.println(fallbackEndpoint);
+            continue;
+        }
+
+        break;
+    }
 
     float finalPower = estimateProtocolPower("HTTP", txDurationMs, payloadBytes, rssiDbm, success);
     lastHttpTxDurationMs = txDurationMs;
@@ -430,7 +480,12 @@ void sendHTTP() {
         Serial.print("[HTTP] Success (");
         Serial.print(httpCode);
         Serial.println(")");
-        Serial.println("       Response: " + http.getString());
+        Serial.print("       Endpoint: ");
+        Serial.println(usedEndpoint);
+        if (fallbackTried) {
+            Serial.println("       Info: request succeeded after endpoint fallback.");
+        }
+        Serial.println("       Response: " + responseBody);
         Serial.print("       Seq: ");
         Serial.print(packetSeq);
         Serial.print(" | RSSI: ");
@@ -444,7 +499,12 @@ void sendHTTP() {
     } else {
         Serial.print("[HTTP] Failed with code: ");
         Serial.println(httpCode);
-        Serial.println("       Response: " + http.getString());
+        Serial.print("       Endpoint: ");
+        Serial.println(usedEndpoint);
+        if (fallbackTried) {
+            Serial.println("       Info: fallback endpoint already attempted.");
+        }
+        Serial.println("       Response: " + responseBody);
         Serial.print("       Seq: ");
         Serial.print(packetSeq);
         Serial.print(" | RSSI: ");
@@ -456,8 +516,6 @@ void sendHTTP() {
         Serial.println(" mW");
         httpSendFail++;
     }
-
-    http.end();
 }
 // ==================== MQTT SENDER ====================
 void sendMQTT() {

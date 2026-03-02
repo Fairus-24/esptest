@@ -2646,6 +2646,18 @@
                 </div>
             </div>
         </div>
+        @php
+            $formatCompactCount = static function ($value, int $threshold): string {
+                $numeric = max(0, (int) $value);
+                if ($numeric > $threshold) {
+                    return (string) round($numeric / 1000) . 'K';
+                }
+
+                return (string) $numeric;
+            };
+            $formatStatCount = static fn ($value): string => $formatCompactCount($value, 99999);
+            $formatQualityCount = static fn ($value): string => $formatCompactCount($value, 999);
+        @endphp
         <!-- Statistics Cards -->
         <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Real-Time Metrics</h2>
         <div class="stats-grid" id="statsGrid">
@@ -2658,7 +2670,7 @@
                     <p class="card-help-item"><span class="card-help-label">data points:</span> Satuan jumlah record, bukan satuan fisik sensor.</p>
                 </div>
                 <span class="stat-label">MQTT - Total Data</span>
-                <span class="stat-value">{{ $summary['mqtt']['total_data'] }}</span>
+                <span class="stat-value" title="{{ (int) ($summary['mqtt']['total_data'] ?? 0) }}">{{ $formatStatCount($summary['mqtt']['total_data'] ?? 0) }}</span>
                 <span class="stat-unit">data points</span>
             </div>
             <div class="stat-card mqtt-color">
@@ -2706,7 +2718,7 @@
                     <p class="card-help-item"><span class="card-help-label">data points:</span> Satuan jumlah record, bukan satuan fisik sensor.</p>
                 </div>
                 <span class="stat-label">HTTP - Total Data</span>
-                <span class="stat-value">{{ $summary['http']['total_data'] }}</span>
+                <span class="stat-value" title="{{ (int) ($summary['http']['total_data'] ?? 0) }}">{{ $formatStatCount($summary['http']['total_data'] ?? 0) }}</span>
                 <span class="stat-unit">data points</span>
             </div>
             <div class="stat-card http-color">
@@ -2929,7 +2941,7 @@
                                     <i class="fas {{ $protocolIconClass }} quality-protocol-icon" aria-hidden="true"></i>
                                     {{ $protocol }} Field Completeness
                                 </span>
-                                <span class="quality-title-count">({{ $protocolMeta['total'] }} data)</span>
+                                <span class="quality-title-count" title="{{ (int) ($protocolMeta['total'] ?? 0) }} data">({{ $formatQualityCount($protocolMeta['total'] ?? 0) }} data)</span>
                             </h4>
                             <span class="quality-summary-meta">
                                 <button type="button" class="card-help-btn quality-help-btn" data-help-target="{{ $qualityHelpPanelId }}" aria-controls="{{ $qualityHelpPanelId }}" aria-expanded="false" title="Lihat penjelasan row card ini">?</button>
@@ -2955,8 +2967,8 @@
                             @foreach($protocolMeta['fields'] as $fieldMeta)
                                 <div class="quality-row">
                                     <span>{{ $fieldMeta['label'] }}</span>
-                                    <span class="quality-badge {{ $fieldMeta['missing'] > 0 ? 'quality-bad' : 'quality-good' }}">
-                                        {{ $fieldMeta['valid'] }}/{{ $fieldMeta['total'] }}
+                                    <span class="quality-badge {{ $fieldMeta['missing'] > 0 ? 'quality-bad' : 'quality-good' }}" title="{{ (int) ($fieldMeta['valid'] ?? 0) }}/{{ (int) ($fieldMeta['total'] ?? 0) }}">
+                                        {{ $formatQualityCount($fieldMeta['valid'] ?? 0) }}/{{ $formatQualityCount($fieldMeta['total'] ?? 0) }}
                                     </span>
                                 </div>
                             @endforeach
