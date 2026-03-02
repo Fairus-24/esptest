@@ -1,8 +1,7 @@
 <?php
 
 return [
-    'panel_token' => env('ADMIN_PANEL_TOKEN', ''),
-    'allow_without_token' => filter_var(env('ADMIN_ALLOW_WITHOUT_TOKEN', false), FILTER_VALIDATE_BOOL),
+    'google_allowed_email' => strtolower(trim((string) env('ADMIN_GOOGLE_ALLOWED_EMAIL', 'mufaza2408@gmail.com'))),
     'session_key' => env('ADMIN_SESSION_KEY', 'admin_config_authenticated'),
     'session_ttl_minutes' => (int) env('ADMIN_SESSION_TTL_MINUTES', 240),
 
@@ -21,4 +20,3 @@ return [
         'AUTO_DETECT',
     ],
 ];
-

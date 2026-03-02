@@ -5,33 +5,48 @@ namespace Tests\Feature;
 use App\Models\Device;
 use App\Models\Eksperimen;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Socialite\Contracts\User as SocialiteUser;
+use Laravel\Socialite\Facades\Socialite;
+use Mockery;
 use Tests\TestCase;
 
 class AdminConfigPanelTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config([
+            'admin.google_allowed_email' => 'mufaza2408@gmail.com',
+            'services.google.client_id' => 'google-client-id',
+            'services.google.client_secret' => 'google-client-secret',
+            'services.google.redirect' => 'https://espdht.mufaza.my.id/admin/login/api/auth/google/callback',
+        ]);
+    }
+
     public function test_admin_panel_requires_login(): void
     {
-        config([
-            'admin.panel_token' => 'secret-admin-token',
-            'admin.allow_without_token' => false,
-        ]);
 
         $this->get('/admin/config')
             ->assertRedirect('/admin/login');
     }
 
+    public function test_admin_google_callback_rejects_unlisted_email(): void
+    {
+        $this->mockGoogleCallback('intruder@example.com');
+
+        $this->get('/admin/login/api/auth/google/callback')
+            ->assertRedirect('/admin/login')
+            ->assertSessionHas('admin_error');
+    }
+
     public function test_admin_can_login_and_save_runtime_override(): void
     {
-        config([
-            'admin.panel_token' => 'secret-admin-token',
-            'admin.allow_without_token' => false,
-        ]);
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
 
-        $this->post('/admin/login', [
-            'token' => 'secret-admin-token',
-        ])->assertRedirect('/admin/config');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
 
         $this->post('/admin/config/runtime', [
             'APP_URL' => 'https://iot.lab.example.com',
@@ -54,19 +69,13 @@ class AdminConfigPanelTest extends TestCase
 
     public function test_admin_firmware_download_contains_selected_device_id(): void
     {
-        config([
-            'admin.panel_token' => 'secret-admin-token',
-            'admin.allow_without_token' => false,
-        ]);
-
         $device = Device::query()->create([
             'nama_device' => 'ESP32-NEW',
             'lokasi' => 'Lab',
         ]);
 
-        $this->post('/admin/login', [
-            'token' => 'secret-admin-token',
-        ])->assertRedirect('/admin/config');
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
 
         $response = $this->get('/admin/config/devices/' . $device->id . '/firmware/main.cpp')
             ->assertOk()
@@ -80,19 +89,13 @@ class AdminConfigPanelTest extends TestCase
 
     public function test_admin_can_update_and_delete_device_with_purge_option(): void
     {
-        config([
-            'admin.panel_token' => 'secret-admin-token',
-            'admin.allow_without_token' => false,
-        ]);
-
         $device = Device::query()->create([
             'nama_device' => 'ESP32-LAB-A',
             'lokasi' => 'Room A',
         ]);
 
-        $this->post('/admin/login', [
-            'token' => 'secret-admin-token',
-        ])->assertRedirect('/admin/config');
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
 
         $this->patch('/admin/config/devices/' . $device->id, [
             'nama_device' => 'ESP32-LAB-A-UPDATED',
@@ -134,19 +137,13 @@ class AdminConfigPanelTest extends TestCase
 
     public function test_admin_platformio_download_contains_runtime_and_profile_network_flags(): void
     {
-        config([
-            'admin.panel_token' => 'secret-admin-token',
-            'admin.allow_without_token' => false,
-        ]);
-
         $device = Device::query()->create([
             'nama_device' => 'ESP32-PROD',
             'lokasi' => 'Production Lab',
         ]);
 
-        $this->post('/admin/login', [
-            'token' => 'secret-admin-token',
-        ])->assertRedirect('/admin/config');
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
 
         $this->post('/admin/config/runtime', [
             'HTTP_INGEST_KEY' => 'runtime-ingest-key',
@@ -180,5 +177,16 @@ class AdminConfigPanelTest extends TestCase
         $this->assertStringContainsString('-DESP_HTTP_BASE_URL=\\"https://espdht.mufaza.my.id\\"', $platformioContent);
         $this->assertStringContainsString('-DESP_MQTT_BROKER=\\"202.154.58.51\\"', $platformioContent);
         $this->assertStringContainsString('-DESP_HTTP_TLS_INSECURE=0', $platformioContent);
+    }
+
+    private function mockGoogleCallback(string $email): void
+    {
+        $provider = Mockery::mock();
+        $socialUser = Mockery::mock(SocialiteUser::class);
+        $socialUser->shouldReceive('getEmail')->andReturn($email);
+        $socialUser->shouldReceive('getName')->andReturn('Admin Google');
+
+        $provider->shouldReceive('user')->once()->andReturn($socialUser);
+        Socialite::shouldReceive('driver')->once()->with('google')->andReturn($provider);
     }
 }

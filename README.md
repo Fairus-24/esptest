@@ -161,7 +161,7 @@ The project has been updated with the following behavior:
 102. Burn-in `seconds_since_latest_row` is now normalized to non-negative values, avoiding timezone-skew confusion in freshness checks.
 103. Simulation service now hard-binds to `SIMULATOR-APP` device ID (even if stale state file points elsewhere), so reset/tick cannot accidentally write/delete real ESP32 device rows.
 104. ESP32 DHT recovery now includes one-time `AUTO_DETECT` fail-safe when boot keeps failing with zero successful reads, to recover from mislabeled/alternate DHT module types.
-105. Added Admin Configuration Panel (`/admin/login` + `/admin/config`) with token-gated session auth, session TTL, and rate-limited login attempts.
+105. Added Admin Configuration Panel (`/admin/login` + `/admin/config`) with protected admin session, session TTL, and rate-limited login attempts.
 106. Runtime environment values can now be overridden from GUI and stored in DB (`app_settings`) without editing `.env` directly; overrides are applied safely at runtime per request.
 107. Added per-device firmware provisioning profiles (`device_firmware_profiles`) so each ESP32 can keep its own board, WiFi, host, topic, DHT, and credential settings.
 108. Firmware generator now renders ready-to-upload `main.cpp` + `platformio.ini` from current device profile and runtime overrides, including automatic `DEVICE_ID` and `ESP_HTTP_INGEST_KEY` alignment.
@@ -205,6 +205,7 @@ The project has been updated with the following behavior:
 146. Comparative latency/power charts now use a shared time-slot x-axis (WIB, second-level bucket), so MQTT and HTTP points with the same timestamp are plotted at the same horizontal position; toolbar `Total data point` remains based on real record count.
 147. Compact `K` counters now use floor formatting (example: `6872 => 6K`, `115999 => 115K`), and chart payload now has dedicated window control (`DASHBOARD_CHART_WINDOW`, default unlimited) so chart `Total data point` no longer appears capped by `DASHBOARD_ANALYSIS_WINDOW`.
 148. Reset page/server cleanup: reset token guard has been removed from runtime flow and admin runtime overrides; reset now validates only checkbox + exact `RESET` typing.
+149. Admin authentication now uses Google OAuth callback flow with strict email allow-list (`ADMIN_GOOGLE_ALLOWED_EMAIL`) and no admin token form.
 
 ## Tech Stack
 
@@ -248,7 +249,7 @@ Before editing `.env` or firmware, collect these values first:
 | MySQL DB name/user/password | `.env` (`DB_*`) | XAMPP MySQL user settings / phpMyAdmin |
 | MQTT credentials | `.env` + firmware (`MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_USER`, `MQTT_PASSWORD`) | Mosquitto config/password file; default in this repo: `esp32/esp32` |
 | Subdomain URL | `.env` (`APP_URL`) | DNS/subdomain setup (example: `https://iot-lab.example.com`) |
-| Security secrets | `.env` (`HTTP_INGEST_KEY`, `ADMIN_PANEL_TOKEN`) | Generate strong random strings (`openssl rand -hex 32`) |
+| Security secrets | `.env` (`HTTP_INGEST_KEY`, `GOOGLE_CLIENT_SECRET`) | Generate strong random strings (`openssl rand -hex 32`) |
 | PHP binary path | `.env` (`LARAVEL_HTTP_PHP_BINARY`) | `where php` on Windows, or Herd/XAMPP PHP absolute path |
 | Mosquitto binary + config path | `.env` (`MOSQUITTO_BINARY`, `MOSQUITTO_CONFIG`) | Usually `C:/Program Files/mosquitto/...` |
 | Device ID | payload `device_id` | `SELECT id, nama_device FROM devices;` after seed |
@@ -421,8 +422,10 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 
 | Key | Required | Example | How to fill |
 | --- | --- | --- | --- |
-| `ADMIN_PANEL_TOKEN` | Required in production | `replace-with-long-random-admin-token` | Token used by `/admin/login` |
-| `ADMIN_ALLOW_WITHOUT_TOKEN` | Local/dev only | `false` | Keep `false` in production |
+| `GOOGLE_CLIENT_ID` | Required | `...apps.googleusercontent.com` | OAuth client ID from Google Cloud Console |
+| `GOOGLE_CLIENT_SECRET` | Required | `GOCSPX-...` | OAuth client secret from Google Cloud Console |
+| `GOOGLE_REDIRECT_URI` | Required | `https://espdht.mufaza.my.id/admin/login/api/auth/google/callback` | Must exactly match authorized redirect URI in Google Console |
+| `ADMIN_GOOGLE_ALLOWED_EMAIL` | Required | `mufaza2408@gmail.com` | Only this Google email is allowed to access admin panel |
 | `ADMIN_SESSION_TTL_MINUTES` | Recommended | `240` | Session lifetime before forced re-login |
 | `ADMIN_SESSION_KEY` | Optional | `admin_config_authenticated` | Session key name (advanced) |
 
@@ -524,8 +527,10 @@ DASHBOARD_BALANCE_ALLOWED_DELTA=3
 DASHBOARD_BALANCE_ALLOWED_RATIO=0.12
 DATA_RETENTION_DAYS=30
 
-ADMIN_PANEL_TOKEN=replace-with-strong-admin-token
-ADMIN_ALLOW_WITHOUT_TOKEN=false
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=https://your-domain/admin/login/api/auth/google/callback
+ADMIN_GOOGLE_ALLOWED_EMAIL=mufaza2408@gmail.com
 ADMIN_SESSION_KEY=admin_config_authenticated
 ADMIN_SESSION_TTL_MINUTES=240
 
@@ -749,9 +754,10 @@ pm2 start "php artisan schedule:work" --name esptest-scheduler
 ### 5) Production security baseline
 
 - set `APP_ENV=production`, `APP_DEBUG=false`.
-- set strong random `HTTP_INGEST_KEY`, `ADMIN_PANEL_TOKEN`.
+- set strong random `HTTP_INGEST_KEY`, `GOOGLE_CLIENT_SECRET`.
 - set `HTTP_ALLOW_INGEST_WITHOUT_KEY=false`.
-- set `ADMIN_ALLOW_WITHOUT_TOKEN=false`.
+- set exact Google OAuth values: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`.
+- set allow-list email `ADMIN_GOOGLE_ALLOWED_EMAIL`.
 - run `php artisan optimize:clear` after `.env` changes.
 
 ### 6) Keep burn-in running during rollout
@@ -852,7 +858,7 @@ Update these values in `ESP32_Firmware/src/main.cpp` before flash:
 
 Instead of editing firmware files manually, use:
 
-1. `GET /admin/login` (login using `ADMIN_PANEL_TOKEN`).
+1. `GET /admin/login` (login using allowed Google account).
 2. Open `GET /admin/config`.
 3. Use `Quick Setup Runtime` for core fields (`APP_URL`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_TOPIC`, `HTTP_INGEST_KEY`, retention).
 4. Add/select target device (optional: clone profile from existing device).
@@ -995,7 +1001,7 @@ Use this order on a fresh machine/session so the stack starts cleanly:
 | Scheduler | `php artisan schedule:list` + active `schedule:work` process | `application-simulation-tick` appears and executes continuously |
 | Database | `eksperimens` table growth | New `HTTP` and `MQTT` rows with full required fields |
 | Dashboard UI | Auto refresh every 5s | Charts update and slide to latest data |
-| Admin Config | `/admin/login` then `/admin/config` | Login succeeds, runtime override + firmware profile save works |
+| Admin Config | `/admin/login` then `/admin/config` | Google login succeeds for allowed email; runtime override + firmware profile save works |
 | ESP32 runtime | Serial monitor | No `HTTP -1` / `MQTT -2` after correct host config |
 
 Recommended DB check:
@@ -1129,7 +1135,8 @@ Data safety note:
 Purpose: runtime configuration management + ESP32 firmware provisioning from GUI.
 
 - `GET /admin/login` -> admin login page.
-- `POST /admin/login` -> validate admin token and create session.
+- `GET /admin/login/api/auth/google/redirect` -> redirect ke Google OAuth consent screen.
+- `GET /admin/login/api/auth/google/callback` -> proses callback Google, validasi email allow-list, dan buat admin session.
 - `POST /admin/logout` -> clear admin session.
 - `GET /admin/config` -> main admin panel (requires authenticated admin session).
 - `POST /admin/config/runtime` -> save runtime overrides to DB (`app_settings`).
@@ -1145,7 +1152,7 @@ Security notes:
 
 - login is rate-limited (`throttle:admin-login`).
 - protected routes require middleware `admin.session`.
-- in production set `ADMIN_PANEL_TOKEN` and keep `ADMIN_ALLOW_WITHOUT_TOKEN=false`.
+- in production set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `ADMIN_GOOGLE_ALLOWED_EMAIL`.
 
 ## Dashboard Behavior
 
@@ -1403,24 +1410,24 @@ GROUP BY protokol;
 - If you changed env security keys, run:
   - `php artisan optimize:clear`
 
-### Admin login always says invalid token
+### Admin login via Google fails / kembali ke login
 
-- Confirm `.env` value `ADMIN_PANEL_TOKEN` exactly matches submitted token (no extra spaces).
-- Keep `ADMIN_ALLOW_WITHOUT_TOKEN=false` in production.
-- If you rotated token recently, clear cache:
+- Confirm `.env` values:
+  - `GOOGLE_CLIENT_ID`
+  - `GOOGLE_CLIENT_SECRET`
+  - `GOOGLE_REDIRECT_URI` (must exactly match Google Console redirect URI)
+  - `ADMIN_GOOGLE_ALLOWED_EMAIL` (must match Google account email exactly)
+- If you rotated OAuth credentials recently, clear cache:
   - `php artisan optimize:clear`
 - Check login rate limiter; repeated failures may temporarily throttle requests.
 
-### Admin login shows browser warning: form submission is not secure
+### Google callback shows `redirect_uri_mismatch`
 
-- Ensure production `.env` has:
-  - `APP_URL=https://your-domain`
-  - `APP_FORCE_HTTPS=true`
-- Ensure Nginx forwards proto header:
-  - `proxy_set_header X-Forwarded-Proto $scheme;`
-- Clear cache and reload:
+- Ensure Google Cloud OAuth client has exact redirect URI:
+  - `https://espdht.mufaza.my.id/admin/login/api/auth/google/callback`
+- Ensure `.env` `GOOGLE_REDIRECT_URI` is exactly the same value.
+- Run:
   - `php artisan optimize:clear`
-  - restart PM2/Nginx processes.
 
 ### Auto git sync is not running on Debian
 

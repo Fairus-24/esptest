@@ -10,10 +10,14 @@ use App\Services\RuntimeConfigOverrideService;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Laravel\Socialite\Contracts\User as SocialiteUser;
+use Laravel\Socialite\Facades\Socialite;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class AdminConfigController extends Controller
 {
@@ -26,31 +30,55 @@ class AdminConfigController extends Controller
 
     public function loginForm()
     {
+        $googleAuthConfig = $this->resolveGoogleAuthConfig();
+
         return view('admin-login', [
-            'allowWithoutToken' => (bool) config('admin.allow_without_token', false),
+            'googleLoginConfigured' => $googleAuthConfig['configured'],
+            'allowedGoogleEmail' => $googleAuthConfig['allowed_email'],
         ]);
     }
 
-    public function login(Request $request): RedirectResponse
+    public function redirectToGoogle(): RedirectResponse
     {
-        $validated = $request->validate([
-            'token' => ['nullable', 'string', 'max:255'],
-        ]);
-
-        $expectedToken = trim((string) config('admin.panel_token', ''));
-        $allowWithoutToken = (bool) config('admin.allow_without_token', false);
-        $providedToken = trim((string) ($validated['token'] ?? ''));
-
-        if ($expectedToken === '' && !$allowWithoutToken) {
-            return back()->withErrors([
-                'token' => 'ADMIN_PANEL_TOKEN belum dikonfigurasi di server.',
-            ]);
+        $googleAuthConfig = $this->resolveGoogleAuthConfig();
+        if (!$googleAuthConfig['configured']) {
+            return redirect()
+                ->route('admin.login')
+                ->with('admin_error', 'Google admin login belum dikonfigurasi di server.');
         }
 
-        if ($expectedToken !== '' && !hash_equals($expectedToken, $providedToken)) {
-            return back()->withErrors([
-                'token' => 'Token admin tidak valid.',
+        return Socialite::driver('google')->redirect();
+    }
+
+    public function handleGoogleCallback(Request $request): RedirectResponse
+    {
+        $googleAuthConfig = $this->resolveGoogleAuthConfig();
+        if (!$googleAuthConfig['configured']) {
+            return redirect()
+                ->route('admin.login')
+                ->with('admin_error', 'Google admin login belum dikonfigurasi di server.');
+        }
+
+        try {
+            /** @var SocialiteUser $googleUser */
+            $googleUser = Socialite::driver('google')->user();
+        } catch (Throwable $e) {
+            Log::warning('Google admin login callback failed.', [
+                'error' => $e->getMessage(),
+                'ip' => $request->ip(),
             ]);
+
+            return redirect()
+                ->route('admin.login')
+                ->with('admin_error', 'Login Google gagal diproses. Coba lagi.');
+        }
+
+        $email = strtolower(trim((string) $googleUser->getEmail()));
+        $allowedEmail = $googleAuthConfig['allowed_email'];
+        if ($email === '' || $allowedEmail === '' || !hash_equals($allowedEmail, $email)) {
+            return redirect()
+                ->route('admin.login')
+                ->with('admin_error', "Akses ditolak. Hanya email {$allowedEmail} yang diizinkan.");
         }
 
         $sessionKey = (string) config('admin.session_key', 'admin_config_authenticated');
@@ -58,11 +86,14 @@ class AdminConfigController extends Controller
             'ok' => true,
             'at' => now()->timestamp,
             'ip' => $request->ip(),
+            'provider' => 'google',
+            'email' => $email,
+            'name' => trim((string) ($googleUser->getName() ?? '')),
         ]);
 
         return redirect()
             ->intended(route('admin.config.index'))
-            ->with('admin_status', 'Login admin berhasil.');
+            ->with('admin_status', 'Login admin via Google berhasil.');
     }
 
     public function logout(Request $request): RedirectResponse
@@ -319,5 +350,21 @@ class AdminConfigController extends Controller
         $profile = $this->firmwareTemplateService->ensureProfile($device);
 
         return $this->firmwareTemplateService->render($device, $profile, $settings);
+    }
+
+    /**
+     * @return array{configured: bool, allowed_email: string}
+     */
+    private function resolveGoogleAuthConfig(): array
+    {
+        $clientId = trim((string) config('services.google.client_id', ''));
+        $clientSecret = trim((string) config('services.google.client_secret', ''));
+        $redirectUri = trim((string) config('services.google.redirect', ''));
+        $allowedEmail = strtolower(trim((string) config('admin.google_allowed_email', '')));
+
+        return [
+            'configured' => $clientId !== '' && $clientSecret !== '' && $redirectUri !== '' && $allowedEmail !== '',
+            'allowed_email' => $allowedEmail,
+        ];
     }
 }

@@ -37,31 +37,27 @@
         }
         h1 { margin: 0 0 8px; font-size: 1.2rem; }
         p { margin: 0 0 18px; color: var(--muted); font-size: .94rem; line-height: 1.45; }
-        label { display: block; margin-bottom: 8px; font-weight: 600; font-size: .92rem; }
-        input {
-            width: 100%;
-            background: #0b1220;
-            border: 1px solid #253047;
-            color: var(--text);
-            border-radius: 10px;
-            padding: 11px 12px;
-            font-size: .94rem;
-            margin-bottom: 14px;
-        }
-        input:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(34, 211, 238, .18);
-        }
         .btn {
             width: 100%;
             border: 0;
             border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             padding: 11px 12px;
             font-weight: 700;
             color: #03242b;
             background: linear-gradient(90deg, #67e8f9, var(--accent));
             cursor: pointer;
+            text-decoration: none;
+            margin-bottom: 14px;
+        }
+        .btn.is-disabled {
+            pointer-events: none;
+            cursor: not-allowed;
+            background: #334155;
+            color: #cbd5e1;
         }
         .alert {
             border-radius: 10px;
@@ -78,7 +74,7 @@
 <body>
     <div class="card">
         <h1>Admin Configuration Login</h1>
-        <p>Gunakan token admin untuk membuka panel konfigurasi runtime, provisioning device ESP32, dan generator firmware.</p>
+        <p>Login admin menggunakan akun Google yang diizinkan untuk membuka panel konfigurasi runtime, provisioning device ESP32, dan generator firmware.</p>
 
         @if (session('admin_error'))
             <div class="alert err">{{ session('admin_error') }}</div>
@@ -90,18 +86,19 @@
             <div class="alert err">{{ $errors->first() }}</div>
         @endif
 
-        <form method="POST" action="{{ route('admin.login.submit', [], false) }}">
-            @csrf
-            <label for="token">Admin Token</label>
-            <input type="password" id="token" name="token" autocomplete="current-password" placeholder="Masukkan token admin">
-            <button type="submit" class="btn">Login Admin</button>
-        </form>
+        <a
+            href="{{ $googleLoginConfigured ? route('admin.login.google.redirect', [], false) : '#' }}"
+            class="btn{{ $googleLoginConfigured ? '' : ' is-disabled' }}"
+            aria-disabled="{{ $googleLoginConfigured ? 'false' : 'true' }}"
+        >
+            <span>Login dengan Google</span>
+        </a>
 
         <div class="hint">
-            @if ($allowWithoutToken)
-                Mode dev aktif: token kosong diizinkan oleh konfigurasi server.
+            @if ($googleLoginConfigured)
+                Hanya email <strong>{{ $allowedGoogleEmail }}</strong> yang diizinkan.
             @else
-                Token disimpan di environment server (`ADMIN_PANEL_TOKEN`).
+                Google OAuth belum dikonfigurasi lengkap di server.
             @endif
             <br>
             <a href="{{ route('dashboard', [], false) }}">Kembali ke Dashboard</a>

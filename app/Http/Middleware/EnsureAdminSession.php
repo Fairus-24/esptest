@@ -33,7 +33,7 @@ class EnsureAdminSession
 
     private function unauthorizedResponse(Request $request, ?string $message = null): Response
     {
-        $message = $message ?? 'Akses admin memerlukan autentikasi token.';
+        $message = $message ?? 'Akses admin memerlukan login Google.';
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -47,4 +47,3 @@ class EnsureAdminSession
             ->with('admin_error', $message);
     }
 }
-

@@ -22,9 +22,11 @@ Route::prefix('/simulation')->name('simulation.')->group(function () {
 Route::redirect('/simulasi', '/simulation');
 
 Route::get('/admin/login', [AdminConfigController::class, 'loginForm'])->name('admin.login');
-Route::post('/admin/login', [AdminConfigController::class, 'login'])
+Route::get('/admin/login/api/auth/google/redirect', [AdminConfigController::class, 'redirectToGoogle'])
     ->middleware('throttle:admin-login')
-    ->name('admin.login.submit');
+    ->name('admin.login.google.redirect');
+Route::get('/admin/login/api/auth/google/callback', [AdminConfigController::class, 'handleGoogleCallback'])
+    ->name('admin.login.google.callback');
 Route::post('/admin/logout', [AdminConfigController::class, 'logout'])->name('admin.logout');
 
 Route::prefix('/admin/config')
