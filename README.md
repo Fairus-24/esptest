@@ -207,6 +207,9 @@ The project has been updated with the following behavior:
 148. Reset page/server cleanup: reset token guard has been removed from runtime flow and admin runtime overrides; reset now validates only checkbox + exact `RESET` typing.
 149. Admin authentication now uses Google OAuth callback flow with strict email allow-list (`ADMIN_GOOGLE_ALLOWED_EMAIL`) and no admin token form.
 150. Admin login page copy has been simplified (no visible allow-list email text on login screen) while backend allow-list validation remains enforced.
+151. Admin login button now includes Google brand icon (inline SVG) so CTA visual is clearly aligned with Google OAuth flow.
+152. Admin login Google CTA now uses a simpler darker-hover style (without motion effects) and button label updated to `Lanjutkan dengan Google`.
+153. Admin Google CTA label now switches on hover (`Login dengan Google` -> `Lanjutkan dengan Google`) and Google icon contrast is enhanced on hover for clearer visual emphasis.
 
 ## Tech Stack
 

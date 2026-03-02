@@ -52,12 +52,62 @@
             cursor: pointer;
             text-decoration: none;
             margin-bottom: 14px;
+            box-shadow: 0 8px 14px rgba(2, 12, 27, 0.2);
+            transition: background 0.18s ease, box-shadow 0.18s ease;
+        }
+        .btn:hover {
+            background: linear-gradient(90deg, #45c7de, #17b0c5);
+            box-shadow: 0 10px 16px rgba(2, 12, 27, 0.26);
+        }
+        .btn:active {
+            background: linear-gradient(90deg, #3ab4ca, #1496a8);
+        }
+        .btn:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25), 0 0 0 6px rgba(66, 133, 244, 0.42);
+        }
+        .btn .google-icon {
+            width: 18px;
+            height: 18px;
+            flex: 0 0 18px;
+            display: block;
+        }
+        .btn .google-icon-wrap {
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            display: inline-grid;
+            place-items: center;
+            background: rgba(255, 255, 255, 0.22);
+            border: 1px solid rgba(15, 23, 42, 0.18);
+            transition: background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+        .btn .btn-label .label-hover {
+            display: none;
         }
         .btn.is-disabled {
             pointer-events: none;
             cursor: not-allowed;
             background: #334155;
             color: #cbd5e1;
+            box-shadow: none;
+        }
+        .btn.is-disabled .google-icon {
+            opacity: 0.72;
+        }
+        .btn:hover .google-icon-wrap {
+            background: #ffffff;
+            border-color: rgba(15, 23, 42, 0.28);
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.22);
+        }
+        .btn:hover .google-icon {
+            filter: saturate(1.16) contrast(1.1);
+        }
+        .btn:hover .btn-label .label-default {
+            display: none;
+        }
+        .btn:hover .btn-label .label-hover {
+            display: inline;
         }
         .alert {
             border-radius: 10px;
@@ -91,7 +141,18 @@
             class="btn{{ $googleLoginConfigured ? '' : ' is-disabled' }}"
             aria-disabled="{{ $googleLoginConfigured ? 'false' : 'true' }}"
         >
-            <span>Login dengan Google</span>
+            <span class="google-icon-wrap">
+                <svg class="google-icon" viewBox="0 0 533.5 544.3" aria-hidden="true" focusable="false">
+                    <path fill="#4285F4" d="M533.5 278.4c0-17.8-1.5-35-4.4-51.6H272.1v97.7h146.9c-6.3 34-25.2 62.7-53.8 82v68h86.9c50.9-46.9 80.4-116.1 80.4-196.1z"/>
+                    <path fill="#34A853" d="M272.1 544.3c72.6 0 133.5-24.1 178-65.8l-86.9-68c-24.1 16.2-54.8 25.8-91.1 25.8-70 0-129.2-47.3-150.4-110.9h-89.9v69.8c44.4 88 135.5 149.1 240.3 149.1z"/>
+                    <path fill="#FBBC04" d="M121.7 325.4c-10.6-31.5-10.6-65.4 0-96.9v-69.8h-89.9c-39.8 79.3-39.8 173.5 0 252.8l89.9-69.8z"/>
+                    <path fill="#EA4335" d="M272.1 107.7c38.2-.6 75 13.8 103.1 40.4l77.2-77.2C403.2 24.4 338.7-1.4 272.1 .1 167.3 .1 76.2 61.2 31.8 149.2l89.9 69.8c21.2-63.6 80.4-111.3 150.4-111.3z"/>
+                </svg>
+            </span>
+            <span class="btn-label">
+                <span class="label-default">Login dengan Google</span>
+                <span class="label-hover">Lanjutkan dengan Google</span>
+            </span>
         </a>
 
         <div class="hint">
