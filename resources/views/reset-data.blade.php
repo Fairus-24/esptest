@@ -336,7 +336,6 @@
                 ? $sessionStatusType
                 : (is_string($statusMessage) && str_starts_with(strtolower($statusMessage), 'gagal') ? 'error' : 'success')
         );
-        $resetTokenRequired = (bool) ($resetTokenRequired ?? false);
         $basePath = rtrim(request()->getBaseUrl(), '/');
         $resetDataPath = ($basePath !== '' ? $basePath : '') . '/reset-data';
         $dashboardPath = $basePath !== '' ? $basePath . '/' : '/';
@@ -411,12 +410,6 @@
                     <label class="confirm-label" for="confirmText">Ketik <strong>RESET</strong> untuk konfirmasi:</label>
                     <input id="confirmText" name="confirm_text" class="confirm-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ketik RESET" value="{{ old('confirm_text') }}">
                     <div class="confirm-hint">Konfirmasi ini ditujukan untuk mencegah reset tidak sengaja.</div>
-
-                    @if($resetTokenRequired)
-                        <label class="confirm-label" for="resetToken">Masukkan <strong>Reset Token</strong> server:</label>
-                        <input id="resetToken" name="reset_token" class="confirm-input" type="password" autocomplete="off" spellcheck="false" placeholder="Reset token">
-                        <div class="confirm-hint">Token ini dikonfigurasi melalui variabel <code>RESET_DATA_TOKEN</code> di server.</div>
-                    @endif
                 </div>
 
                 <div class="actions">
@@ -448,7 +441,6 @@
             const totalRows = Number(@json($totalRows));
             const confirmRisk = document.getElementById('confirmRisk');
             const confirmText = document.getElementById('confirmText');
-            const resetToken = document.getElementById('resetToken');
             const submitBtn = document.getElementById('submitResetBtn');
 
             if (!confirmRisk || !confirmText || !submitBtn) {
@@ -462,15 +454,11 @@
                 }
                 const typed = normalized.trim();
                 const hasData = totalRows > 0;
-                const tokenReady = !resetToken || (resetToken.value || '').trim() !== '';
-                submitBtn.disabled = !(hasData && confirmRisk.checked && typed === 'RESET' && tokenReady);
+                submitBtn.disabled = !(hasData && confirmRisk.checked && typed === 'RESET');
             };
 
             confirmRisk.addEventListener('change', syncButtonState);
             confirmText.addEventListener('input', syncButtonState);
-            if (resetToken) {
-                resetToken.addEventListener('input', syncButtonState);
-            }
             syncButtonState();
         }());
     </script>

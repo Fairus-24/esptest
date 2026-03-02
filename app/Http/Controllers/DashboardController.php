@@ -29,8 +29,6 @@ class DashboardController extends Controller
     // Reset all eksperimen data
     public function resetData(Request $request)
     {
-        $resetGuard = $this->resolveResetGuardConfig();
-
         $rules = [
             'confirm_risk' => ['required', 'accepted'],
             'confirm_text' => ['required', 'string', 'max:16', 'regex:/^reset$/i'],
@@ -39,27 +37,7 @@ class DashboardController extends Controller
             'confirm_risk.accepted' => 'Checklist konfirmasi risiko wajib diaktifkan sebelum reset.',
             'confirm_text.regex' => 'Konfirmasi teks harus tepat: RESET',
         ];
-        if ($resetGuard['token_required']) {
-            $rules['reset_token'] = ['required', 'string', 'max:128'];
-            $messages['reset_token.required'] = 'Token reset wajib diisi.';
-        }
-
         $validated = $request->validate($rules, $messages);
-
-        if ($resetGuard['token_required']) {
-            if ($resetGuard['token'] === '') {
-                return back()
-                    ->withErrors(['reset_token' => 'RESET_DATA_TOKEN belum dikonfigurasi di server.'])
-                    ->withInput();
-            }
-
-            $providedToken = trim((string) ($validated['reset_token'] ?? ''));
-            if ($providedToken === '' || !hash_equals($resetGuard['token'], $providedToken)) {
-                return back()
-                    ->withErrors(['reset_token' => 'Token reset tidak valid.'])
-                    ->withInput();
-            }
-        }
 
         $confirmText = strtoupper(trim((string) ($validated['confirm_text'] ?? '')));
         if ($confirmText !== 'RESET') {
@@ -1289,8 +1267,6 @@ class DashboardController extends Controller
 
     public function buildResetPagePayload(): array
     {
-        $resetGuard = $this->resolveResetGuardConfig();
-
         try {
             $totalRows = Eksperimen::query()->count();
             $mqttRows = Eksperimen::query()->whereRaw('UPPER(protokol) = ?', ['MQTT'])->count();
@@ -1320,7 +1296,6 @@ class DashboardController extends Controller
                 'latestWib' => $latestWib,
                 'statusType' => null,
                 'statusMessage' => null,
-                'resetTokenRequired' => $resetGuard['token_required'],
             ];
         } catch (Throwable $e) {
             Log::warning('Reset page fallback: database unavailable.', [
@@ -1334,7 +1309,6 @@ class DashboardController extends Controller
                 'latestWib' => '-',
                 'statusType' => 'error',
                 'statusMessage' => 'Database tidak terhubung. Jalankan MySQL/XAMPP agar fitur reset dapat digunakan.',
-                'resetTokenRequired' => $resetGuard['token_required'],
             ];
         }
     }
@@ -1421,19 +1395,6 @@ class DashboardController extends Controller
             'balance_min_samples' => max(1, $balanceMinSamples),
             'balance_allowed_delta' => max(0, $balanceAllowedDelta),
             'balance_allowed_ratio' => max(0.0, $balanceAllowedRatio),
-        ];
-    }
-
-    private function resolveResetGuardConfig(): array
-    {
-        $token = trim((string) config('dashboard.reset.token', ''));
-        $allowWithoutToken = (bool) config('dashboard.reset.allow_without_token', true);
-        $tokenRequired = $token !== ''
-            || (!$allowWithoutToken && !app()->environment(['local', 'testing']));
-
-        return [
-            'token' => $token,
-            'token_required' => $tokenRequired,
         ];
     }
 

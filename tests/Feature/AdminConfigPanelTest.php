@@ -38,7 +38,6 @@ class AdminConfigPanelTest extends TestCase
             'MQTT_HOST' => 'mqtt.lab.example.com',
             'MQTT_PORT' => '1883',
             'HTTP_INGEST_KEY' => 'new-ingest-key',
-            'RESET_ALLOW_WITHOUT_TOKEN' => '0',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('app_settings', [
@@ -51,10 +50,6 @@ class AdminConfigPanelTest extends TestCase
             'setting_value' => 'mqtt.lab.example.com',
         ]);
 
-        $this->assertDatabaseHas('app_settings', [
-            'setting_key' => 'RESET_ALLOW_WITHOUT_TOKEN',
-            'setting_value' => '0',
-        ]);
     }
 
     public function test_admin_firmware_download_contains_selected_device_id(): void

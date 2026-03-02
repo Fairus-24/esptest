@@ -51,9 +51,4 @@ return [
         'balance_allowed_ratio' => (float) env('DASHBOARD_BALANCE_ALLOWED_RATIO', 0.12),
     ],
 
-    // Guard tambahan untuk aksi reset data (disarankan aktif di production).
-    'reset' => [
-        'token' => env('RESET_DATA_TOKEN', ''),
-        'allow_without_token' => filter_var(env('RESET_ALLOW_WITHOUT_TOKEN', true), FILTER_VALIDATE_BOOL),
-    ],
 ];

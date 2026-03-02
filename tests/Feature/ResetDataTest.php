@@ -11,17 +11,7 @@ class ResetDataTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        config([
-            'dashboard.reset.token' => '',
-            'dashboard.reset.allow_without_token' => true,
-        ]);
-    }
-
-    public function test_reset_requires_valid_token_when_guard_enabled(): void
+    public function test_reset_requires_explicit_confirmation_without_token_field(): void
     {
         $device = Device::query()->create([
             'nama_device' => 'ESP32-1',
@@ -48,28 +38,20 @@ class ResetDataTest extends TestCase
             'send_tick_ms' => 6060,
         ]);
 
-        config([
-            'dashboard.reset.token' => 'reset-secret',
-            'dashboard.reset.allow_without_token' => false,
-        ]);
+        $this->from('/reset-data')->post('/reset-data', [
+            'confirm_text' => 'RESET',
+        ])->assertRedirect('/reset-data')
+            ->assertSessionHasErrors(['confirm_risk']);
 
         $this->from('/reset-data')->post('/reset-data', [
             'confirm_risk' => 'on',
-            'confirm_text' => 'RESET',
+            'confirm_text' => 'NOPE',
         ])->assertRedirect('/reset-data')
-            ->assertSessionHasErrors(['reset_token']);
-
-        $this->from('/reset-data')->post('/reset-data', [
-            'confirm_risk' => 'on',
-            'confirm_text' => 'RESET',
-            'reset_token' => 'wrong-token',
-        ])->assertRedirect('/reset-data')
-            ->assertSessionHasErrors(['reset_token']);
+            ->assertSessionHasErrors(['confirm_text']);
 
         $this->post('/reset-data', [
             'confirm_risk' => 'on',
             'confirm_text' => 'RESET',
-            'reset_token' => 'reset-secret',
         ])->assertOk();
 
         $this->assertDatabaseCount('eksperimens', 0);

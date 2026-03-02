@@ -135,7 +135,7 @@ The project has been updated with the following behavior:
 76. API HTTP ingest no longer leaks raw exception messages in `500` responses; detailed errors are logged server-side while client receives a sanitized generic message.
 77. HTTP idempotent upsert now includes duplicate-key race fallback handling so concurrent same-sequence requests remain stable.
 78. Dashboard warning thresholds are now configurable for minimum health score and MQTT/HTTP data-count imbalance tolerance (`DASHBOARD_*_MIN_SCORE`, `DASHBOARD_BALANCE_*`).
-79. Reset flow now supports optional server token guard (`RESET_DATA_TOKEN`) and reset page UI shows token input automatically when guard is enabled.
+79. Reset flow requires explicit in-page confirmation only (`confirm_risk` checkbox + exact `RESET` text), without additional reset token field.
 80. Data retention is now configurable (`DATA_RETENTION_DAYS`) and scheduled prune job runs daily to cap old experiment growth.
 81. Windows startup script now honors `MOSQUITTO_ONLY_LOCAL` consistently before trying to auto-start local Mosquitto.
 82. ESP32 HTTP sender now uses multi-attempt retry with read-timeout control, and stale fallback sensor snapshot budget is tightened to reduce outdated sends.
@@ -204,6 +204,7 @@ The project has been updated with the following behavior:
 145. Simulation page now places `Kembali ke Dashboard Utama` on top-left, `Last Tick` is formatted as `YYYY-MM-DD  |  HH:mm:ss WIB+07:00`, and embedded simulation dashboard (`/?source=simulation&embedded=1`) hides `Reset Data Eksperimen`, `Admin Config & Firmware`, and `Mode Simulasi Keseluruhan Aplikasi`.
 146. Comparative latency/power charts now use a shared time-slot x-axis (WIB, second-level bucket), so MQTT and HTTP points with the same timestamp are plotted at the same horizontal position; toolbar `Total data point` remains based on real record count.
 147. Compact `K` counters now use floor formatting (example: `6872 => 6K`, `115999 => 115K`), and chart payload now has dedicated window control (`DASHBOARD_CHART_WINDOW`, default unlimited) so chart `Total data point` no longer appears capped by `DASHBOARD_ANALYSIS_WINDOW`.
+148. Reset page/server cleanup: reset token guard has been removed from runtime flow and admin runtime overrides; reset now validates only checkbox + exact `RESET` typing.
 
 ## Tech Stack
 
@@ -247,7 +248,7 @@ Before editing `.env` or firmware, collect these values first:
 | MySQL DB name/user/password | `.env` (`DB_*`) | XAMPP MySQL user settings / phpMyAdmin |
 | MQTT credentials | `.env` + firmware (`MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_USER`, `MQTT_PASSWORD`) | Mosquitto config/password file; default in this repo: `esp32/esp32` |
 | Subdomain URL | `.env` (`APP_URL`) | DNS/subdomain setup (example: `https://iot-lab.example.com`) |
-| Security secrets | `.env` (`HTTP_INGEST_KEY`, `RESET_DATA_TOKEN`, `ADMIN_PANEL_TOKEN`) | Generate strong random strings (`openssl rand -hex 32`) |
+| Security secrets | `.env` (`HTTP_INGEST_KEY`, `ADMIN_PANEL_TOKEN`) | Generate strong random strings (`openssl rand -hex 32`) |
 | PHP binary path | `.env` (`LARAVEL_HTTP_PHP_BINARY`) | `where php` on Windows, or Herd/XAMPP PHP absolute path |
 | Mosquitto binary + config path | `.env` (`MOSQUITTO_BINARY`, `MOSQUITTO_CONFIG`) | Usually `C:/Program Files/mosquitto/...` |
 | Device ID | payload `device_id` | `SELECT id, nama_device FROM devices;` after seed |
@@ -416,13 +417,6 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | `HTTP_ALLOW_INGEST_WITHOUT_KEY` | Local/testing only | `true` | Keep `false` in production |
 | `HTTP_INGEST_RATE_LIMIT_PER_MINUTE` | Recommended | `240` | Per-device and per-IP throttle budget |
 
-### Reset Guard
-
-| Key | Required | Example | How to fill |
-| --- | --- | --- | --- |
-| `RESET_DATA_TOKEN` | Recommended in production | `replace-with-long-random-secret` | Required by `/reset-data` when set |
-| `RESET_ALLOW_WITHOUT_TOKEN` | Local/testing only | `true` | Set `false` in production so reset always requires token |
-
 ### Admin Panel Security + Session
 
 | Key | Required | Example | How to fill |
@@ -529,9 +523,6 @@ DASHBOARD_BALANCE_MIN_SAMPLES=20
 DASHBOARD_BALANCE_ALLOWED_DELTA=3
 DASHBOARD_BALANCE_ALLOWED_RATIO=0.12
 DATA_RETENTION_DAYS=30
-
-RESET_DATA_TOKEN=replace-with-strong-reset-token
-RESET_ALLOW_WITHOUT_TOKEN=false
 
 ADMIN_PANEL_TOKEN=replace-with-strong-admin-token
 ADMIN_ALLOW_WITHOUT_TOKEN=false
@@ -758,9 +749,8 @@ pm2 start "php artisan schedule:work" --name esptest-scheduler
 ### 5) Production security baseline
 
 - set `APP_ENV=production`, `APP_DEBUG=false`.
-- set strong random `HTTP_INGEST_KEY`, `RESET_DATA_TOKEN`, `ADMIN_PANEL_TOKEN`.
+- set strong random `HTTP_INGEST_KEY`, `ADMIN_PANEL_TOKEN`.
 - set `HTTP_ALLOW_INGEST_WITHOUT_KEY=false`.
-- set `RESET_ALLOW_WITHOUT_TOKEN=false`.
 - set `ADMIN_ALLOW_WITHOUT_TOKEN=false`.
 - run `php artisan optimize:clear` after `.env` changes.
 
@@ -1098,9 +1088,7 @@ Security notes:
 - route is CSRF-protected (web middleware).
 - route is rate-limited (`throttle:reset-data`).
 - server validates confirmation checkbox + exact `RESET` text before deleting data.
-- if `RESET_DATA_TOKEN` is configured, server also validates token (reset page renders extra token field).
 - if CSRF token is expired, app renders `/reset-data` directly with an explicit session-expired message so user can submit again safely.
-- for production, set `RESET_ALLOW_WITHOUT_TOKEN=false`.
 
 ### GET `/`
 
@@ -1400,13 +1388,12 @@ GROUP BY protokol;
   - `php artisan optimize:clear`
   - restart Apache/XAMPP and Laravel HTTP worker process.
 
-### Reset fails with `Token reset wajib diisi`
+### Reset button stays disabled / reset submit rejected
 
-- This means reset guard is enabled (`RESET_DATA_TOKEN` set, or `RESET_ALLOW_WITHOUT_TOKEN=false`).
-- Open `/reset-data`, enter the correct reset token, then submit again.
-- If you intentionally want no token in local lab mode:
-  - set `RESET_ALLOW_WITHOUT_TOKEN=true`
-  - clear cache: `php artisan optimize:clear`
+- Ensure both confirmations are valid:
+  - checklist `Saya memahami bahwa...` is checked.
+  - confirmation text is exactly `RESET` (case-insensitive input is auto-normalized to uppercase).
+- If CSRF expired, reload `/reset-data` and submit again.
 
 ### Admin panel keeps returning to login page
 
