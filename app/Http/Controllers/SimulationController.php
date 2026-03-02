@@ -59,7 +59,7 @@ class SimulationController extends Controller
             'interval_seconds' => ['nullable', 'integer', 'min:1', 'max:30'],
             'http_fail_rate' => ['nullable', 'numeric', 'min:0', 'max:1'],
             'mqtt_fail_rate' => ['nullable', 'numeric', 'min:0', 'max:1'],
-            'network_profile' => ['nullable', 'string', 'in:stable,normal,stress'],
+            'network_profile' => ['nullable', 'string', 'in:stable,normal,stress,auto_shuffle'],
             'reset_before_start' => ['nullable', 'boolean'],
         ]);
 
@@ -152,10 +152,15 @@ class SimulationController extends Controller
         ]);
     }
 
-    public function tick(): JsonResponse
+    public function tick(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'run_once_if_stopped' => ['nullable', 'boolean'],
+        ]);
+        $allowRunWhenStopped = (bool) ($validated['run_once_if_stopped'] ?? false);
+
         try {
-            $result = $this->simulationService->tick();
+            $result = $this->simulationService->tick($allowRunWhenStopped);
 
             return response()->json([
                 'success' => true,
@@ -196,6 +201,7 @@ class SimulationController extends Controller
             'base_temp' => 28.0,
             'base_humidity' => 60.0,
             'network_profile' => 'normal',
+            'network_profile_active' => 'normal',
             'network_mode' => 'steady',
             'network_mode_ticks_left' => 0,
             'network_health' => 86.0,

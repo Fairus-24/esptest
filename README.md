@@ -200,6 +200,7 @@ The project has been updated with the following behavior:
 141. NTP sync state in firmware is now validated against real Unix epoch (no false `1970` success), and firmware auto-retries NTP sync every 30 seconds until valid to reduce startup telemetry gaps that can trigger temporary dashboard `Disconnected/OFF`.
 142. ESP32 firmware now auto-seeds `httpPacketSeq` and `mqttPacketSeq` from valid Unix epoch (`>= 2022-01-01`) so MQTT/HTTP counters no longer freeze after reboot due repeated low `packet_seq` values being upserted.
 143. Simulation page/service is now fail-safe: if simulation storage is not ready (e.g. missing `simulated_eksperimens` table on production), `/simulation` no longer throws HTTP 500; UI shows explicit storage warning, auto-disables simulation controls, and simulation status APIs return structured fallback payload.
+144. Simulation UI now uses a single Start/Stop toggle button, shows reset button only when simulation data exists, supports `auto_shuffle` network profile, and manual tick can run one cycle even when simulator status is `STOPPED`.
 
 ## Tech Stack
 
@@ -657,10 +658,11 @@ Burn-in log output:
 Simulation quick start:
 
 1. Open `http://127.0.0.1/esptest/public/simulation`
-2. Set `interval`, fail-rate (`HTTP`/`MQTT`), and `Network Profile` (`stable`/`normal`/`stress`).
-3. Click `Start Simulasi`.
+2. Set `interval`, fail-rate (`HTTP`/`MQTT`), and `Network Profile` (`stable`/`normal`/`stress`/`auto_shuffle`).
+3. Click toggle button `Start Simulasi` (the same button becomes `Stop Simulasi` while running).
 4. Observe live behavior in embedded simulation dashboard frame (`/?source=simulation`) and verify `Network` meta (`profile/mode/health`) on simulation page.
-5. Real dashboard (`/`) remains isolated and continues reading only real telemetry table (`eksperimens`).
+5. `Reset Data Simulasi` button only appears when simulation table currently has rows.
+6. Real dashboard (`/`) remains isolated and continues reading only real telemetry table (`eksperimens`).
 
 ## Production Deployment (Debian + Nginx + PM2 + Subdomain)
 
@@ -1111,9 +1113,9 @@ Purpose: simulate full MQTT-vs-HTTP application behavior without physical ESP32.
 
 - `GET /simulation` -> simulation control page (start/stop/tick/reset) + live dashboard iframe.
 - `GET /simulation/status` -> current simulator status JSON.
-- `POST /simulation/start` -> start simulator engine. Optional JSON: `interval_seconds`, `http_fail_rate`, `mqtt_fail_rate`, `network_profile`, `reset_before_start`.
+- `POST /simulation/start` -> start simulator engine. Optional JSON: `interval_seconds`, `http_fail_rate`, `mqtt_fail_rate`, `network_profile` (`stable|normal|stress|auto_shuffle`), `reset_before_start`.
 - `POST /simulation/stop` -> stop simulator engine.
-- `POST /simulation/tick` -> force one manual simulation tick.
+- `POST /simulation/tick` -> force one manual simulation tick. Optional JSON: `run_once_if_stopped` (boolean) so tick can run once even when simulator is currently stopped.
 - `POST /simulation/reset` -> clear simulator rows only in simulation table (`simulated_eksperimens`), keep real rows in `eksperimens` intact.
 - `GET /simulasi` -> shortcut redirect to `/simulation`.
 
@@ -1480,7 +1482,7 @@ GROUP BY protokol;
 - Ensure scheduler is active (`php artisan schedule:work`) because simulation tick is scheduled every second.
 - Verify scheduler task registration:
   - `php artisan schedule:list` should include `application-simulation-tick`.
-- Use `Tick Manual` button on `/simulation` to verify engine can still generate one cycle.
+- Use `Tick Manual` button on `/simulation` to force one cycle; current code supports run-once even when simulator is still `STOPPED`.
 - Ensure latest code is deployed: retention-disable mode (`DATA_RETENTION_DAYS<=0`) no longer stops simulation scheduler in current patch.
 - Check simulator status endpoint:
   - `GET /simulation/status`
@@ -1672,7 +1674,7 @@ GROUP BY protokol;
   - `php artisan migrate --force`
 - Verify table exists:
   - `php artisan tinker` then `Schema::hasTable('simulated_eksperimens')`
-- Current app now degrades safely (no hard crash): simulation UI will show storage warning and disable Start/Stop/Tick controls until storage is ready.
+- Current app now degrades safely (no hard crash): simulation UI will show storage warning and disable simulation action controls until storage is ready.
 
 ### ESP32 repeatedly logs `Sensor read failed (TIMEOUT)`
 

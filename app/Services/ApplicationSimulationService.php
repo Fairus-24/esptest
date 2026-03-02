@@ -19,6 +19,7 @@ class ApplicationSimulationService
     private const PROFILE_STABLE = 'stable';
     private const PROFILE_NORMAL = 'normal';
     private const PROFILE_STRESS = 'stress';
+    private const PROFILE_AUTO_SHUFFLE = 'auto_shuffle';
     private const MODE_STEADY = 'steady';
     private const MODE_RECOVERING = 'recovering';
     private const MODE_CONGESTED = 'congested';
@@ -76,6 +77,7 @@ class ApplicationSimulationService
             'base_temp' => round((float) ($state['base_temp'] ?? 28.0), 3),
             'base_humidity' => round((float) ($state['base_humidity'] ?? 60.0), 3),
             'network_profile' => $this->sanitizeNetworkProfile((string) ($state['network_profile'] ?? self::PROFILE_NORMAL)),
+            'network_profile_active' => $this->resolveEffectiveNetworkProfile($state),
             'network_mode' => $this->sanitizeNetworkMode((string) ($state['network_mode'] ?? self::MODE_STEADY)),
             'network_mode_ticks_left' => max(0, (int) ($state['network_mode_ticks_left'] ?? 0)),
             'network_health' => round($this->clampValue((float) ($state['network_health'] ?? 0.86), 0.0, 1.0) * 100.0, 2),
@@ -106,6 +108,7 @@ class ApplicationSimulationService
         $state['http_fail_rate'] = $this->clampRate((float) ($options['http_fail_rate'] ?? $state['http_fail_rate'] ?? 0.08));
         $state['mqtt_fail_rate'] = $this->clampRate((float) ($options['mqtt_fail_rate'] ?? $state['mqtt_fail_rate'] ?? 0.12));
         $state['network_profile'] = $this->sanitizeNetworkProfile((string) ($options['network_profile'] ?? $state['network_profile'] ?? self::PROFILE_NORMAL));
+        $state['network_profile_active'] = $this->resolveProfileForTick($state['network_profile']);
         $state['network_mode'] = $this->sanitizeNetworkMode((string) ($state['network_mode'] ?? self::MODE_STEADY));
 
         if (($options['reset_before_start'] ?? false) === true) {
@@ -159,7 +162,7 @@ class ApplicationSimulationService
         return $this->status();
     }
 
-    public function tick(): array
+    public function tick(bool $allowRunWhenStopped = false): array
     {
         if (!$this->isSimulationStorageReady()) {
             return [
@@ -170,7 +173,9 @@ class ApplicationSimulationService
         }
 
         $state = $this->loadState();
-        if (!(bool) ($state['running'] ?? false)) {
+        $running = (bool) ($state['running'] ?? false);
+        $manualRunWhileStopped = !$running && $allowRunWhenStopped;
+        if (!$running && !$manualRunWhileStopped) {
             return [
                 'ran' => false,
                 'reason' => 'simulation_not_running',
@@ -179,6 +184,8 @@ class ApplicationSimulationService
         }
 
         $state['device_id'] = $this->resolveSimulatorDeviceId(isset($state['device_id']) ? (int) $state['device_id'] : null);
+        $state['network_profile'] = $this->sanitizeNetworkProfile((string) ($state['network_profile'] ?? self::PROFILE_NORMAL));
+        $state['network_profile_active'] = $this->resolveProfileForTick($state['network_profile']);
         $intervalSeconds = max(1, (int) ($state['interval_seconds'] ?? 5));
         $now = Carbon::now('UTC');
 
@@ -186,7 +193,7 @@ class ApplicationSimulationService
             ? Carbon::parse($state['last_tick_at'], 'UTC')
             : null;
         $elapsedSinceLastTick = $lastTick ? $lastTick->diffInSeconds($now, true) : $intervalSeconds;
-        if ($lastTick && $elapsedSinceLastTick < $intervalSeconds) {
+        if (!$manualRunWhileStopped && $lastTick && $elapsedSinceLastTick < $intervalSeconds) {
             return [
                 'ran' => false,
                 'reason' => 'interval_not_reached',
@@ -223,6 +230,7 @@ class ApplicationSimulationService
 
         return [
             'ran' => true,
+            'manual_once' => $manualRunWhileStopped,
             'http' => $httpResult,
             'mqtt' => $mqttResult,
             'status' => $this->status(),
@@ -342,7 +350,8 @@ class ApplicationSimulationService
 
     private function resolveProtocolNetwork(array $state, bool $isHttp): array
     {
-        $profile = $this->resolveProfileConfig((string) ($state['network_profile'] ?? self::PROFILE_NORMAL));
+        $effectiveProfile = $this->resolveEffectiveNetworkProfile($state);
+        $profile = $this->resolveProfileConfig($effectiveProfile);
         $networkMode = $this->sanitizeNetworkMode((string) ($state['network_mode'] ?? self::MODE_STEADY));
         $quality = $this->clampValue((float) ($state['network_health'] ?? 0.86), 0.2, 1.0);
         $qualityPenalty = 1.0 - $quality;
@@ -400,7 +409,8 @@ class ApplicationSimulationService
 
     private function advanceNetworkState(array &$state): void
     {
-        $profile = $this->resolveProfileConfig((string) ($state['network_profile'] ?? self::PROFILE_NORMAL));
+        $effectiveProfile = $this->resolveEffectiveNetworkProfile($state);
+        $profile = $this->resolveProfileConfig($effectiveProfile);
         $currentMode = $this->sanitizeNetworkMode((string) ($state['network_mode'] ?? self::MODE_STEADY));
         $ticksLeft = max(0, (int) ($state['network_mode_ticks_left'] ?? 0));
 
@@ -478,7 +488,12 @@ class ApplicationSimulationService
 
     private function resolveProfileConfig(string $profile): array
     {
-        return match ($this->sanitizeNetworkProfile($profile)) {
+        $normalizedProfile = $this->sanitizeNetworkProfile($profile);
+        if ($normalizedProfile === self::PROFILE_AUTO_SHUFFLE) {
+            $normalizedProfile = $this->pickShuffleProfile();
+        }
+
+        return match ($normalizedProfile) {
             self::PROFILE_STABLE => [
                 'fail_multiplier' => 0.68,
                 'jitter' => 0.82,
@@ -521,7 +536,7 @@ class ApplicationSimulationService
     private function sanitizeNetworkProfile(string $profile): string
     {
         $normalized = strtolower(trim($profile));
-        if (in_array($normalized, [self::PROFILE_STABLE, self::PROFILE_NORMAL, self::PROFILE_STRESS], true)) {
+        if (in_array($normalized, [self::PROFILE_STABLE, self::PROFILE_NORMAL, self::PROFILE_STRESS, self::PROFILE_AUTO_SHUFFLE], true)) {
             return $normalized;
         }
 
@@ -630,6 +645,7 @@ class ApplicationSimulationService
             'base_temp' => 28.0,
             'base_humidity' => 60.0,
             'network_profile' => self::PROFILE_NORMAL,
+            'network_profile_active' => self::PROFILE_NORMAL,
             'network_mode' => self::MODE_STEADY,
             'network_mode_ticks_left' => 0,
             'network_health' => 0.86,
@@ -653,6 +669,45 @@ class ApplicationSimulationService
         }
 
         return $min + (mt_rand(0, 1000000) / 1000000) * ($max - $min);
+    }
+
+    private function resolveEffectiveNetworkProfile(array $state): string
+    {
+        $configured = $this->sanitizeNetworkProfile((string) ($state['network_profile'] ?? self::PROFILE_NORMAL));
+        if ($configured !== self::PROFILE_AUTO_SHUFFLE) {
+            return $configured;
+        }
+
+        $active = $this->sanitizeNetworkProfile((string) ($state['network_profile_active'] ?? ''));
+        if (in_array($active, [self::PROFILE_STABLE, self::PROFILE_NORMAL, self::PROFILE_STRESS], true)) {
+            return $active;
+        }
+
+        return self::PROFILE_NORMAL;
+    }
+
+    private function resolveProfileForTick(string $configuredProfile): string
+    {
+        $normalized = $this->sanitizeNetworkProfile($configuredProfile);
+        if ($normalized === self::PROFILE_AUTO_SHUFFLE) {
+            return $this->pickShuffleProfile();
+        }
+
+        return $normalized;
+    }
+
+    private function pickShuffleProfile(): string
+    {
+        $draw = $this->randomFloat(0.0, 1.0);
+        if ($draw < 0.34) {
+            return self::PROFILE_STABLE;
+        }
+
+        if ($draw < 0.68) {
+            return self::PROFILE_NORMAL;
+        }
+
+        return self::PROFILE_STRESS;
     }
 
     private function isSimulationStorageReady(): bool

@@ -90,6 +90,40 @@ class SimulationFlowTest extends TestCase
         $this->assertGreaterThan($beforeTickCount, $afterTickCount);
     }
 
+    public function test_simulation_manual_tick_can_run_once_while_stopped(): void
+    {
+        $statePath = storage_path('app/simulation_state.json');
+        if (is_file($statePath)) {
+            @unlink($statePath);
+        }
+
+        $response = $this->post('/simulation/tick', [
+            'run_once_if_stopped' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.ran', true)
+            ->assertJsonPath('data.manual_once', true)
+            ->assertJsonPath('data.status.running', false);
+
+        $tickCount = (int) ($response->json('data.status.tick_count') ?? 0);
+        $this->assertGreaterThan(0, $tickCount);
+    }
+
+    public function test_simulation_start_accepts_auto_shuffle_profile(): void
+    {
+        $response = $this->post('/simulation/start', [
+            'interval_seconds' => 1,
+            'http_fail_rate' => 0,
+            'mqtt_fail_rate' => 0,
+            'network_profile' => 'auto_shuffle',
+            'reset_before_start' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.running', true)
+            ->assertJsonPath('data.network_profile', 'auto_shuffle');
+
+        $activeProfile = (string) ($response->json('data.network_profile_active') ?? '');
+        $this->assertContains($activeProfile, ['stable', 'normal', 'stress']);
+    }
+
     public function test_simulation_data_isolated_from_real_dashboard_source(): void
     {
         $this->post('/simulation/start', [

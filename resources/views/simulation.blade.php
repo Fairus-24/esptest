@@ -326,6 +326,7 @@
                         <option value="stable">Stable (Lab tenang)</option>
                         <option value="normal" selected>Normal (Realistik)</option>
                         <option value="stress">Stress (Jaringan padat)</option>
+                        <option value="auto_shuffle">Auto Shuffle (acak per tick)</option>
                     </select>
                 </div>
             </div>
@@ -336,9 +337,8 @@
             </label>
 
             <div class="actions">
-                <button class="btn primary" id="startSimulationBtn"><i class="fas fa-play"></i> Start Simulasi</button>
-                <button class="btn dark" id="stopSimulationBtn"><i class="fas fa-stop"></i> Stop Simulasi</button>
-                <button class="btn warning" id="tickSimulationBtn"><i class="fas fa-bolt"></i> Tick Manual</button>
+                <button class="btn primary" id="toggleSimulationBtn"><i class="fas fa-play"></i> Start Simulasi</button>
+                <button class="btn warning" id="tickSimulationBtn"><i class="fas fa-hand-pointer"></i> Tick Manual</button>
                 <button class="btn danger" id="resetSimulationBtn"><i class="fas fa-trash"></i> Reset Data Simulasi</button>
                 <a class="btn link" href="{{ $dashboardPath }}"><i class="fas fa-arrow-left"></i> Kembali ke Dashboard Utama</a>
             </div>
@@ -389,8 +389,7 @@
             let tickIntervalMs = 0;
             let lastKnownStatus = null;
             const actionButtonIds = [
-                'startSimulationBtn',
-                'stopSimulationBtn',
+                'toggleSimulationBtn',
                 'tickSimulationBtn',
                 'resetSimulationBtn',
             ];
@@ -444,11 +443,21 @@
 
             function normalizeProfile(profile) {
                 const value = String(profile || 'normal').toLowerCase();
-                if (value === 'stable' || value === 'normal' || value === 'stress') {
+                if (value === 'stable' || value === 'normal' || value === 'stress' || value === 'auto_shuffle') {
                     return value;
                 }
 
                 return 'normal';
+            }
+
+            function formatProfileLabel(profile, activeProfile) {
+                const configured = normalizeProfile(profile);
+                const active = normalizeProfile(activeProfile || configured);
+                if (configured === 'auto_shuffle') {
+                    return `AUTO_SHUFFLE (${active.toUpperCase()})`;
+                }
+
+                return configured.toUpperCase();
             }
 
             function modeLabel(mode) {
@@ -457,6 +466,30 @@
                 if (value === 'congested') return 'CONGESTED';
                 if (value === 'recovering') return 'RECOVERING';
                 return '-';
+            }
+
+            function syncToggleButton(isRunning) {
+                const button = document.getElementById('toggleSimulationBtn');
+                if (!button) return;
+
+                if (isRunning) {
+                    button.classList.remove('primary');
+                    button.classList.add('dark');
+                    button.innerHTML = '<i class="fas fa-stop"></i> Stop Simulasi';
+                    return;
+                }
+
+                button.classList.remove('dark');
+                button.classList.add('primary');
+                button.innerHTML = '<i class="fas fa-play"></i> Start Simulasi';
+            }
+
+            function syncResetButtonVisibility(totalRows, storageReady) {
+                const button = document.getElementById('resetSimulationBtn');
+                if (!button) return;
+
+                const hasData = Number(totalRows || 0) > 0;
+                button.style.display = (hasData && storageReady) ? '' : 'none';
             }
 
             function hydrateInputsFromStatus(status) {
@@ -479,6 +512,7 @@
                 if (!status || typeof status !== 'object') return;
                 lastKnownStatus = status;
                 const storageReady = status.storage_ready !== false;
+                const totalRows = Number(status.total_rows || 0);
 
                 document.getElementById('statRunning').textContent = status.running ? 'RUNNING' : 'STOPPED';
                 document.getElementById('statTicks').textContent = String(status.tick_count ?? 0);
@@ -492,9 +526,11 @@
                 document.getElementById('metaSensorSeq').textContent = String(status.sensor_read_seq ?? 0);
                 document.getElementById('metaTemp').textContent = Number(status.base_temp || 0).toFixed(3);
                 document.getElementById('metaHumidity').textContent = Number(status.base_humidity || 0).toFixed(3);
-                document.getElementById('metaNetworkProfile').textContent = normalizeProfile(status.network_profile).toUpperCase();
+                document.getElementById('metaNetworkProfile').textContent = formatProfileLabel(status.network_profile, status.network_profile_active);
                 document.getElementById('metaNetworkMode').textContent = modeLabel(status.network_mode);
                 document.getElementById('metaNetworkHealth').textContent = Number(status.network_health || 0).toFixed(2);
+                syncToggleButton(status.running);
+                syncResetButtonVisibility(totalRows, storageReady);
 
                 if (!status.running) {
                     hydrateInputsFromStatus(status);
@@ -550,7 +586,7 @@
                     updateView(status);
                     appendLog(payload.message || 'Simulasi dimulai.');
                     setStatus('Simulasi berhasil dimulai.', 'ok');
-                    appendLog(`Profil ${normalizeProfile(status.network_profile).toUpperCase()} | interval ${status.interval_seconds || '-'} detik.`);
+                    appendLog(`Profil ${formatProfileLabel(status.network_profile, status.network_profile_active)} | interval ${status.interval_seconds || '-'} detik.`);
                 } catch (error) {
                     setStatus(`Gagal start simulasi: ${error.message}`, 'error');
                 }
@@ -568,6 +604,15 @@
                 }
             }
 
+            async function toggleSimulation() {
+                if (lastKnownStatus?.running) {
+                    await stopSimulation();
+                    return;
+                }
+
+                await startSimulation();
+            }
+
             async function resetSimulation() {
                 if (!confirm('Reset data simulasi? Hanya data device simulator yang akan dihapus.')) return;
 
@@ -583,11 +628,15 @@
 
             async function manualTick() {
                 try {
-                    const payload = await requestJson('/tick', 'POST', {});
+                    const payload = await requestJson('/tick', 'POST', { run_once_if_stopped: true });
                     const data = payload.data || {};
                     const status = data.status || {};
                     updateView(status);
-                    appendLog(data.ran ? 'Tick simulasi berhasil.' : `Tick skip (${data.reason || 'no_reason'}).`);
+                    if (data.ran) {
+                        appendLog(data.manual_once ? 'Tick manual berhasil (run-once saat status STOPPED).' : 'Tick simulasi berhasil.');
+                    } else {
+                        appendLog(`Tick skip (${data.reason || 'no_reason'}).`);
+                    }
                 } catch (error) {
                     setStatus(`Gagal tick simulasi: ${error.message}`, 'error');
                 }
@@ -640,8 +689,7 @@
                 tickIntervalMs = 0;
             }
 
-            document.getElementById('startSimulationBtn').addEventListener('click', startSimulation);
-            document.getElementById('stopSimulationBtn').addEventListener('click', stopSimulation);
+            document.getElementById('toggleSimulationBtn').addEventListener('click', toggleSimulation);
             document.getElementById('resetSimulationBtn').addEventListener('click', resetSimulation);
             document.getElementById('tickSimulationBtn').addEventListener('click', manualTick);
             document.getElementById('intervalSeconds').addEventListener('change', function () {
