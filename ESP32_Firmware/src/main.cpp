@@ -164,6 +164,7 @@ bool payloadHasRequiredFields(const String& payload);
 bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog);
 void printStatus();
 void updateTime();
+void seedPacketSequenceFromTime();
 bool isServerHostSelfTarget();
 void printServerTargetConfig();
 
@@ -193,6 +194,7 @@ void setup() {
     // Synchronize time with NTP
     updateTime();
     lastNtpSyncAttempt = millis();
+    seedPacketSequenceFromTime();
     
     Serial.println("[SETUP] Initialization complete!");
     Serial.println("==========================================\n");
@@ -222,6 +224,7 @@ void loop() {
         Serial.println("[TIME] Epoch belum valid, retry sinkronisasi NTP...");
         updateTime();
         lastNtpSyncAttempt = millis();
+        seedPacketSequenceFromTime();
     }
     
     // Read sensor data periodically
@@ -377,6 +380,10 @@ void sendHTTP() {
         Serial.println("[HTTP] ERROR: SERVER_HOST equals ESP32 IP, request aborted.");
         httpSendFail++;
         return;
+    }
+
+    if (httpPacketSeq == 0) {
+        seedPacketSequenceFromTime();
     }
 
     String primaryEndpoint = String(HTTP_ENDPOINT);
@@ -557,6 +564,10 @@ void sendMQTT() {
         Serial.println("[MQTT] Invalid sensor data, skipping send");
         mqttSendFail++;
         return;
+    }
+
+    if (mqttPacketSeq == 0) {
+        seedPacketSequenceFromTime();
     }
 
     uint32_t packetSeq = ++mqttPacketSeq;
@@ -926,6 +937,36 @@ void updateTime() {
         Serial.println(ctime(&now));
     } else {
         Serial.println("[TIME] WARNING: NTP belum valid (epoch masih awal). Akan dicoba lagi otomatis.");
+    }
+}
+
+void seedPacketSequenceFromTime() {
+    time_t now = time(nullptr);
+    if (now < 1640995200L) {
+        return;
+    }
+
+    const uint32_t baseSeed = (uint32_t) max((time_t) 1, now - 1640995200L);
+    bool changed = false;
+
+    if (httpPacketSeq < baseSeed) {
+        httpPacketSeq = baseSeed;
+        changed = true;
+    }
+
+    if (mqttPacketSeq < baseSeed) {
+        mqttPacketSeq = baseSeed;
+        changed = true;
+    }
+
+    if (changed) {
+        Serial.print("[SEQ] Packet sequence seed: ");
+        Serial.print((unsigned long) baseSeed);
+        Serial.print(" (HTTP=");
+        Serial.print((unsigned long) httpPacketSeq);
+        Serial.print(", MQTT=");
+        Serial.print((unsigned long) mqttPacketSeq);
+        Serial.println(")");
     }
 }
 

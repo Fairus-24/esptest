@@ -198,6 +198,7 @@ The project has been updated with the following behavior:
 139. Comparative Analysis toolbar now formats `Total data point` in compact `K` only when value is greater than `9,999` (for both latency and power charts), while `Default(min)` and `View saat ini` remain raw counts.
 140. Statistical Analysis `Sample Size (N)` now displays real total dataset counts per protocol (MQTT/HTTP) without compact `K` notation.
 141. NTP sync state in firmware is now validated against real Unix epoch (no false `1970` success), and firmware auto-retries NTP sync every 30 seconds until valid to reduce startup telemetry gaps that can trigger temporary dashboard `Disconnected/OFF`.
+142. ESP32 firmware now auto-seeds `httpPacketSeq` and `mqttPacketSeq` from valid Unix epoch (`>= 2022-01-01`) so MQTT/HTTP counters no longer freeze after reboot due repeated low `packet_seq` values being upserted.
 
 ## Tech Stack
 
@@ -1656,6 +1657,12 @@ GROUP BY protokol;
   - restart worker process so new config/subscription is loaded
   - run `php artisan optimize:clear`
 - MQTT/HTTP protocol badges remain based on telemetry rows only (heartbeat does not force protocol `Connected`).
+
+### MQTT status `Connected` but MQTT total data seems stuck
+
+- This can happen when telemetry freshness is still updated (worker receives MQTT), but `packet_seq` repeats after reboot.
+- MQTT worker uses idempotent upsert by (`device_id`, `protokol`, `packet_seq`), so repeated `packet_seq` updates existing rows instead of adding new rows.
+- Update and re-flash latest firmware from this repository (`pio run -t upload`) so sequence is auto-seeded from valid epoch and continues above old range.
 
 ### ESP32 repeatedly logs `Sensor read failed (TIMEOUT)`
 
