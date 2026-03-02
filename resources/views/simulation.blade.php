@@ -46,6 +46,17 @@
             gap: 16px;
         }
 
+        .page-nav {
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .page-nav .btn.link {
+            background: rgba(248, 250, 252, 0.95);
+            color: #1e3a8a;
+            border: 1px solid rgba(30, 58, 138, 0.2);
+        }
+
         .hero {
             background: linear-gradient(140deg, rgba(15, 23, 42, 0.88), rgba(30, 64, 175, 0.82));
             color: #f8fafc;
@@ -293,10 +304,14 @@
     @php
         $basePath = rtrim(request()->getBaseUrl(), '/');
         $dashboardPath = $basePath !== '' ? $basePath . '/' : '/';
-        $simulationDashboardPath = $dashboardPath . '?source=simulation';
+        $simulationDashboardPath = $dashboardPath . '?source=simulation&embedded=1';
         $simulationApiBase = ($basePath !== '' ? $basePath : '') . '/simulation';
     @endphp
     <div class="wrap">
+        <div class="page-nav">
+            <a class="btn link" href="{{ $dashboardPath }}"><i class="fas fa-arrow-left"></i> Kembali ke Dashboard Utama</a>
+        </div>
+
         <section class="hero">
             <h1><i class="fas fa-vial-circle-check"></i> Simulasi Keseluruhan Aplikasi</h1>
             <p>
@@ -340,7 +355,6 @@
                 <button class="btn primary" id="toggleSimulationBtn"><i class="fas fa-play"></i> Start Simulasi</button>
                 <button class="btn warning" id="tickSimulationBtn"><i class="fas fa-hand-pointer"></i> Tick Manual</button>
                 <button class="btn danger" id="resetSimulationBtn"><i class="fas fa-trash"></i> Reset Data Simulasi</button>
-                <a class="btn link" href="{{ $dashboardPath }}"><i class="fas fa-arrow-left"></i> Kembali ke Dashboard Utama</a>
             </div>
 
             <div class="status-row" id="simulationStatusRow">Memuat status simulasi...</div>
@@ -366,7 +380,7 @@
         </section>
 
         <section class="surface">
-            <h2 style="margin:0 0 6px;font-size:1.06rem;font-family:'Space Grotesk','Manrope',sans-serif;">Live Dashboard Simulasi (Terpisah dari Real)</h2>
+            <h2 style="margin:0 0 6px;font-size:1.06rem;font-family:'Space Grotesk','Manrope',sans-serif;">Live Dashboard Simulasi</h2>
             <p style="margin:0;color:#475569;font-size:0.9rem;">
                 Frame di bawah ini membaca sumber telemetry simulasi (`source=simulation`), sehingga tidak bercampur dengan dashboard data real produksi.
             </p>
@@ -468,6 +482,37 @@
                 return '-';
             }
 
+            function formatLastTickWib(timestampValue) {
+                if (!timestampValue) {
+                    return '-';
+                }
+
+                const parsed = new Date(timestampValue);
+                if (Number.isNaN(parsed.getTime())) {
+                    return String(timestampValue);
+                }
+
+                const parts = new Intl.DateTimeFormat('id-ID', {
+                    timeZone: 'Asia/Jakarta',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                }).formatToParts(parsed).reduce((carry, part) => {
+                    if (part.type !== 'literal') {
+                        carry[part.type] = part.value;
+                    }
+                    return carry;
+                }, {});
+
+                const datePart = `${parts.year || '0000'}-${parts.month || '00'}-${parts.day || '00'}`;
+                const timePart = `${parts.hour || '00'}:${parts.minute || '00'}:${parts.second || '00'}`;
+                return `${datePart}  |  ${timePart} WIB+07:00`;
+            }
+
             function syncToggleButton(isRunning) {
                 const button = document.getElementById('toggleSimulationBtn');
                 if (!button) return;
@@ -519,7 +564,7 @@
                 document.getElementById('statUptime').textContent = `${Number(status.esp_uptime_s || 0)} s`;
                 document.getElementById('statMqttRows').textContent = String(status.mqtt_total_rows ?? 0);
                 document.getElementById('statHttpRows').textContent = String(status.http_total_rows ?? 0);
-                document.getElementById('statLastTick').textContent = status.last_tick_at || '-';
+                document.getElementById('statLastTick').textContent = formatLastTickWib(status.last_tick_at);
                 document.getElementById('metaDevice').textContent = status.device_id ? `${status.device_name} (#${status.device_id})` : '-';
                 document.getElementById('metaMqttSeq').textContent = String(status.mqtt_packet_seq ?? 0);
                 document.getElementById('metaHttpSeq').textContent = String(status.http_packet_seq ?? 0);

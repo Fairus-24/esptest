@@ -201,6 +201,7 @@ The project has been updated with the following behavior:
 142. ESP32 firmware now auto-seeds `httpPacketSeq` and `mqttPacketSeq` from valid Unix epoch (`>= 2022-01-01`) so MQTT/HTTP counters no longer freeze after reboot due repeated low `packet_seq` values being upserted.
 143. Simulation page/service is now fail-safe: if simulation storage is not ready (e.g. missing `simulated_eksperimens` table on production), `/simulation` no longer throws HTTP 500; UI shows explicit storage warning, auto-disables simulation controls, and simulation status APIs return structured fallback payload.
 144. Simulation UI now uses a single Start/Stop toggle button, shows reset button only when simulation data exists, supports `auto_shuffle` network profile, and manual tick can run one cycle even when simulator status is `STOPPED`.
+145. Simulation page now places `Kembali ke Dashboard Utama` on top-left, `Last Tick` is formatted as `YYYY-MM-DD  |  HH:mm:ss WIB+07:00`, and embedded simulation dashboard (`/?source=simulation&embedded=1`) hides `Reset Data Eksperimen`, `Admin Config & Firmware`, and `Mode Simulasi Keseluruhan Aplikasi`.
 
 ## Tech Stack
 
@@ -1107,11 +1108,19 @@ Dashboard entry route (served via Apache path `/esptest/public` in this setup).
 Dashboard simulation source route.
 - Reads simulation telemetry table (`simulated_eksperimens`) and is intended for simulation page iframe.
 
+### GET `/?source=simulation&embedded=1`
+
+Embedded simulation dashboard route.
+- Same data source as simulation route (`simulated_eksperimens`) but with embedded layout controls.
+- Hides dashboard control/navigation blocks that are not needed inside simulation iframe (`Reset Data Eksperimen`, `Admin Config & Firmware`, and `Mode Simulasi Keseluruhan Aplikasi`).
+
 ### Simulation Routes (`/simulation`)
 
 Purpose: simulate full MQTT-vs-HTTP application behavior without physical ESP32.
 
 - `GET /simulation` -> simulation control page (start/stop/tick/reset) + live dashboard iframe.
+- Simulation page header now places `Kembali ke Dashboard Utama` at top-left.
+- `Last Tick` card is rendered in Indonesian WIB format: `YYYY-MM-DD  |  HH:mm:ss WIB+07:00`.
 - `GET /simulation/status` -> current simulator status JSON.
 - `POST /simulation/start` -> start simulator engine. Optional JSON: `interval_seconds`, `http_fail_rate`, `mqtt_fail_rate`, `network_profile` (`stable|normal|stress|auto_shuffle`), `reset_before_start`.
 - `POST /simulation/stop` -> stop simulator engine.

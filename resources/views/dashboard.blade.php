@@ -2437,6 +2437,7 @@
 </head>
     <body>
     @php
+        $isEmbeddedDashboard = request()->boolean('embedded');
         $mqttConnectionStatus = is_array($mqttConnectionStatus ?? null)
             ? $mqttConnectionStatus
             : [
@@ -2759,13 +2760,15 @@
                 <span class="stat-unit">seq {{ $reliability['http_expected_packets'] > 0 ? ($reliability['http_received_packets'] . '/' . $reliability['http_expected_packets']) : '-' }} | complete {{ $reliability['http_data_completeness'] }}% | tx {{ $reliability['http_transmission_health'] ?? 0 }}%</span>
             </div>
         </div>
-        <div class="action-row">
-            <a href="{{ (rtrim(request()->getBaseUrl(), '/') !== '' ? rtrim(request()->getBaseUrl(), '/') : '') . '/reset-data' }}" class="reset-btn"><i class="fas fa-trash-alt"></i> Reset Data Eksperimen</a>
-            <a href="{{ (rtrim(request()->getBaseUrl(), '/') !== '' ? rtrim(request()->getBaseUrl(), '/') : '') . '/admin/config' }}" class="admin-config-btn"><i class="fas fa-sliders"></i> Admin Config & Firmware</a>
-            @if(session('status'))
-                <span id="resetStatusMessage" class="reset-status">{{ session('status') }}</span>
-            @endif
-        </div>
+        @if(!$isEmbeddedDashboard)
+            <div class="action-row">
+                <a href="{{ (rtrim(request()->getBaseUrl(), '/') !== '' ? rtrim(request()->getBaseUrl(), '/') : '') . '/reset-data' }}" class="reset-btn"><i class="fas fa-trash-alt"></i> Reset Data Eksperimen</a>
+                <a href="{{ (rtrim(request()->getBaseUrl(), '/') !== '' ? rtrim(request()->getBaseUrl(), '/') : '') . '/admin/config' }}" class="admin-config-btn"><i class="fas fa-sliders"></i> Admin Config & Firmware</a>
+                @if(session('status'))
+                    <span id="resetStatusMessage" class="reset-status">{{ session('status') }}</span>
+                @endif
+            </div>
+        @endif
         @if(!empty($dataWarnings))
             <div id="dataQualityWarnings" class="inline-warning">
                 <i class="fas fa-triangle-exclamation"></i>
@@ -3184,22 +3187,24 @@
             </section>
         @endif
 
-        @php
-            $basePath = rtrim(request()->getBaseUrl(), '/');
-            $simulationPath = ($basePath !== '' ? $basePath : '') . '/simulation';
-        @endphp
-        <div class="simulation-nav-wrap">
-            <a href="{{ $simulationPath }}" class="simulation-nav-card">
-                <div>
-                    <h3 class="simulation-nav-title"><i class="fas fa-vial-circle-check"></i> Mode Simulasi Keseluruhan Aplikasi</h3>
-                    <p class="simulation-nav-desc">
-                        Buka halaman simulasi untuk meniru alur end-to-end MQTT vs HTTP secara realtime
-                        (generator data, packet sequence, reliability, diagnostics, chart, dan auto-refresh dashboard).
-                    </p>
-                </div>
-                <i class="fas fa-arrow-right simulation-nav-arrow" aria-hidden="true"></i>
-            </a>
-        </div>
+        @if(!$isEmbeddedDashboard)
+            @php
+                $basePath = rtrim(request()->getBaseUrl(), '/');
+                $simulationPath = ($basePath !== '' ? $basePath : '') . '/simulation';
+            @endphp
+            <div class="simulation-nav-wrap">
+                <a href="{{ $simulationPath }}" class="simulation-nav-card">
+                    <div>
+                        <h3 class="simulation-nav-title"><i class="fas fa-vial-circle-check"></i> Mode Simulasi Keseluruhan Aplikasi</h3>
+                        <p class="simulation-nav-desc">
+                            Buka halaman simulasi untuk meniru alur end-to-end MQTT vs HTTP secara realtime
+                            (generator data, packet sequence, reliability, diagnostics, chart, dan auto-refresh dashboard).
+                        </p>
+                    </div>
+                    <i class="fas fa-arrow-right simulation-nav-arrow" aria-hidden="true"></i>
+                </a>
+            </div>
+        @endif
 
         <!-- Footer -->
         <div class="footer">
