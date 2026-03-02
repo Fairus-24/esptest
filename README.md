@@ -199,6 +199,7 @@ The project has been updated with the following behavior:
 140. Statistical Analysis `Sample Size (N)` now displays real total dataset counts per protocol (MQTT/HTTP) without compact `K` notation.
 141. NTP sync state in firmware is now validated against real Unix epoch (no false `1970` success), and firmware auto-retries NTP sync every 30 seconds until valid to reduce startup telemetry gaps that can trigger temporary dashboard `Disconnected/OFF`.
 142. ESP32 firmware now auto-seeds `httpPacketSeq` and `mqttPacketSeq` from valid Unix epoch (`>= 2022-01-01`) so MQTT/HTTP counters no longer freeze after reboot due repeated low `packet_seq` values being upserted.
+143. Simulation page/service is now fail-safe: if simulation storage is not ready (e.g. missing `simulated_eksperimens` table on production), `/simulation` no longer throws HTTP 500; UI shows explicit storage warning, auto-disables simulation controls, and simulation status APIs return structured fallback payload.
 
 ## Tech Stack
 
@@ -1663,6 +1664,15 @@ GROUP BY protokol;
 - This can happen when telemetry freshness is still updated (worker receives MQTT), but `packet_seq` repeats after reboot.
 - MQTT worker uses idempotent upsert by (`device_id`, `protokol`, `packet_seq`), so repeated `packet_seq` updates existing rows instead of adding new rows.
 - Update and re-flash latest firmware from this repository (`pio run -t upload`) so sequence is auto-seeded from valid epoch and continues above old range.
+
+### `/simulation` returns `500 Server Error` on production
+
+- Most common cause: production database has not run migration for `simulated_eksperimens`.
+- Run migration on production:
+  - `php artisan migrate --force`
+- Verify table exists:
+  - `php artisan tinker` then `Schema::hasTable('simulated_eksperimens')`
+- Current app now degrades safely (no hard crash): simulation UI will show storage warning and disable Start/Stop/Tick controls until storage is ready.
 
 ### ESP32 repeatedly logs `Sensor read failed (TIMEOUT)`
 

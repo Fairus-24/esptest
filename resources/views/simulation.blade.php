@@ -388,6 +388,12 @@
             let tickTimer = null;
             let tickIntervalMs = 0;
             let lastKnownStatus = null;
+            const actionButtonIds = [
+                'startSimulationBtn',
+                'stopSimulationBtn',
+                'tickSimulationBtn',
+                'resetSimulationBtn',
+            ];
 
             function appendLog(message) {
                 const now = new Date();
@@ -401,6 +407,14 @@
                 statusRow.classList.remove('ok', 'error');
                 if (type === 'ok') statusRow.classList.add('ok');
                 if (type === 'error') statusRow.classList.add('error');
+            }
+
+            function setSimulationControlsDisabled(disabled) {
+                actionButtonIds.forEach((id) => {
+                    const button = document.getElementById(id);
+                    if (!button) return;
+                    button.disabled = disabled;
+                });
             }
 
             async function requestJson(path, method = 'GET', body = null) {
@@ -464,6 +478,7 @@
             function updateView(status) {
                 if (!status || typeof status !== 'object') return;
                 lastKnownStatus = status;
+                const storageReady = status.storage_ready !== false;
 
                 document.getElementById('statRunning').textContent = status.running ? 'RUNNING' : 'STOPPED';
                 document.getElementById('statTicks').textContent = String(status.tick_count ?? 0);
@@ -485,12 +500,22 @@
                     hydrateInputsFromStatus(status);
                 }
 
-                setStatus(
-                    status.running
-                        ? `Simulasi aktif (${modeLabel(status.network_mode)}). Generator berjalan dan dashboard simulasi diperbarui realtime.`
-                        : 'Simulasi belum aktif. Tekan Start Simulasi untuk mulai.',
-                    status.running ? 'ok' : null
-                );
+                if (!storageReady) {
+                    stopTickLoop();
+                    setSimulationControlsDisabled(true);
+                    setStatus(
+                        status.storage_error || 'Storage simulasi tidak siap. Jalankan migrasi tabel simulasi di server.',
+                        'error'
+                    );
+                } else {
+                    setSimulationControlsDisabled(false);
+                    setStatus(
+                        status.running
+                            ? `Simulasi aktif (${modeLabel(status.network_mode)}). Generator berjalan dan dashboard simulasi diperbarui realtime.`
+                            : 'Simulasi belum aktif. Tekan Start Simulasi untuk mulai.',
+                        status.running ? 'ok' : null
+                    );
+                }
 
                 if (status.running) {
                     ensureTickLoop(status.interval_seconds);

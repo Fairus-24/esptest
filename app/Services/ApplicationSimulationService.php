@@ -5,10 +5,15 @@ namespace App\Services;
 use App\Models\Device;
 use App\Models\SimulatedEksperimen;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class ApplicationSimulationService
 {
     private const STATE_FILE = 'app/simulation_state.json';
+    private const DEVICES_TABLE = 'devices';
+    private const SIMULATED_TELEMETRY_TABLE = 'simulated_eksperimens';
     private const DEVICE_NAME = 'SIMULATOR-APP';
     private const DEVICE_LOCATION = 'Virtual Lab';
     private const PROFILE_STABLE = 'stable';
@@ -17,21 +22,45 @@ class ApplicationSimulationService
     private const MODE_STEADY = 'steady';
     private const MODE_RECOVERING = 'recovering';
     private const MODE_CONGESTED = 'congested';
+    private ?bool $simulationStorageReadyCache = null;
 
     public function status(): array
     {
         $state = $this->loadState();
-        $deviceId = $this->resolveSimulatorDeviceId(isset($state['device_id']) ? (int) $state['device_id'] : null);
+        $storageReady = $this->isSimulationStorageReady();
+        $storageError = null;
+        $candidateDeviceId = isset($state['device_id']) ? (int) $state['device_id'] : null;
+        $deviceId = $candidateDeviceId !== null && $candidateDeviceId > 0 ? $candidateDeviceId : 0;
+        $mqttRows = 0;
+        $httpRows = 0;
 
-        $mqttRows = $deviceId > 0
-            ? SimulatedEksperimen::query()->where('device_id', $deviceId)->where('protokol', 'MQTT')->count()
-            : 0;
-        $httpRows = $deviceId > 0
-            ? SimulatedEksperimen::query()->where('device_id', $deviceId)->where('protokol', 'HTTP')->count()
-            : 0;
+        if ($storageReady) {
+            try {
+                $deviceId = $this->resolveSimulatorDeviceId($deviceId > 0 ? $deviceId : null);
+                $mqttRows = $deviceId > 0
+                    ? SimulatedEksperimen::query()->where('device_id', $deviceId)->where('protokol', 'MQTT')->count()
+                    : 0;
+                $httpRows = $deviceId > 0
+                    ? SimulatedEksperimen::query()->where('device_id', $deviceId)->where('protokol', 'HTTP')->count()
+                    : 0;
+            } catch (Throwable $e) {
+                $storageReady = false;
+                $storageError = 'Storage simulasi tidak siap. Jalankan migrasi tabel simulasi di server.';
+                Log::warning('Simulation status fallback triggered.', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        } else {
+            $storageError = 'Storage simulasi tidak siap. Jalankan migrasi tabel simulasi di server.';
+        }
+
+        if (!$storageReady && (bool) ($state['running'] ?? false)) {
+            $state['running'] = false;
+            $this->saveState($state);
+        }
 
         return [
-            'running' => (bool) ($state['running'] ?? false),
+            'running' => $storageReady ? (bool) ($state['running'] ?? false) : false,
             'device_id' => $deviceId > 0 ? $deviceId : null,
             'device_name' => self::DEVICE_NAME,
             'interval_seconds' => (int) ($state['interval_seconds'] ?? 5),
@@ -53,11 +82,21 @@ class ApplicationSimulationService
             'mqtt_total_rows' => $mqttRows,
             'http_total_rows' => $httpRows,
             'total_rows' => $mqttRows + $httpRows,
+            'storage_ready' => $storageReady,
+            'storage_error' => $storageError,
         ];
     }
 
     public function start(array $options = []): array
     {
+        if (!$this->isSimulationStorageReady()) {
+            $state = $this->loadState();
+            $state['running'] = false;
+            $this->saveState($state);
+
+            return $this->status();
+        }
+
         $state = $this->loadState();
 
         $state['device_id'] = $this->resolveSimulatorDeviceId(isset($state['device_id']) ? (int) $state['device_id'] : null);
@@ -101,6 +140,14 @@ class ApplicationSimulationService
 
     public function reset(): array
     {
+        if (!$this->isSimulationStorageReady()) {
+            $state = $this->loadState();
+            $state['running'] = false;
+            $this->saveState($state);
+
+            return $this->status();
+        }
+
         $state = $this->loadState();
         $deviceId = $this->resolveSimulatorDeviceId(isset($state['device_id']) ? (int) $state['device_id'] : null);
         $this->deleteSimulatorRows($deviceId);
@@ -114,6 +161,14 @@ class ApplicationSimulationService
 
     public function tick(): array
     {
+        if (!$this->isSimulationStorageReady()) {
+            return [
+                'ran' => false,
+                'reason' => 'simulation_storage_unavailable',
+                'status' => $this->status(),
+            ];
+        }
+
         $state = $this->loadState();
         if (!(bool) ($state['running'] ?? false)) {
             return [
@@ -519,6 +574,10 @@ class ApplicationSimulationService
 
     private function deleteSimulatorRows(int $deviceId): void
     {
+        if (!$this->isSimulationStorageReady()) {
+            return;
+        }
+
         SimulatedEksperimen::query()->where('device_id', $deviceId)->delete();
     }
 
@@ -594,5 +653,25 @@ class ApplicationSimulationService
         }
 
         return $min + (mt_rand(0, 1000000) / 1000000) * ($max - $min);
+    }
+
+    private function isSimulationStorageReady(): bool
+    {
+        if ($this->simulationStorageReadyCache !== null) {
+            return $this->simulationStorageReadyCache;
+        }
+
+        try {
+            $hasDevicesTable = Schema::hasTable(self::DEVICES_TABLE);
+            $hasSimulationTable = Schema::hasTable(self::SIMULATED_TELEMETRY_TABLE);
+            $this->simulationStorageReadyCache = $hasDevicesTable && $hasSimulationTable;
+        } catch (Throwable $e) {
+            Log::warning('Simulation storage health check failed.', [
+                'error' => $e->getMessage(),
+            ]);
+            $this->simulationStorageReadyCache = false;
+        }
+
+        return $this->simulationStorageReadyCache;
     }
 }
