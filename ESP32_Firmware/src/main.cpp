@@ -16,8 +16,8 @@
 #ifndef ESP_WIFI_PASSWORD
 #define ESP_WIFI_PASSWORD "gratiskok"
 #endif
-const char* WIFI_SSID = ESP_WIFI_SSID;
-const char* WIFI_PASSWORD = ESP_WIFI_PASSWORD;
+const char* WIFI_SSID = "Free";
+const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
 #define SERVER_HOST "192.168.0.104"  // Windows host LAN IP (update if DHCP IP changes)
@@ -56,12 +56,12 @@ const char* WIFI_PASSWORD = ESP_WIFI_PASSWORD;
 #endif
 #endif
 const char* HTTP_SERVER = ESP_HTTP_BASE_URL;
-const char* HTTP_ENDPOINT = ESP_HTTP_ENDPOINT;
-const char* MQTT_SERVER = ESP_MQTT_BROKER;
-const int MQTT_PORT = ESP_MQTT_PORT;
-const char* MQTT_TOPIC = ESP_MQTT_TOPIC;
-const char* MQTT_USER = ESP_MQTT_USER;
-const char* MQTT_PASSWORD = ESP_MQTT_PASSWORD;
+const char* HTTP_ENDPOINT = "/esptest/public/api/http-data";
+const char* MQTT_SERVER = "192.168.0.104";
+const int MQTT_PORT = 1883;
+const char* MQTT_TOPIC = "iot/esp32/suhu";
+const char* MQTT_USER = "esp32";
+const char* MQTT_PASSWORD = "esp32";
 const char* HTTP_INGEST_KEY = ESP_HTTP_INGEST_KEY;
 
 
@@ -72,10 +72,10 @@ const char* HTTP_INGEST_KEY = ESP_HTTP_INGEST_KEY;
 #ifndef ESP_DEVICE_ID
 #define ESP_DEVICE_ID 1
 #endif
-#define DHTPIN ESP_DHT_PIN
+#define DHTPIN 4
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
-const int DEVICE_ID = ESP_DEVICE_ID;
+const int DEVICE_ID = 1;
 
 // Timing Settings
 #ifndef ESP_SENSOR_INTERVAL_MS
@@ -90,11 +90,11 @@ const int DEVICE_ID = ESP_DEVICE_ID;
 #ifndef ESP_DHT_MIN_READ_INTERVAL_MS
 #define ESP_DHT_MIN_READ_INTERVAL_MS 1500UL
 #endif
-const unsigned long INTERVAL_SENSOR = ESP_SENSOR_INTERVAL_MS;    // Read sensor periodically
-const unsigned long INTERVAL_HTTP = ESP_HTTP_INTERVAL_MS;        // Send HTTP periodically
-const unsigned long INTERVAL_MQTT = ESP_MQTT_INTERVAL_MS;        // Send MQTT periodically
+const unsigned long INTERVAL_SENSOR = 5000UL;    // Read sensor periodically
+const unsigned long INTERVAL_HTTP = 10000UL;        // Send HTTP periodically
+const unsigned long INTERVAL_MQTT = 10000UL;        // Send MQTT periodically
 const unsigned long WIFI_TIMEOUT = 10000;      // WiFi connection timeout
-const unsigned long DHT_MIN_READ_INTERVAL_MS = ESP_DHT_MIN_READ_INTERVAL_MS;
+const unsigned long DHT_MIN_READ_INTERVAL_MS = 1500UL;
 constexpr size_t PAYLOAD_JSON_DOC_CAPACITY = 1024;
 constexpr size_t PAYLOAD_VERIFY_DOC_CAPACITY = 1536;
 

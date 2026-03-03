@@ -219,6 +219,7 @@ The project has been updated with the following behavior:
 160. `/doc` now includes stronger inline SVG visuals and academic terminology support: responsive architecture diagram (ESP32 -> HTTP/MQTT ingress -> DB -> `StatisticsService` -> dashboard), HTTP-vs-MQTT timeline sequence visualization, and a two-layer `Glossary / Daftar Istilah` section tied to actual implementation terms.
 161. `/doc` floating back-to-top control is now icon-only (arrow-up, no visible text label) and uses explicit smooth-scroll behavior via JavaScript (`window.scrollTo({ top: 0, behavior: 'smooth' })`).
 162. Admin Google login rejection message is now generic and no longer exposes allow-list email criteria on `/admin/login`; unauthorized accounts receive a non-sensitive access-denied notice.
+163. Admin firmware profile now supports advanced tuning that directly regenerates both `ESP32_Firmware/src/main.cpp` and `ESP32_Firmware/platformio.ini`: protocol intervals, HTTP timeout, MQTT packet size, debug level, monitor/upload serial ports, and monitor speed are configurable per device from GUI.
 
 ## Tech Stack
 
@@ -1166,6 +1167,10 @@ Security notes:
 - login is rate-limited (`throttle:admin-login`).
 - protected routes require middleware `admin.session`.
 - in production set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `ADMIN_GOOGLE_ALLOWED_EMAIL`.
+- firmware profile form now includes advanced per-device tuning for generated `main.cpp` and `platformio.ini`:
+  - timing: `sensor_interval_ms`, `http_interval_ms`, `mqtt_interval_ms`, `dht_min_read_interval_ms`
+  - transport/runtime: `http_read_timeout_ms`, `mqtt_max_packet_size`, `core_debug_level`
+  - serial tooling: `monitor_speed`, optional `monitor_port`, optional `upload_port`
 
 ### Documentation Route (`/doc`)
 

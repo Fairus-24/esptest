@@ -179,6 +179,73 @@ class AdminConfigPanelTest extends TestCase
         $this->assertStringContainsString('-DESP_HTTP_TLS_INSECURE=0', $platformioContent);
     }
 
+    public function test_admin_firmware_profile_advanced_tuning_is_reflected_in_generated_sources(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-TUNE',
+            'lokasi' => 'Advanced Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $this->post('/admin/config/devices/' . $device->id . '/profile', [
+            'board' => 'esp32doit-devkit-v1',
+            'wifi_ssid' => 'LAB-WIFI-ADV',
+            'wifi_password' => 'lab-pass-adv',
+            'server_host' => '192.168.1.111',
+            'http_base_url' => 'https://iot.example.com',
+            'http_endpoint' => '/api/http-data',
+            'mqtt_broker' => 'mqtt.example.com',
+            'mqtt_host' => 'mqtt.example.com',
+            'mqtt_port' => 1884,
+            'mqtt_topic' => 'iot/esp32/advanced',
+            'mqtt_user' => 'adv-user',
+            'mqtt_password' => 'adv-pass',
+            'http_tls_insecure' => '0',
+            'http_read_timeout_ms' => 7000,
+            'dht_pin' => 5,
+            'dht_model' => 'AM2302',
+            'sensor_interval_ms' => 12000,
+            'http_interval_ms' => 17000,
+            'mqtt_interval_ms' => 15000,
+            'dht_min_read_interval_ms' => 2500,
+            'core_debug_level' => 3,
+            'mqtt_max_packet_size' => 4096,
+            'monitor_speed' => 230400,
+            'monitor_port' => 'COM7',
+            'upload_port' => 'COM8',
+            'extra_build_flags' => '-DESP_EXTRA_SAMPLE=1',
+        ])->assertRedirect('/admin/config?device_id=' . $device->id);
+
+        $mainResponse = $this->get('/admin/config/devices/' . $device->id . '/firmware/main.cpp')
+            ->assertOk()
+            ->assertHeader('content-type', 'text/plain; charset=UTF-8');
+
+        $mainContent = $mainResponse->streamedContent();
+        $this->assertStringContainsString('#define DHTTYPE DHT22', $mainContent);
+        $this->assertStringContainsString('const unsigned long INTERVAL_SENSOR = 12000UL;', $mainContent);
+        $this->assertStringContainsString('const unsigned long INTERVAL_HTTP = 17000UL;', $mainContent);
+        $this->assertStringContainsString('const unsigned long INTERVAL_MQTT = 15000UL;', $mainContent);
+        $this->assertStringContainsString('const unsigned long DHT_MIN_READ_INTERVAL_MS = 2500UL;', $mainContent);
+
+        $platformioResponse = $this->get('/admin/config/devices/' . $device->id . '/firmware/platformio.ini')
+            ->assertOk()
+            ->assertHeader('content-type', 'text/plain; charset=UTF-8');
+
+        $platformioContent = $platformioResponse->streamedContent();
+        $this->assertStringContainsString('monitor_speed = 230400', $platformioContent);
+        $this->assertStringContainsString('monitor_port = COM7', $platformioContent);
+        $this->assertStringContainsString('upload_port = COM8', $platformioContent);
+        $this->assertStringContainsString('-DCORE_DEBUG_LEVEL=3', $platformioContent);
+        $this->assertStringContainsString('-DMQTT_MAX_PACKET_SIZE=4096', $platformioContent);
+        $this->assertStringContainsString('-DESP_HTTP_READ_TIMEOUT_MS=7000', $platformioContent);
+        $this->assertStringContainsString('-DESP_SENSOR_INTERVAL_MS=12000UL', $platformioContent);
+        $this->assertStringContainsString('-DESP_HTTP_INTERVAL_MS=17000UL', $platformioContent);
+        $this->assertStringContainsString('-DESP_MQTT_INTERVAL_MS=15000UL', $platformioContent);
+        $this->assertStringContainsString('-DESP_DHT_MIN_READ_INTERVAL_MS=2500UL', $platformioContent);
+    }
+
     private function mockGoogleCallback(string $email): void
     {
         $provider = Mockery::mock();

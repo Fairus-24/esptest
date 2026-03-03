@@ -182,8 +182,18 @@ class AdminConfigController extends Controller
                         'mqtt_user',
                         'mqtt_password',
                         'http_tls_insecure',
+                        'http_read_timeout_ms',
                         'dht_pin',
                         'dht_model',
+                        'sensor_interval_ms',
+                        'http_interval_ms',
+                        'mqtt_interval_ms',
+                        'dht_min_read_interval_ms',
+                        'core_debug_level',
+                        'mqtt_max_packet_size',
+                        'monitor_speed',
+                        'monitor_port',
+                        'upload_port',
                         'extra_build_flags',
                     ])
                 );
@@ -279,10 +289,22 @@ class AdminConfigController extends Controller
             'mqtt_user' => ['required', 'string', 'max:80'],
             'mqtt_password' => ['required', 'string', 'max:120'],
             'http_tls_insecure' => ['required', 'in:0,1,true,false,on,off,yes,no'],
+            'http_read_timeout_ms' => ['nullable', 'integer', 'min:1000', 'max:120000'],
             'dht_pin' => ['required', 'integer', 'min:0', 'max:39'],
             'dht_model' => ['required', 'string', Rule::in($dhtModels)],
+            'sensor_interval_ms' => ['nullable', 'integer', 'min:500', 'max:3600000'],
+            'http_interval_ms' => ['nullable', 'integer', 'min:500', 'max:3600000'],
+            'mqtt_interval_ms' => ['nullable', 'integer', 'min:500', 'max:3600000'],
+            'dht_min_read_interval_ms' => ['nullable', 'integer', 'min:250', 'max:120000'],
+            'core_debug_level' => ['nullable', 'integer', 'min:0', 'max:5'],
+            'mqtt_max_packet_size' => ['nullable', 'integer', 'min:256', 'max:65535'],
+            'monitor_speed' => ['nullable', 'integer', 'min:1200', 'max:3000000'],
+            'monitor_port' => ['nullable', 'string', 'max:80'],
+            'upload_port' => ['nullable', 'string', 'max:80'],
             'extra_build_flags' => ['nullable', 'string', 'max:4000'],
         ]);
+
+        $profile = $this->firmwareTemplateService->ensureProfile($device);
 
         $httpBaseUrl = rtrim(trim((string) ($validated['http_base_url'] ?? '')), '/');
         $parsedServerHost = (string) (parse_url($httpBaseUrl, PHP_URL_HOST) ?: '');
@@ -300,8 +322,19 @@ class AdminConfigController extends Controller
         $validated['http_base_url'] = $httpBaseUrl;
         $validated['mqtt_broker'] = trim((string) $validated['mqtt_broker']);
         $validated['http_tls_insecure'] = filter_var($validated['http_tls_insecure'], FILTER_VALIDATE_BOOL);
+        $validated['http_read_timeout_ms'] = (int) ($validated['http_read_timeout_ms'] ?? $profile->http_read_timeout_ms ?? 5000);
+        $validated['sensor_interval_ms'] = (int) ($validated['sensor_interval_ms'] ?? $profile->sensor_interval_ms ?? 5000);
+        $validated['http_interval_ms'] = (int) ($validated['http_interval_ms'] ?? $profile->http_interval_ms ?? 10000);
+        $validated['mqtt_interval_ms'] = (int) ($validated['mqtt_interval_ms'] ?? $profile->mqtt_interval_ms ?? 10000);
+        $validated['dht_min_read_interval_ms'] = (int) ($validated['dht_min_read_interval_ms'] ?? $profile->dht_min_read_interval_ms ?? 1500);
+        $validated['core_debug_level'] = (int) ($validated['core_debug_level'] ?? $profile->core_debug_level ?? 0);
+        $validated['mqtt_max_packet_size'] = (int) ($validated['mqtt_max_packet_size'] ?? $profile->mqtt_max_packet_size ?? 2048);
+        $validated['monitor_speed'] = (int) ($validated['monitor_speed'] ?? $profile->monitor_speed ?? 115200);
+        $validated['monitor_port'] = trim((string) ($validated['monitor_port'] ?? ''));
+        $validated['upload_port'] = trim((string) ($validated['upload_port'] ?? ''));
+        $validated['monitor_port'] = $validated['monitor_port'] !== '' ? $validated['monitor_port'] : null;
+        $validated['upload_port'] = $validated['upload_port'] !== '' ? $validated['upload_port'] : null;
 
-        $profile = $this->firmwareTemplateService->ensureProfile($device);
         $profile->fill($validated);
         $profile->save();
 

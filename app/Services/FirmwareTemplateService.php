@@ -52,8 +52,18 @@ class FirmwareTemplateService
                 'mqtt_user' => 'esp32',
                 'mqtt_password' => 'esp32',
                 'http_tls_insecure' => true,
+                'http_read_timeout_ms' => 5000,
                 'dht_pin' => 4,
                 'dht_model' => 'DHT11',
+                'sensor_interval_ms' => 5000,
+                'http_interval_ms' => 10000,
+                'mqtt_interval_ms' => 10000,
+                'dht_min_read_interval_ms' => 1500,
+                'core_debug_level' => 0,
+                'mqtt_max_packet_size' => 2048,
+                'monitor_speed' => 115200,
+                'monitor_port' => null,
+                'upload_port' => null,
             ]
         );
 
@@ -73,6 +83,27 @@ class FirmwareTemplateService
         if ($profile->http_tls_insecure === null) {
             $backfill['http_tls_insecure'] = true;
         }
+        if ((int) ($profile->http_read_timeout_ms ?? 0) <= 0) {
+            $backfill['http_read_timeout_ms'] = 5000;
+        }
+        if ((int) ($profile->sensor_interval_ms ?? 0) <= 0) {
+            $backfill['sensor_interval_ms'] = 5000;
+        }
+        if ((int) ($profile->http_interval_ms ?? 0) <= 0) {
+            $backfill['http_interval_ms'] = 10000;
+        }
+        if ((int) ($profile->mqtt_interval_ms ?? 0) <= 0) {
+            $backfill['mqtt_interval_ms'] = 10000;
+        }
+        if ((int) ($profile->dht_min_read_interval_ms ?? 0) <= 0) {
+            $backfill['dht_min_read_interval_ms'] = 1500;
+        }
+        if ((int) ($profile->mqtt_max_packet_size ?? 0) <= 0) {
+            $backfill['mqtt_max_packet_size'] = 2048;
+        }
+        if ((int) ($profile->monitor_speed ?? 0) <= 0) {
+            $backfill['monitor_speed'] = 115200;
+        }
 
         if ($backfill !== []) {
             $profile->fill($backfill);
@@ -91,52 +122,84 @@ class FirmwareTemplateService
         $mainTemplate = file_get_contents(base_path('ESP32_Firmware/src/main.cpp')) ?: '';
         $iniTemplate = file_get_contents(base_path('ESP32_Firmware/platformio.ini')) ?: '';
 
+        $wifiSsid = (string) $profile->wifi_ssid;
+        $wifiPassword = (string) $profile->wifi_password;
+        $serverHost = trim((string) $profile->server_host);
         $httpIngestKey = (string) ($runtimeState['HTTP_INGEST_KEY']['current_value'] ?? config('http_server.ingest_key', ''));
+        $httpBaseUrl = rtrim(trim((string) ($profile->http_base_url ?: '')), '/');
+        if ($httpBaseUrl === '') {
+            $httpBaseUrl = trim((string) config('app.url', 'http://127.0.0.1'));
+        }
         $httpEndpoint = trim((string) ($profile->http_endpoint ?: ''));
         if ($httpEndpoint === '') {
             $httpEndpoint = '/api/http-data';
         }
         $httpEndpoint = '/' . ltrim($httpEndpoint, '/');
+        $mqttHost = trim((string) ($profile->mqtt_host ?: $profile->mqtt_broker ?: $serverHost));
+        $mqttBroker = trim((string) ($profile->mqtt_broker ?: $mqttHost));
+        $mqttPort = max(1, (int) $profile->mqtt_port);
+        $mqttTopic = trim((string) $profile->mqtt_topic);
+        $mqttUser = (string) $profile->mqtt_user;
+        $mqttPassword = (string) $profile->mqtt_password;
+        $httpTlsInsecure = ((bool) $profile->http_tls_insecure) ? '1' : '0';
+        $httpReadTimeout = max(1000, (int) ($profile->http_read_timeout_ms ?? 5000));
+        $dhtPin = max(0, (int) $profile->dht_pin);
+        $dhtTypeToken = $this->resolveDhtTypeToken((string) $profile->dht_model);
+        $sensorInterval = max(500, (int) ($profile->sensor_interval_ms ?? 5000));
+        $httpInterval = max(500, (int) ($profile->http_interval_ms ?? 10000));
+        $mqttInterval = max(500, (int) ($profile->mqtt_interval_ms ?? 10000));
+        $dhtMinReadInterval = max(250, (int) ($profile->dht_min_read_interval_ms ?? 1500));
+        $coreDebugLevel = max(0, min(5, (int) ($profile->core_debug_level ?? 0)));
+        $mqttMaxPacketSize = max(256, (int) ($profile->mqtt_max_packet_size ?? 2048));
+        $monitorSpeed = max(1200, (int) ($profile->monitor_speed ?? 115200));
+        $monitorPort = trim((string) ($profile->monitor_port ?? ''));
+        $uploadPort = trim((string) ($profile->upload_port ?? ''));
 
         $mainRendered = $mainTemplate;
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* WIFI_SSID = [^;]+;/', 'const char* WIFI_SSID = "' . $this->escapeCpp((string) $profile->wifi_ssid) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* WIFI_PASSWORD = [^;]+;/', 'const char* WIFI_PASSWORD = "' . $this->escapeCpp((string) $profile->wifi_password) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/#define SERVER_HOST ".*?"/', '#define SERVER_HOST "' . $this->escapeCpp((string) $profile->server_host) . '"');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* WIFI_SSID = [^;]+;/', 'const char* WIFI_SSID = "' . $this->escapeCpp($wifiSsid) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* WIFI_PASSWORD = [^;]+;/', 'const char* WIFI_PASSWORD = "' . $this->escapeCpp($wifiPassword) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/#define SERVER_HOST ".*?"/', '#define SERVER_HOST "' . $this->escapeCpp($serverHost) . '"');
         $mainRendered = $this->replaceOne($mainRendered, '/const char\* HTTP_ENDPOINT = [^;]+;/', 'const char* HTTP_ENDPOINT = "' . $this->escapeCpp($httpEndpoint) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_SERVER = .*?;/', 'const char* MQTT_SERVER = "' . $this->escapeCpp((string) $profile->mqtt_host) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const int MQTT_PORT = [^;]+;/', 'const int MQTT_PORT = ' . max(1, (int) $profile->mqtt_port) . ';');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_TOPIC = [^;]+;/', 'const char* MQTT_TOPIC = "' . $this->escapeCpp((string) $profile->mqtt_topic) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_USER = [^;]+;/', 'const char* MQTT_USER = "' . $this->escapeCpp((string) $profile->mqtt_user) . '";');
-        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_PASSWORD = [^;]+;/', 'const char* MQTT_PASSWORD = "' . $this->escapeCpp((string) $profile->mqtt_password) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_SERVER = .*?;/', 'const char* MQTT_SERVER = "' . $this->escapeCpp($mqttHost) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const int MQTT_PORT = [^;]+;/', 'const int MQTT_PORT = ' . $mqttPort . ';');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_TOPIC = [^;]+;/', 'const char* MQTT_TOPIC = "' . $this->escapeCpp($mqttTopic) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_USER = [^;]+;/', 'const char* MQTT_USER = "' . $this->escapeCpp($mqttUser) . '";');
+        $mainRendered = $this->replaceOne($mainRendered, '/const char\* MQTT_PASSWORD = [^;]+;/', 'const char* MQTT_PASSWORD = "' . $this->escapeCpp($mqttPassword) . '";');
         $mainRendered = $this->replaceOne($mainRendered, '/const int DEVICE_ID = [^;]+;/', 'const int DEVICE_ID = ' . (int) $device->id . ';');
-        $mainRendered = $this->replaceOne($mainRendered, '/^#define DHTPIN .+$/m', '#define DHTPIN ' . max(0, (int) $profile->dht_pin));
-        $mainRendered = $this->replaceOne(
-            $mainRendered,
-            '/const DHTesp::DHT_MODEL_t DHT_MODEL_PREFERRED = DHTesp::[A-Z0-9_]+;/',
-            'const DHTesp::DHT_MODEL_t DHT_MODEL_PREFERRED = DHTesp::' . $this->normalizeDhtModel((string) $profile->dht_model) . ';'
-        );
+        $mainRendered = $this->replaceOne($mainRendered, '/^#define DHTPIN .+$/m', '#define DHTPIN ' . $dhtPin);
+        $mainRendered = $this->replaceOne($mainRendered, '/^#define DHTTYPE .+$/m', '#define DHTTYPE ' . $dhtTypeToken);
+        $mainRendered = $this->replaceOne($mainRendered, '/const unsigned long INTERVAL_SENSOR = [^;]+;/', 'const unsigned long INTERVAL_SENSOR = ' . $sensorInterval . 'UL;');
+        $mainRendered = $this->replaceOne($mainRendered, '/const unsigned long INTERVAL_HTTP = [^;]+;/', 'const unsigned long INTERVAL_HTTP = ' . $httpInterval . 'UL;');
+        $mainRendered = $this->replaceOne($mainRendered, '/const unsigned long INTERVAL_MQTT = [^;]+;/', 'const unsigned long INTERVAL_MQTT = ' . $mqttInterval . 'UL;');
+        $mainRendered = $this->replaceOne($mainRendered, '/const unsigned long DHT_MIN_READ_INTERVAL_MS = [^;]+;/', 'const unsigned long DHT_MIN_READ_INTERVAL_MS = ' . $dhtMinReadInterval . 'UL;');
 
         $iniRendered = $iniTemplate;
-        $iniRendered = $this->replaceOne($iniRendered, '/^board\s*=\s*.+$/m', 'board = ' . trim((string) $profile->board));
+        $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'board', trim((string) $profile->board));
+        $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'monitor_speed', (string) $monitorSpeed);
+        $iniRendered = $this->upsertOrRemovePlatformioSetting($iniRendered, 'monitor_port', $monitorPort);
+        $iniRendered = $this->upsertOrRemovePlatformioSetting($iniRendered, 'upload_port', $uploadPort);
 
-        $httpBaseUrl = rtrim(trim((string) ($profile->http_base_url ?: '')), '/');
-        if ($httpBaseUrl === '') {
-            $httpBaseUrl = trim((string) config('app.url', 'http://127.0.0.1'));
-        }
-        $mqttBroker = trim((string) ($profile->mqtt_broker ?: ''));
-        if ($mqttBroker === '') {
-            $mqttBroker = trim((string) ($profile->mqtt_host ?: $profile->server_host));
-        }
-
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'CORE_DEBUG_LEVEL', (string) $coreDebugLevel);
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'HTTP_CLIENT_TIMEOUT', (string) $httpReadTimeout);
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'MQTT_MAX_PACKET_SIZE', (string) $mqttMaxPacketSize);
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_WIFI_SSID', $wifiSsid);
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_WIFI_PASSWORD', $wifiPassword);
         $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_HTTP_INGEST_KEY', $httpIngestKey);
         $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_HTTP_BASE_URL', $httpBaseUrl);
         $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_HTTP_ENDPOINT', $httpEndpoint);
         $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_MQTT_BROKER', $mqttBroker);
-        $iniRendered = $this->upsertPlatformioPlainFlag(
-            $iniRendered,
-            'ESP_HTTP_TLS_INSECURE',
-            ((bool) $profile->http_tls_insecure) ? '1' : '0'
-        );
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_MQTT_PORT', (string) $mqttPort);
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_MQTT_TOPIC', $mqttTopic);
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_MQTT_USER', $mqttUser);
+        $iniRendered = $this->upsertPlatformioQuotedFlag($iniRendered, 'ESP_MQTT_PASSWORD', $mqttPassword);
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_HTTP_TLS_INSECURE', $httpTlsInsecure);
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_HTTP_READ_TIMEOUT_MS', (string) $httpReadTimeout);
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_DHT_PIN', (string) $dhtPin);
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_DEVICE_ID', (string) ((int) $device->id));
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_SENSOR_INTERVAL_MS', $sensorInterval . 'UL');
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_HTTP_INTERVAL_MS', $httpInterval . 'UL');
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_MQTT_INTERVAL_MS', $mqttInterval . 'UL');
+        $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_DHT_MIN_READ_INTERVAL_MS', $dhtMinReadInterval . 'UL');
 
         $extraFlags = trim((string) $profile->extra_build_flags);
         if ($extraFlags !== '') {
@@ -235,6 +298,41 @@ class FirmwareTemplateService
         return $this->appendPlatformioBuildFlag($content, $line);
     }
 
+    private function upsertPlatformioSetting(string $content, string $key, string $value): string
+    {
+        $line = $key . ' = ' . $value;
+        $pattern = '/^' . preg_quote($key, '/') . '\s*=\s*[^\r\n]*\r?$/m';
+
+        if (preg_match($pattern, $content) === 1) {
+            $seen = 0;
+            $updated = preg_replace_callback($pattern, static function () use (&$seen, $line): string {
+                $seen++;
+                return $seen === 1 ? $line : '';
+            }, $content) ?: $content;
+
+            return preg_replace("/\n{3,}/", "\n\n", $updated) ?: $updated;
+        }
+
+        return rtrim($content) . "\n" . $line . "\n";
+    }
+
+    private function upsertOrRemovePlatformioSetting(string $content, string $key, string $value): string
+    {
+        if ($value === '') {
+            return $this->removePlatformioSetting($content, $key);
+        }
+
+        return $this->upsertPlatformioSetting($content, $key, $value);
+    }
+
+    private function removePlatformioSetting(string $content, string $key): string
+    {
+        $pattern = '/^' . preg_quote($key, '/') . '\s*=\s*[^\r\n]*\r?\n?/m';
+        $updated = preg_replace($pattern, '', $content) ?: $content;
+
+        return preg_replace("/\n{3,}/", "\n\n", $updated) ?: $updated;
+    }
+
     private function appendPlatformioBuildFlag(string $content, string $line): string
     {
         if (preg_match('/^build_flags\s*=\s*$/m', $content) === 1) {
@@ -249,14 +347,13 @@ class FirmwareTemplateService
         return rtrim($content) . "\n" . $line . "\n";
     }
 
-    private function normalizeDhtModel(string $model): string
+    private function resolveDhtTypeToken(string $model): string
     {
         $normalized = strtoupper(trim($model));
 
         return match ($normalized) {
             'DHT22' => 'DHT22',
-            'AM2302' => 'AM2302',
-            'AUTO_DETECT' => 'AUTO_DETECT',
+            'AM2302' => 'DHT22',
             default => 'DHT11',
         };
     }

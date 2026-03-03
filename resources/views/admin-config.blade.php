@@ -621,6 +621,74 @@
                         </div>
                     </div>
 
+                    <div class="row-3">
+                        <div class="field">
+                            <label>Sensor Interval (ms)</label>
+                            <input name="sensor_interval_ms" type="number" min="500" max="3600000" value="{{ $selectedProfile->sensor_interval_ms ?? 5000 }}">
+                            <small>Maps to `ESP_SENSOR_INTERVAL_MS` in `platformio.ini` and `INTERVAL_SENSOR` in `main.cpp`.</small>
+                        </div>
+                        <div class="field">
+                            <label>HTTP Interval (ms)</label>
+                            <input name="http_interval_ms" type="number" min="500" max="3600000" value="{{ $selectedProfile->http_interval_ms ?? 10000 }}">
+                            <small>Maps to `ESP_HTTP_INTERVAL_MS` and `INTERVAL_HTTP`.</small>
+                        </div>
+                        <div class="field">
+                            <label>MQTT Interval (ms)</label>
+                            <input name="mqtt_interval_ms" type="number" min="500" max="3600000" value="{{ $selectedProfile->mqtt_interval_ms ?? 10000 }}">
+                            <small>Maps to `ESP_MQTT_INTERVAL_MS` and `INTERVAL_MQTT`.</small>
+                        </div>
+                    </div>
+
+                    <div class="row-3">
+                        <div class="field">
+                            <label>DHT Min Read Interval (ms)</label>
+                            <input name="dht_min_read_interval_ms" type="number" min="250" max="120000" value="{{ $selectedProfile->dht_min_read_interval_ms ?? 1500 }}">
+                            <small>Maps to `ESP_DHT_MIN_READ_INTERVAL_MS` and `DHT_MIN_READ_INTERVAL_MS`.</small>
+                        </div>
+                        <div class="field">
+                            <label>HTTP Read Timeout (ms)</label>
+                            <input name="http_read_timeout_ms" type="number" min="1000" max="120000" value="{{ $selectedProfile->http_read_timeout_ms ?? 5000 }}">
+                            <small>Maps to `ESP_HTTP_READ_TIMEOUT_MS` and `HTTP_CLIENT_TIMEOUT`.</small>
+                        </div>
+                        <div class="field">
+                            <label>MQTT Max Packet Size</label>
+                            <input name="mqtt_max_packet_size" type="number" min="256" max="65535" value="{{ $selectedProfile->mqtt_max_packet_size ?? 2048 }}">
+                            <small>Maps to `MQTT_MAX_PACKET_SIZE` build flag.</small>
+                        </div>
+                    </div>
+
+                    <div class="row-3">
+                        <div class="field">
+                            <label>Core Debug Level (0-5)</label>
+                            <input name="core_debug_level" type="number" min="0" max="5" value="{{ $selectedProfile->core_debug_level ?? 0 }}">
+                            <small>Maps to `CORE_DEBUG_LEVEL` build flag.</small>
+                        </div>
+                        <div class="field">
+                            <label>Monitor Speed</label>
+                            <input name="monitor_speed" type="number" min="1200" max="3000000" value="{{ $selectedProfile->monitor_speed ?? 115200 }}">
+                            <small>Maps to `monitor_speed` in `platformio.ini`.</small>
+                        </div>
+                        <div class="field">
+                            <label>DHT Model Note</label>
+                            <small>
+                                For this firmware base (Adafruit DHT), `AM2302` is emitted as `DHT22`, and `AUTO_DETECT` fallback uses `DHT11`.
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="field">
+                            <label>Monitor Port (optional)</label>
+                            <input name="monitor_port" value="{{ $selectedProfile->monitor_port }}" placeholder="COM5 / /dev/ttyUSB0">
+                            <small>If empty, `monitor_port` line is removed so PlatformIO can auto-detect.</small>
+                        </div>
+                        <div class="field">
+                            <label>Upload Port (optional)</label>
+                            <input name="upload_port" value="{{ $selectedProfile->upload_port }}" placeholder="COM5 / /dev/ttyUSB0">
+                            <small>If empty, `upload_port` line is removed so PlatformIO can auto-detect.</small>
+                        </div>
+                    </div>
+
                     <div class="field">
                         <label>Extra Build Flags (optional, one per line)</label>
                         <textarea name="extra_build_flags">{{ $selectedProfile->extra_build_flags }}</textarea>
