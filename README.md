@@ -218,6 +218,7 @@ The project has been updated with the following behavior:
 159. `/doc` content has been rewritten into a two-layer narrative format (simple explanation + technical explanation) with new sections for simplified system story, end-to-end data flow explanation, step-by-step metric interpretation, concrete calculation examples, and design rationale, while keeping all formulas/mechanisms aligned with actual code paths.
 160. `/doc` now includes stronger inline SVG visuals and academic terminology support: responsive architecture diagram (ESP32 -> HTTP/MQTT ingress -> DB -> `StatisticsService` -> dashboard), HTTP-vs-MQTT timeline sequence visualization, and a two-layer `Glossary / Daftar Istilah` section tied to actual implementation terms.
 161. `/doc` floating back-to-top control is now icon-only (arrow-up, no visible text label) and uses explicit smooth-scroll behavior via JavaScript (`window.scrollTo({ top: 0, behavior: 'smooth' })`).
+162. Admin Google login rejection message is now generic and no longer exposes allow-list email criteria on `/admin/login`; unauthorized accounts receive a non-sensitive access-denied notice.
 
 ## Tech Stack
 

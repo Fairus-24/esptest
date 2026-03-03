@@ -34,7 +34,6 @@ class AdminConfigController extends Controller
 
         return view('admin-login', [
             'googleLoginConfigured' => $googleAuthConfig['configured'],
-            'allowedGoogleEmail' => $googleAuthConfig['allowed_email'],
         ]);
     }
 
@@ -78,7 +77,7 @@ class AdminConfigController extends Controller
         if ($email === '' || $allowedEmail === '' || !hash_equals($allowedEmail, $email)) {
             return redirect()
                 ->route('admin.login')
-                ->with('admin_error', "Akses ditolak. Hanya email {$allowedEmail} yang diizinkan.");
+                ->with('admin_error', 'Akun Google ini tidak dapat digunakan untuk akses admin. Silakan hubungi administrator.');
         }
 
         $sessionKey = (string) config('admin.session_key', 'admin_config_authenticated');
