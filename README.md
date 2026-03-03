@@ -215,6 +215,7 @@ The project has been updated with the following behavior:
 156. Documentation page now supports bilingual explanation toggle (`?lang=id|en`) via top-right `ID/EN` switch; technical field names, payload keys, SQL/code snippets, and class/function identifiers remain in English.
 157. Documentation page layout (`/doc`) has been redesigned for stronger responsiveness: adaptive section spacing, mobile/tablet sticky section chips, desktop sidebar from `lg` breakpoint, metadata summary cards, and a floating back-to-top shortcut.
 158. Mobile/tablet sticky section navigation on `/doc` now applies blur/background-elevation only when the nav is actually stuck at top (`IntersectionObserver`-based stuck state), so visual depth appears exactly at the pinned moment.
+159. `/doc` content has been rewritten into a two-layer narrative format (simple explanation + technical explanation) with new sections for simplified system story, end-to-end data flow explanation, step-by-step metric interpretation, concrete calculation examples, and design rationale, while keeping all formulas/mechanisms aligned with actual code paths.
 
 ## Tech Stack
 
@@ -1172,10 +1173,14 @@ Purpose: technical reference page for current implementation details.
 - Explanatory text is translated by language selection, while technical identifiers stay in English (`device_id`, `packet_seq`, `ApiController::storeHttp`, SQL/query/code blocks).
 - Layout is optimized for desktop/tablet/mobile with sticky mobile section navigation, `lg` desktop sidebar navigation, adaptive card spacing, and quick summary cards.
 - Mobile/tablet sticky navigation uses dynamic stuck-state blur/elevation (blur appears only when pinned to top).
+- Main sections now follow a two-layer explanation style: first paragraph for non-technical readers, second paragraph for technical detail tied to implementation.
 - Contents include:
-  - system overview and code-based architecture flow
+  - simplified system storyline (`Alur Sistem Secara Sederhana`)
+  - end-to-end flow explanation (`ESP32 -> Server -> Database -> Statistics -> Dashboard`) with visual flowchart
   - actual payload structure (HTTP/MQTT telemetry fields)
-  - latency, power, packet delivery ratio/reliability, and t-test implementation notes
+  - step-by-step metric explanations for latency, power, reliability/PDR, and independent sample t-test
+  - practical numeric examples (single send cycle, latency math, power estimate, p-value interpretation)
+  - design rationale for dual protocol comparison, worker separation, and statistical testing
   - database table/relationship summary and ingest-to-dashboard flow
   - statistical validation rules and current implementation limitations
 

@@ -171,15 +171,16 @@
         {{-- Mobile and tablet section jump navigation --}}
         <div id="mobile-doc-nav-sentinel" class="h-px lg:hidden"></div>
         <nav id="mobile-doc-nav" data-stuck="false" class="mobile-doc-nav sticky top-0 z-20 mb-4 flex gap-2 overflow-x-auto rounded-xl border p-2 text-xs whitespace-nowrap transition-all duration-200 lg:hidden">
+            <a href="#simple-flow" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Alur Sederhana', 'Simple Flow') }}</a>
             <a href="#overview" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Ringkasan', 'Overview') }}</a>
+            <a href="#data-flow" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Alur Data', 'Data Flow') }}</a>
             <a href="#architecture" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Arsitektur', 'Architecture') }}</a>
             <a href="#payload" class="rounded-full bg-slate-800 px-3 py-1.5">Payload</a>
-            <a href="#latency" class="rounded-full bg-slate-800 px-3 py-1.5">Latency</a>
-            <a href="#power" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Daya', 'Power') }}</a>
-            <a href="#pdr" class="rounded-full bg-slate-800 px-3 py-1.5">PDR</a>
-            <a href="#ttest" class="rounded-full bg-slate-800 px-3 py-1.5">T-Test</a>
+            <a href="#metrics" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Metrik', 'Metrics') }}</a>
+            <a href="#examples" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Contoh', 'Examples') }}</a>
+            <a href="#why-design" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Alasan Desain', 'Design Reasons') }}</a>
             <a href="#database" class="rounded-full bg-slate-800 px-3 py-1.5">Database</a>
-            <a href="#flow" class="rounded-full bg-slate-800 px-3 py-1.5">Flow</a>
+            <a href="#flow" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Ke Dashboard', 'To Dashboard') }}</a>
             <a href="#limits" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Batasan', 'Limits') }}</a>
         </nav>
 
@@ -189,15 +190,16 @@
                 <div class="sticky top-4 rounded-2xl border border-white/10 bg-slate-900/70 p-4 shadow-glow">
                     <p class="mb-3 text-xs uppercase tracking-[0.2em] text-brand-300">{{ $t('Navigasi', 'Navigation') }}</p>
                     <nav class="space-y-2 text-sm">
+                        <a href="#simple-flow" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Alur Sistem Sederhana', 'Simple System Flow') }}</a>
                         <a href="#overview" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('System Overview', 'System Overview') }}</a>
+                        <a href="#data-flow" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Bagaimana Data Mengalir', 'How Data Flows') }}</a>
                         <a href="#architecture" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Arsitektur Aktual', 'Actual Architecture') }}</a>
                         <a href="#routes" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">Laravel Routes</a>
                         <a href="#ingress" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('HTTP & MQTT Ingress', 'HTTP & MQTT Ingress') }}</a>
                         <a href="#payload" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">JSON Payload</a>
-                        <a href="#latency" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Logika Latency', 'Latency Logic') }}</a>
-                        <a href="#power" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Logika Daya (daya_mw)', 'Power Logic (daya_mw)') }}</a>
-                        <a href="#pdr" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">Packet Delivery Ratio</a>
-                        <a href="#ttest" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">Independent Sample T-Test</a>
+                        <a href="#metrics" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Penjelasan Metrik Bertahap', 'Step-by-Step Metric Explanation') }}</a>
+                        <a href="#examples" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Contoh Nyata', 'Real Examples') }}</a>
+                        <a href="#why-design" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Kenapa Desain Ini', 'Why This Design') }}</a>
                         <a href="#database" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Database & Relasi', 'Database & Relations') }}</a>
                         <a href="#flow" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Alur Data ke Dashboard', 'Data-to-Dashboard Flow') }}</a>
                         <a href="#validation" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Validasi Statistik', 'Statistical Validation') }}</a>
@@ -207,10 +209,104 @@
             </aside>
 
             <main class="min-w-0 space-y-5 sm:space-y-6">
+                {{-- SECTION 0A: Simple flow for non-technical readers --}}
+                <section id="simple-flow" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
+                    <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Alur Sistem Secara Sederhana', 'System Flow in Simple Language') }}</h2>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Bayangkan ada dua kurir yang mengantar pesan dari ESP32 ke server: kurir HTTP dan kurir MQTT. Keduanya membawa isi pesan yang sama, lalu server menyimpan hasil kiriman, menghitung kualitas pengiriman, dan menampilkan perbandingan keduanya di dashboard.', 'Imagine two couriers delivering messages from ESP32 to the server: HTTP courier and MQTT courier. Both carry similar message content, then the server stores each delivery, calculates delivery quality, and shows the comparison on the dashboard.') }}</p>
+                    <p class="mt-2 text-sm text-slate-300">{!! $t('Secara teknis, firmware di <code>ESP32_Firmware/src/main.cpp</code> mengirim payload periodik ke <code>POST /api/http-data</code> (HTTP) dan ke broker topic <code>' . config('mqtt.topic', 'iot/esp32/suhu') . '</code> (MQTT). Jalur HTTP diproses <code>ApiController::storeHttp</code>, jalur MQTT diproses worker <code>mqtt_worker.php</code>, lalu keduanya tersimpan idempotent ke tabel <code>eksperimens</code>.', 'Technically, firmware in <code>ESP32_Firmware/src/main.cpp</code> sends periodic payloads to <code>POST /api/http-data</code> (HTTP) and broker topic <code>' . config('mqtt.topic', 'iot/esp32/suhu') . '</code> (MQTT). HTTP path is handled by <code>ApiController::storeHttp</code>, MQTT path is handled by worker <code>mqtt_worker.php</code>, then both are stored idempotently in <code>eksperimens</code>.') !!}</p>
+
+                    <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div class="rounded-xl border border-white/10 bg-slate-800/50 p-3 text-sm">
+                            <p class="font-semibold text-brand-300">1. ESP32</p>
+                            <p class="mt-1 text-slate-300">{{ $t('Membaca sensor lalu menyiapkan paket data.', 'Reads sensor and prepares telemetry packet.') }}</p>
+                        </div>
+                        <div class="rounded-xl border border-white/10 bg-slate-800/50 p-3 text-sm">
+                            <p class="font-semibold text-brand-300">2. HTTP + MQTT</p>
+                            <p class="mt-1 text-slate-300">{{ $t('Paket dikirim lewat dua jalur berbeda.', 'Packet is sent through two different channels.') }}</p>
+                        </div>
+                        <div class="rounded-xl border border-white/10 bg-slate-800/50 p-3 text-sm">
+                            <p class="font-semibold text-brand-300">3. Database</p>
+                            <p class="mt-1 text-slate-300">{{ $t('Server menyimpan hasil kiriman dan menghitung metrik.', 'Server stores deliveries and calculates metrics.') }}</p>
+                        </div>
+                        <div class="rounded-xl border border-white/10 bg-slate-800/50 p-3 text-sm">
+                            <p class="font-semibold text-brand-300">4. Dashboard</p>
+                            <p class="mt-1 text-slate-300">{{ $t('Hasil perbandingan tampil realtime untuk analisis.', 'Comparison results are shown in realtime for analysis.') }}</p>
+                        </div>
+                    </div>
+                </section>
+
+                {{-- SECTION 0B: Data flow explanation with two-layer style --}}
+                <section id="data-flow" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
+                    <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Bagaimana Data Mengalir di Sistem Ini', 'How Data Flows in This System') }}</h2>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Bahasa sederhana: data bergerak dari alat (ESP32), masuk ke server, disimpan di database, dihitung statistiknya, lalu ditampilkan di dashboard.', 'Simple view: data moves from device (ESP32), enters server, is stored in database, gets statistical processing, and is finally shown on dashboard.') }}</p>
+                    <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: <code>sendHTTP()</code> dan <code>sendMQTT()</code> di firmware mengirim payload; HTTP diterima <code>ApiController::storeHttp</code>, MQTT diterima callback di <code>mqtt_worker.php</code>; data masuk <code>Eksperimen::updateOrCreate</code>; dashboard memanggil <code>StatisticsService</code> dari <code>DashboardController::index</code>.', 'Technical view: firmware <code>sendHTTP()</code> and <code>sendMQTT()</code> push payloads; HTTP is accepted by <code>ApiController::storeHttp</code>, MQTT is accepted by callback in <code>mqtt_worker.php</code>; data is written via <code>Eksperimen::updateOrCreate</code>; dashboard calls <code>StatisticsService</code> from <code>DashboardController::index</code>.') !!}</p>
+
+                    <div class="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950 p-4">
+<pre class="text-xs leading-5 text-slate-200">
+[ESP32 Sensor Read]
+        |
+        +--> HTTP -> /api/http-data -> ApiController -> eksperimens
+        |
+        +--> MQTT -> Broker -> mqtt_worker.php -> eksperimens
+                                              |
+                                              v
+                                    StatisticsService (summary, reliability, t-test)
+                                              |
+                                              v
+                                    DashboardController -> dashboard.blade.php
+</pre>
+                    </div>
+
+                    <div class="mt-4 overflow-x-auto rounded-xl border border-white/10">
+                        <table class="min-w-full text-left text-xs sm:text-sm">
+                            <thead class="bg-slate-800/60 text-slate-100">
+                                <tr>
+                                    <th class="px-3 py-2">{{ $t('Langkah', 'Step') }}</th>
+                                    <th class="px-3 py-2">{{ $t('Bahasa Sederhana', 'Simple Explanation') }}</th>
+                                    <th class="px-3 py-2">{{ $t('Penjelasan Teknis', 'Technical Explanation') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/10 text-slate-300">
+                                <tr>
+                                    <td class="px-3 py-2 font-medium">1</td>
+                                    <td class="px-3 py-2">{{ $t('ESP32 membaca suhu dan kelembapan.', 'ESP32 reads temperature and humidity.') }}</td>
+                                    <td class="px-3 py-2">{!! $t('Firmware menyimpan ke <code>lastTemperature</code>/<code>lastHumidity</code> lewat <code>captureSensorSnapshot()</code>.', 'Firmware stores values in <code>lastTemperature</code>/<code>lastHumidity</code> via <code>captureSensorSnapshot()</code>.') !!}</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-3 py-2 font-medium">2</td>
+                                    <td class="px-3 py-2">{{ $t('Data yang sama konsepnya dikirim lewat dua jalur.', 'Conceptually similar data is sent through two channels.') }}</td>
+                                    <td class="px-3 py-2">{!! $t('<code>sendHTTP()</code> kirim ke endpoint API, <code>sendMQTT()</code> publish ke topic broker.', '<code>sendHTTP()</code> posts to API endpoint, <code>sendMQTT()</code> publishes to broker topic.') !!}</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-3 py-2 font-medium">3</td>
+                                    <td class="px-3 py-2">{{ $t('Server mengecek apakah data valid.', 'Server checks whether payload is valid.') }}</td>
+                                    <td class="px-3 py-2">{{ $t('HTTP memakai validator Laravel, MQTT worker memakai validasi manual field/range.', 'HTTP uses Laravel validator, MQTT worker uses manual field/range validation.') }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-3 py-2 font-medium">4</td>
+                                    <td class="px-3 py-2">{{ $t('Data disimpan tanpa menggandakan paket yang sama.', 'Data is stored without duplicating the same packet.') }}</td>
+                                    <td class="px-3 py-2">{!! $t('Kunci idempotent: <code>(device_id, protokol, packet_seq)</code> melalui <code>updateOrCreate</code> + unique index DB.', 'Idempotent key: <code>(device_id, protokol, packet_seq)</code> using <code>updateOrCreate</code> + DB unique index.') !!}</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-3 py-2 font-medium">5</td>
+                                    <td class="px-3 py-2">{{ $t('Sistem menghitung statistik perbandingan.', 'System computes comparative statistics.') }}</td>
+                                    <td class="px-3 py-2">{!! $t('<code>StatisticsService</code> menghitung summary, reliability/PDR, dan independent sample T-test.', '<code>StatisticsService</code> computes summary, reliability/PDR, and independent sample T-test.') !!}</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-3 py-2 font-medium">6</td>
+                                    <td class="px-3 py-2">{{ $t('Hasil tampil di dashboard untuk dibaca manusia.', 'Results are shown on dashboard for human interpretation.') }}</td>
+                                    <td class="px-3 py-2">{{ $t('Dashboard menampilkan card metrik, quality panel, diagnostics, chart latency/daya, dan panel T-test.', 'Dashboard renders metric cards, quality panel, diagnostics, latency/power charts, and T-test panels.') }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
                 {{-- SECTION 1: System Overview --}}
                 <section id="overview" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
                     <h2 class="text-lg font-semibold sm:text-xl">System Overview</h2>
-                    <p class="mt-3 text-sm text-slate-300">{{ $t('Implementasi saat ini membandingkan telemetry MQTT vs HTTP dari ESP32, menyimpan keduanya ke MySQL, lalu menampilkan statistik komparatif, chart, dan t-test pada satu dashboard.', 'Current implementation compares MQTT vs HTTP telemetry from ESP32, stores both into MySQL, then renders comparative statistics, charts, and t-tests on one dashboard.') }}</p>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Untuk pembaca awam: halaman ini menjelaskan siapa mengirim data, ke mana data pergi, apa yang dihitung, dan bagaimana hasilnya dibaca di dashboard.', 'For general readers: this page explains who sends the data, where it goes, what is calculated, and how the results are read on dashboard.') }}</p>
+                    <p class="mt-2 text-sm text-slate-300">{{ $t('Untuk pembaca teknis: sistem membandingkan telemetry MQTT vs HTTP dari ESP32, menyimpan keduanya ke MySQL, lalu mengeksekusi statistik komparatif (summary, reliability, t-test) sebelum render chart dan panel analisis.', 'For technical readers: the system compares MQTT vs HTTP telemetry from ESP32, stores both in MySQL, then runs comparative statistics (summary, reliability, t-test) before rendering charts and analysis panels.') }}</p>
                     <div class="mt-4 grid gap-3 text-sm md:grid-cols-2">
                         <div class="rounded-xl border border-white/10 bg-slate-800/50 p-3">
                             <p class="font-medium text-brand-300">Firmware (ESP32)</p>
@@ -234,7 +330,8 @@
                 {{-- SECTION 2: Actual Architecture + data flow diagram --}}
                 <section id="architecture" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
                     <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Arsitektur Aktual (Berbasis Kode)', 'Actual Architecture (Code-Based)') }}</h2>
-                    <p class="mt-3 text-sm text-slate-300">{{ $t('Diagram berikut mengikuti jalur runtime yang benar-benar ada di repository ini.', 'The diagram below follows runtime paths that actually exist in this repository.') }}</p>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Versi awam: ada dua jalur pengiriman dari ESP32, lalu kedua jalur bertemu di database untuk dianalisis bersama.', 'Simple view: there are two delivery channels from ESP32, then both channels meet in database for joint analysis.') }}</p>
+                    <p class="mt-2 text-sm text-slate-300">{{ $t('Versi teknis: diagram berikut mengikuti jalur runtime yang benar-benar ada di repository ini tanpa asumsi tambahan di luar kode.', 'Technical view: the diagram below follows runtime paths that actually exist in this repository with no assumptions beyond code.') }}</p>
                     <div class="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950 p-4">
 <pre class="text-xs leading-5 text-slate-200">
 ESP32 Firmware (main.cpp)
@@ -291,6 +388,8 @@ Optional simulation branch
                 {{-- SECTION 4: Controller ingest and worker --}}
                 <section id="ingress" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
                     <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Controller HTTP dan Worker MQTT', 'HTTP Controller and MQTT Worker') }}</h2>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Versi awam: pintu HTTP dijaga oleh Laravel, sedangkan pintu MQTT dijaga oleh worker khusus. Keduanya mengecek data sebelum menyimpan.', 'Simple view: HTTP gate is handled by Laravel, while MQTT gate is handled by a dedicated worker. Both validate data before storing it.') }}</p>
+                    <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: route API menggunakan middleware <code>throttle:http-data</code> + <code>ingest.key</code>. MQTT berjalan sebagai proses subscriber tersendiri dengan validasi manual, lalu keduanya melakukan upsert idempotent ke tabel yang sama.', 'Technical view: API route uses <code>throttle:http-data</code> + <code>ingest.key</code> middleware. MQTT runs as separate subscriber process with manual validation, then both perform idempotent upsert into the same table.') !!}</p>
                     <div class="mt-3 grid gap-3 text-sm md:grid-cols-2">
                         <div class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
                             <p class="font-medium text-brand-300">HTTP path (<code>ApiController::storeHttp</code>)</p>
@@ -318,7 +417,8 @@ Optional simulation branch
                 {{-- SECTION 5: Payload structure used by firmware/backend --}}
                 <section id="payload" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
                     <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Struktur JSON Payload yang Dipakai Runtime', 'JSON Payload Structure Used in Runtime') }}</h2>
-                    <p class="mt-3 text-sm text-slate-300">{!! $t('Builder payload firmware (<code>fillProtocolPayload()</code>) selalu mengirim field telemetry wajib beserta field diagnostik tambahan.', 'Firmware payload builder (<code>fillProtocolPayload()</code>) always emits required telemetry fields plus additional diagnostics fields.') !!}</p>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Versi awam: payload adalah "isi paket" yang dibawa dari ESP32 ke server. Di dalamnya ada data utama sensor dan data tambahan untuk diagnosis kualitas jaringan.', 'Simple view: payload is "package content" carried from ESP32 to server. It contains primary sensor data and additional fields for network-quality diagnostics.') }}</p>
+                    <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: builder payload firmware (<code>fillProtocolPayload()</code>) selalu mengirim field telemetry wajib ditambah field diagnostik seperti RSSI, TX duration, payload bytes, dan counter keberhasilan/kegagalan kirim.', 'Technical view: firmware payload builder (<code>fillProtocolPayload()</code>) always emits required telemetry fields plus diagnostics such as RSSI, TX duration, payload bytes, and send success/fail counters.') !!}</p>
                     <div class="mt-4 rounded-xl border border-white/10 bg-slate-950 p-4">
 <pre class="overflow-x-auto text-xs leading-5 text-slate-200"><code>{
   "device_id": 1,
@@ -352,6 +452,38 @@ Optional simulation branch
                             <p class="font-medium text-brand-300">{{ $t('Field tambahan yang dikirim firmware', 'Extra fields emitted by firmware') }}</p>
                             <p class="mt-2 text-slate-300">{{ implode(', ', $extendedFirmwareFields) }}</p>
                         </div>
+                    </div>
+                </section>
+
+                {{-- SECTION 5B: Step-by-step metric explanations --}}
+                <section id="metrics" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
+                    <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Penjelasan Bertahap untuk Setiap Metrik', 'Step-by-Step Explanation for Each Metric') }}</h2>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Bagian ini sengaja ditulis dua lapis: paragraf pertama untuk pemahaman awam, paragraf kedua untuk akurasi teknis sesuai kode.', 'This section is intentionally two-layered: first paragraph for non-technical understanding, second paragraph for technical accuracy based on code.') }}</p>
+
+                    <div class="mt-4 space-y-4 text-sm">
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">Latency</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Versi awam: latency adalah lama waktu dari data dikirim oleh alat sampai diterima server. Semakin kecil, data terasa semakin cepat sampai.', 'Simple view: latency is how long it takes data to travel from the device to the server. Smaller latency means faster delivery.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Versi teknis: baik HTTP maupun MQTT menghitung <code>latency_ms = abs(server_utc - timestamp_esp)</code> menggunakan <code>Carbon::floatDiffInMilliseconds()</code> di <code>ApiController</code> dan <code>mqtt_worker.php</code>, lalu disimpan ke <code>eksperimens.latency_ms</code>.', 'Technical view: both HTTP and MQTT compute <code>latency_ms = abs(server_utc - timestamp_esp)</code> using <code>Carbon::floatDiffInMilliseconds()</code> in <code>ApiController</code> and <code>mqtt_worker.php</code>, then store it in <code>eksperimens.latency_ms</code>.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Konsumsi Daya', 'Power Consumption') }}</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Versi awam: sistem memperkirakan "biaya energi" setiap kali ESP32 mengirim data. Ini bukan alat ukur listrik langsung, tetapi estimasi berbasis kondisi kirim.', 'Simple view: the system estimates "energy cost" each time ESP32 sends data. This is not a direct electrical meter; it is an estimate based on transmission conditions.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Versi teknis: firmware menghitung <code>powerMw = voltage * totalCurrentMa</code> di <code>estimateProtocolPower()</code> dengan komponen RSSI, ukuran payload, durasi kirim, overhead protokol, fail ratio, suhu, dan kelembapan. Nilai dikirim sebagai field <code>daya</code> lalu disimpan backend ke <code>daya_mw</code>.', 'Technical view: firmware computes <code>powerMw = voltage * totalCurrentMa</code> in <code>estimateProtocolPower()</code> using RSSI, payload size, TX duration, protocol overhead, fail ratio, temperature, and humidity. It is sent as <code>daya</code> then stored in backend as <code>daya_mw</code>.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Reliability / Packet Delivery Ratio', 'Reliability / Packet Delivery Ratio') }}</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Versi awam: reliability menunjukkan seberapa konsisten data sampai tanpa hilang. Jika banyak nomor paket yang "loncat", skor reliability turun.', 'Simple view: reliability shows how consistently data arrives without loss. If many packet numbers are missing, reliability decreases.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Versi teknis: backend menghitung sequence reliability dari <code>packet_seq</code> per device (<code>received / expected * 100</code>) dengan aturan segmentasi reboot/jump. Skor akhir adalah gabungan sequence, field completeness, dan transmission health via <code>combineReliability()</code>.', 'Technical view: backend computes sequence reliability from <code>packet_seq</code> per device (<code>received / expected * 100</code>) with reboot/jump segmentation rules. Final score combines sequence, field completeness, and transmission health via <code>combineReliability()</code>.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">Independent Sample T-Test</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Versi awam: T-Test membantu menjawab apakah perbedaan MQTT dan HTTP itu kemungkinan "benar berbeda", bukan hanya kebetulan data sesaat.', 'Simple view: T-Test helps answer whether MQTT and HTTP differences are likely real, not just random short-term fluctuations.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Versi teknis: <code>StatisticsService::tTest()</code> menghitung pooled variance, standard error, dan <code>t_value</code> untuk <code>latency_ms</code> dan <code>daya_mw</code>. Signifikansi ditetapkan dengan batas tetap <code>|t| &gt; 1.96</code>, sementara <code>p_value</code> ditampilkan sebagai nilai aproksimasi.', 'Technical view: <code>StatisticsService::tTest()</code> calculates pooled variance, standard error, and <code>t_value</code> for <code>latency_ms</code> and <code>daya_mw</code>. Significance is decided with fixed threshold <code>|t| &gt; 1.96</code>, while <code>p_value</code> is shown as an approximate value.') !!}</p>
+                        </article>
                     </div>
                 </section>
 
@@ -453,6 +585,77 @@ $isSignificant = abs($tValue) > $criticalValue;</code></pre>
                     </ul>
                 </section>
 
+                {{-- SECTION 9B: Real examples --}}
+                <section id="examples" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
+                    <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Contoh Nyata dari Satu Siklus Data', 'Real Examples from One Data Cycle') }}</h2>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Tujuan bagian ini adalah membuat angka-angka penelitian lebih mudah dibayangkan. Angka contoh di bawah menggunakan pola rumus yang sama dengan kode runtime.', 'This section makes research numbers easier to imagine. Example numbers below follow the same formula pattern used in runtime code.') }}</p>
+
+                    <div class="mt-4 space-y-4">
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Contoh 1: Satu siklus kirim data', 'Example 1: One full data cycle') }}</h3>
+                            <p class="mt-2 text-sm text-slate-300">{{ $t('Versi awam: ESP32 membaca sensor, lalu mengirim paket ke HTTP dan MQTT hampir berdekatan, kemudian server menyimpan keduanya.', 'Simple view: ESP32 reads the sensor, sends packet to HTTP and MQTT nearly at the same time, then server stores both.') }}</p>
+                            <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: firmware membuat payload lewat <code>fillProtocolPayload()</code> (termasuk <code>packet_seq</code>, <code>timestamp_esp</code>, <code>daya</code>, <code>sensor_read_seq</code>), lalu backend melakukan <code>updateOrCreate</code> berdasarkan kunci unik paket.', 'Technical view: firmware builds payload using <code>fillProtocolPayload()</code> (including <code>packet_seq</code>, <code>timestamp_esp</code>, <code>daya</code>, <code>sensor_read_seq</code>), then backend performs <code>updateOrCreate</code> using packet unique key.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Contoh 2: Perhitungan latency', 'Example 2: Latency calculation') }}</h3>
+                            <div class="mt-2 rounded-lg border border-white/10 bg-slate-950 p-3">
+<pre class="overflow-x-auto text-xs leading-5 text-slate-200"><code>timestamp_esp   = 1772021517   (UTC second)
+timestamp_server= 1772021518.320 (UTC with millisecond)
+latency_ms      = abs(1772021518.320 - 1772021517) * 1000
+                = 1320 ms</code></pre>
+                            </div>
+                            <p class="mt-2 text-sm text-slate-300">{{ $t('Versi awam: data sampai sekitar 1,32 detik setelah waktu cap di alat.', 'Simple view: data arrives around 1.32 seconds after the device timestamp.') }}</p>
+                            <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: ini persis pola di <code>Carbon::floatDiffInMilliseconds()</code> dengan <code>abs()</code> di jalur HTTP dan MQTT worker.', 'Technical view: this matches the <code>Carbon::floatDiffInMilliseconds()</code> + <code>abs()</code> pattern in both HTTP and MQTT worker paths.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Contoh 3: Perhitungan daya (estimasi)', 'Example 3: Power estimation') }}</h3>
+                            <div class="mt-2 rounded-lg border border-white/10 bg-slate-950 p-3">
+<pre class="overflow-x-auto text-xs leading-5 text-slate-200"><code>Assume: protocol=HTTP, rssi=-60, payload=210 bytes, tx=80 ms,
+cpu=240MHz, fail ratio HTTP=10%, temp=28C, humidity=60%, success=true.
+
+totalCurrentMa ~ 72 + 2 + 26.4 + 9.75 + 42 + 14.4 + 20 + 3 + 2.7 + 0.5 + 0
+               ~ 192.75 mA
+powerMw = 3.30 * 192.75 ~ 636.08 mW</code></pre>
+                            </div>
+                            <p class="mt-2 text-sm text-slate-300">{{ $t('Versi awam: semakin jelek sinyal, semakin lama kirim, dan semakin besar paket, maka daya estimasi cenderung naik.', 'Simple view: weaker signal, longer transmission, and larger payload generally increase estimated power.') }}</p>
+                            <p class="mt-2 text-sm text-slate-300">{{ $t('Versi teknis: komponen angka di atas mengikuti komponen real di fungsi estimateProtocolPower() firmware.', 'Technical view: the components above follow the real terms in firmware estimateProtocolPower().') }}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Contoh 4: Membaca p-value dan signifikansi', 'Example 4: Reading p-value and significance') }}</h3>
+                            <p class="mt-2 text-sm text-slate-300">{{ $t('Versi awam: jika hasil menunjukkan perbedaan signifikan, artinya dua jalur komunikasi punya performa yang memang berbeda secara statistik.', 'Simple view: if result is significant, it means the two communication paths have a statistically meaningful performance difference.') }}</p>
+                            <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: di kode saat ini keputusan signifikan ditentukan oleh <code>|t_value| &gt; 1.96</code>. Nilai <code>p_value</code> ditampilkan sebagai aproksimasi pendukung interpretasi (bukan perhitungan exact Student-t untuk semua df).', 'Technical view: current code determines significance using <code>|t_value| &gt; 1.96</code>. <code>p_value</code> is shown as an approximation to support interpretation (not exact Student-t computation for all df).') !!}</p>
+                        </article>
+                    </div>
+                </section>
+
+                {{-- SECTION 9C: Why this design --}}
+                <section id="why-design" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
+                    <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Kenapa Sistem Ini Dibuat Seperti Ini?', 'Why Was This System Designed This Way?') }}</h2>
+
+                    <div class="mt-4 space-y-4">
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Alasan membandingkan MQTT dan HTTP', 'Why compare MQTT and HTTP') }}</h3>
+                            <p class="mt-2 text-sm text-slate-300">{{ $t('Versi awam: penelitian butuh pembanding yang adil. Karena itu data yang mirip dikirim lewat dua jalur berbeda agar bisa dilihat mana yang lebih cepat dan lebih stabil.', 'Simple view: research needs fair comparison. Similar payload is sent through two different paths so we can observe which one is faster and more stable.') }}</p>
+                            <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: firmware mengirim field yang sama ke HTTP dan MQTT, backend menyimpan pada tabel dan skema yang sama (dibedakan kolom <code>protokol</code>) sehingga analisis statistik antar-protokol bisa langsung dibandingkan.', 'Technical view: firmware sends matching fields to HTTP and MQTT, backend stores them in the same table/schema (distinguished by <code>protokol</code>) so cross-protocol statistics can be compared directly.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Alasan worker MQTT dipisah', 'Why MQTT worker is separated') }}</h3>
+                            <p class="mt-2 text-sm text-slate-300">{{ $t('Versi awam: jalur MQTT bersifat "menunggu pesan terus-menerus", jadi lebih cocok ditangani proses khusus yang selalu hidup.', 'Simple view: MQTT path is "always listening", so it fits better as a dedicated always-on process.') }}</p>
+                            <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: repository ini memang tidak memiliki controller ingest MQTT di Laravel; ingest MQTT dijalankan oleh proses mandiri <code>mqtt_worker.php</code> dengan reconnect loop, fallback host, dan lock file untuk mencegah worker ganda.', 'Technical view: this repository intentionally has no Laravel MQTT ingest controller; MQTT ingest runs in standalone <code>mqtt_worker.php</code> with reconnect loop, fallback hosts, and lock file to prevent duplicate workers.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                            <h3 class="font-semibold text-brand-300">{{ $t('Alasan memakai T-Test', 'Why use T-Test') }}</h3>
+                            <p class="mt-2 text-sm text-slate-300">{{ $t('Versi awam: rata-rata saja belum cukup. T-Test dipakai untuk mengecek apakah selisih dua protokol cukup kuat secara statistik.', 'Simple view: averages alone are not enough. T-Test checks whether the difference between protocols is statistically strong enough.') }}</p>
+                            <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: <code>StatisticsService</code> menghitung independent sample t-test untuk latency dan daya, lalu dashboard menampilkan parameter utama (N, mean, variance, std dev, t-value, p-value, interpretasi).', 'Technical view: <code>StatisticsService</code> computes independent sample t-tests for latency and power, then dashboard displays key parameters (N, mean, variance, std dev, t-value, p-value, interpretation).') !!}</p>
+                        </article>
+                    </div>
+                </section>
+
                 {{-- SECTION 10: Database schema + relations --}}
                 <section id="database" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
                     <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Struktur Database dan Relasi Tabel', 'Database Structure and Table Relations') }}</h2>
@@ -501,6 +704,8 @@ WHERE UPPER(protokol) = 'MQTT';</code></pre>
                 {{-- SECTION 11: Data flow to dashboard and component map --}}
                 <section id="flow" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
                     <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Alur: Data Masuk sampai Render Dashboard', 'Flow: Data Ingest to Dashboard Rendering') }}</h2>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Versi awam: setelah data disimpan di database, sistem mengolahnya menjadi angka ringkas agar pengguna bisa langsung melihat siapa yang lebih cepat, lebih hemat daya, dan lebih stabil.', 'Simple view: after data is saved into database, the system transforms it into concise numbers so users can quickly see which protocol is faster, more power-efficient, and more stable.') }}</p>
+                    <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: <code>DashboardController::index</code> mengambil data protocol dari model telemetry, memanggil <code>StatisticsService</code> untuk summary/reliability/t-test, menyusun payload chart, lalu mengirim semua hasil ke <code>resources/views/dashboard.blade.php</code>.', 'Technical view: <code>DashboardController::index</code> pulls protocol data from telemetry model, calls <code>StatisticsService</code> for summary/reliability/t-test, prepares chart payloads, then sends all results to <code>resources/views/dashboard.blade.php</code>.') !!}</p>
                     <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-300">
                         <li>{{ $t('ESP32 mengirim payload HTTP dan MQTT dengan field telemetry lengkap.', 'ESP32 sends HTTP and MQTT payloads with full telemetry fields.') }}</li>
                         <li>{!! $t('Jalur HTTP masuk ke <code>ApiController</code>; jalur MQTT masuk ke <code>mqtt_worker.php</code>.', 'HTTP path enters <code>ApiController</code>; MQTT path enters <code>mqtt_worker.php</code>.') !!}</li>
