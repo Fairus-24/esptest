@@ -210,6 +210,11 @@ The project has been updated with the following behavior:
 151. Admin login button now includes Google brand icon (inline SVG) so CTA visual is clearly aligned with Google OAuth flow.
 152. Admin login Google CTA now uses a simpler darker-hover style (without motion effects) and button label updated to `Lanjutkan dengan Google`.
 153. Admin Google CTA label now switches on hover (`Login dengan Google` -> `Lanjutkan dengan Google`) and Google icon contrast is enhanced on hover for clearer visual emphasis.
+154. Added a dedicated technical documentation page at `GET /doc` (`resources/views/doc.blade.php`) that summarizes the actual firmware/backend/worker/statistics/database/dashboard implementation path.
+155. Dashboard now includes a new `Technical Docs` navigation card below `Mode Simulasi Keseluruhan Aplikasi`, linking directly to `/doc`.
+156. Documentation page now supports bilingual explanation toggle (`?lang=id|en`) via top-right `ID/EN` switch; technical field names, payload keys, SQL/code snippets, and class/function identifiers remain in English.
+157. Documentation page layout (`/doc`) has been redesigned for stronger responsiveness: adaptive section spacing, mobile/tablet sticky section chips, desktop sidebar from `lg` breakpoint, metadata summary cards, and a floating back-to-top shortcut.
+158. Mobile/tablet sticky section navigation on `/doc` now applies blur/background-elevation only when the nav is actually stuck at top (`IntersectionObserver`-based stuck state), so visual depth appears exactly at the pinned moment.
 
 ## Tech Stack
 
@@ -1158,6 +1163,22 @@ Security notes:
 - protected routes require middleware `admin.session`.
 - in production set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `ADMIN_GOOGLE_ALLOWED_EMAIL`.
 
+### Documentation Route (`/doc`)
+
+Purpose: technical reference page for current implementation details.
+
+- `GET /doc` -> renders `resources/views/doc.blade.php`.
+- Supports language switch from top-right button: `/doc?lang=id` (default Indonesian) and `/doc?lang=en` (English).
+- Explanatory text is translated by language selection, while technical identifiers stay in English (`device_id`, `packet_seq`, `ApiController::storeHttp`, SQL/query/code blocks).
+- Layout is optimized for desktop/tablet/mobile with sticky mobile section navigation, `lg` desktop sidebar navigation, adaptive card spacing, and quick summary cards.
+- Mobile/tablet sticky navigation uses dynamic stuck-state blur/elevation (blur appears only when pinned to top).
+- Contents include:
+  - system overview and code-based architecture flow
+  - actual payload structure (HTTP/MQTT telemetry fields)
+  - latency, power, packet delivery ratio/reliability, and t-test implementation notes
+  - database table/relationship summary and ingest-to-dashboard flow
+  - statistical validation rules and current implementation limitations
+
 ## Dashboard Behavior
 
 Latency and power charts now behave as follows:
@@ -1176,6 +1197,7 @@ Other dashboard behavior:
 - protocol-level summary cards
 - dedicated reset experiment data button
 - dedicated `/reset-data` management page with synchronized dashboard palette and guarded reset confirmation
+- bottom navigation cards now include both simulation page and technical documentation (`/doc`)
 - floating top-right `Realtime Link Monitor` (MQTT/HTTP ping ms + throughput Mb/s from latest real payload telemetry)
 - same monitor now includes browser-measured external ping/speed (per-device internet condition, speedtest-style)
 - comparative chart x-axis is grouped by shared WIB second slot, so same-time MQTT/HTTP samples are aligned on the same x position

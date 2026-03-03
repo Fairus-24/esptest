@@ -44,4 +44,5 @@ Route::prefix('/admin/config')
         Route::post('/devices/{device}/firmware/apply', [AdminConfigController::class, 'applyFirmware'])->name('devices.firmware.apply');
     });
 
+Route::view('/doc', 'doc')->name('doc');
 Route::get('/', [DashboardController::class, 'index'])->name('dashboard');

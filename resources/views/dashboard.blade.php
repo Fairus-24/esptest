@@ -2298,6 +2298,15 @@
             box-shadow: 0 20px 34px rgba(2, 6, 23, 0.34);
         }
 
+        .docs-nav-card {
+            margin-top: 12px;
+            background: linear-gradient(132deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        }
+
+        .docs-nav-card .simulation-nav-arrow {
+            color: #cbd5e1;
+        }
+
         .simulation-nav-title {
             margin: 0 0 4px;
             font-size: 1rem;
@@ -3191,6 +3200,7 @@
             @php
                 $basePath = rtrim(request()->getBaseUrl(), '/');
                 $simulationPath = ($basePath !== '' ? $basePath : '') . '/simulation';
+                $docPath = ($basePath !== '' ? $basePath : '') . '/doc';
             @endphp
             <div class="simulation-nav-wrap">
                 <a href="{{ $simulationPath }}" class="simulation-nav-card">
@@ -3199,6 +3209,16 @@
                         <p class="simulation-nav-desc">
                             Buka halaman simulasi untuk meniru alur end-to-end MQTT vs HTTP secara realtime
                             (generator data, packet sequence, reliability, diagnostics, chart, dan auto-refresh dashboard).
+                        </p>
+                    </div>
+                    <i class="fas fa-arrow-right simulation-nav-arrow" aria-hidden="true"></i>
+                </a>
+                <a href="{{ $docPath }}" class="simulation-nav-card docs-nav-card">
+                    <div>
+                        <h3 class="simulation-nav-title"><i class="fas fa-book-open"></i> Technical Docs</h3>
+                        <p class="simulation-nav-desc">
+                            Buka dokumentasi teknis implementasi aktual sistem (arsitektur, payload, perhitungan latency/daya/reliability,
+                            t-test, struktur database, dan alur dashboard).
                         </p>
                     </div>
                     <i class="fas fa-arrow-right simulation-nav-arrow" aria-hidden="true"></i>
