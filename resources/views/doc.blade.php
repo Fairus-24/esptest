@@ -175,6 +175,7 @@
             <a href="#overview" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Ringkasan', 'Overview') }}</a>
             <a href="#data-flow" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Alur Data', 'Data Flow') }}</a>
             <a href="#architecture" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Arsitektur', 'Architecture') }}</a>
+            <a href="#timeline" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Timeline', 'Timeline') }}</a>
             <a href="#payload" class="rounded-full bg-slate-800 px-3 py-1.5">Payload</a>
             <a href="#metrics" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Metrik', 'Metrics') }}</a>
             <a href="#examples" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Contoh', 'Examples') }}</a>
@@ -182,6 +183,7 @@
             <a href="#database" class="rounded-full bg-slate-800 px-3 py-1.5">Database</a>
             <a href="#flow" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Ke Dashboard', 'To Dashboard') }}</a>
             <a href="#limits" class="rounded-full bg-slate-800 px-3 py-1.5">{{ $t('Batasan', 'Limits') }}</a>
+            <a href="#glossary" class="rounded-full bg-slate-800 px-3 py-1.5">Glossary</a>
         </nav>
 
         <div class="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
@@ -194,6 +196,7 @@
                         <a href="#overview" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('System Overview', 'System Overview') }}</a>
                         <a href="#data-flow" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Bagaimana Data Mengalir', 'How Data Flows') }}</a>
                         <a href="#architecture" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Arsitektur Aktual', 'Actual Architecture') }}</a>
+                        <a href="#timeline" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Timeline HTTP vs MQTT', 'HTTP vs MQTT Timeline') }}</a>
                         <a href="#routes" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">Laravel Routes</a>
                         <a href="#ingress" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('HTTP & MQTT Ingress', 'HTTP & MQTT Ingress') }}</a>
                         <a href="#payload" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">JSON Payload</a>
@@ -204,6 +207,7 @@
                         <a href="#flow" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Alur Data ke Dashboard', 'Data-to-Dashboard Flow') }}</a>
                         <a href="#validation" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Validasi Statistik', 'Statistical Validation') }}</a>
                         <a href="#limits" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">{{ $t('Batasan Sistem', 'System Limitations') }}</a>
+                        <a href="#glossary" class="block rounded-lg px-2 py-1.5 hover:bg-white/5">Glossary / {{ $t('Istilah', 'Terms') }}</a>
                     </nav>
                 </div>
             </aside>
@@ -332,6 +336,79 @@
                     <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Arsitektur Aktual (Berbasis Kode)', 'Actual Architecture (Code-Based)') }}</h2>
                     <p class="mt-3 text-sm text-slate-300">{{ $t('Versi awam: ada dua jalur pengiriman dari ESP32, lalu kedua jalur bertemu di database untuk dianalisis bersama.', 'Simple view: there are two delivery channels from ESP32, then both channels meet in database for joint analysis.') }}</p>
                     <p class="mt-2 text-sm text-slate-300">{{ $t('Versi teknis: diagram berikut mengikuti jalur runtime yang benar-benar ada di repository ini tanpa asumsi tambahan di luar kode.', 'Technical view: the diagram below follows runtime paths that actually exist in this repository with no assumptions beyond code.') }}</p>
+
+                    <div class="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 sm:p-4">
+                        <svg viewBox="0 0 980 430" class="h-auto w-full" role="img" aria-label="System architecture flow SVG">
+                            <defs>
+                                <linearGradient id="gradNode" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#1e293b" />
+                                    <stop offset="100%" stop-color="#0f172a" />
+                                </linearGradient>
+                                <linearGradient id="gradBackend" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#1d4ed8" stop-opacity="0.24" />
+                                    <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.12" />
+                                </linearGradient>
+                                <marker id="arrowDoc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#60a5fa" />
+                                </marker>
+                            </defs>
+
+                            <rect x="40" y="170" width="150" height="72" rx="12" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="115" y="197" fill="#e2e8f0" font-size="14" text-anchor="middle" font-weight="600">ESP32</text>
+                            <text x="115" y="218" fill="#94a3b8" font-size="11" text-anchor="middle">main.cpp</text>
+
+                            <rect x="245" y="86" width="180" height="72" rx="12" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="335" y="113" fill="#e2e8f0" font-size="13" text-anchor="middle" font-weight="600">HTTP Path</text>
+                            <text x="335" y="134" fill="#94a3b8" font-size="11" text-anchor="middle">POST /api/http-data</text>
+
+                            <rect x="245" y="252" width="180" height="72" rx="12" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="335" y="279" fill="#e2e8f0" font-size="13" text-anchor="middle" font-weight="600">MQTT Path</text>
+                            <text x="335" y="300" fill="#94a3b8" font-size="11" text-anchor="middle">topic {{ config('mqtt.topic', 'iot/esp32/suhu') }}</text>
+
+                            <rect x="470" y="70" width="220" height="290" rx="16" fill="url(#gradBackend)" stroke="#2563eb" stroke-dasharray="6 5" />
+                            <text x="580" y="94" fill="#bfdbfe" font-size="12" text-anchor="middle" font-weight="600">Backend Processing</text>
+
+                            <rect x="495" y="108" width="170" height="62" rx="10" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="580" y="132" fill="#e2e8f0" font-size="12" text-anchor="middle" font-weight="600">ApiController::storeHttp</text>
+                            <text x="580" y="151" fill="#94a3b8" font-size="10.5" text-anchor="middle">throttle + ingest.key</text>
+
+                            <rect x="495" y="188" width="170" height="62" rx="10" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="580" y="212" fill="#e2e8f0" font-size="12" text-anchor="middle" font-weight="600">mqtt_worker.php</text>
+                            <text x="580" y="231" fill="#94a3b8" font-size="10.5" text-anchor="middle">subscribe + validate</text>
+
+                            <rect x="495" y="268" width="170" height="62" rx="10" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="580" y="292" fill="#e2e8f0" font-size="12" text-anchor="middle" font-weight="600">Latency Calculation</text>
+                            <text x="580" y="311" fill="#94a3b8" font-size="10.5" text-anchor="middle">abs(server_utc - timestamp_esp)</text>
+
+                            <rect x="730" y="152" width="170" height="78" rx="12" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="815" y="180" fill="#e2e8f0" font-size="13" text-anchor="middle" font-weight="600">MySQL</text>
+                            <text x="815" y="200" fill="#94a3b8" font-size="11" text-anchor="middle">eksperimens</text>
+                            <text x="815" y="216" fill="#94a3b8" font-size="11" text-anchor="middle">updateOrCreate + unique key</text>
+
+                            <rect x="730" y="260" width="170" height="68" rx="12" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="815" y="286" fill="#e2e8f0" font-size="12.5" text-anchor="middle" font-weight="600">StatisticsService</text>
+                            <text x="815" y="305" fill="#94a3b8" font-size="10.5" text-anchor="middle">summary + reliability + tTest()</text>
+
+                            <rect x="730" y="348" width="170" height="54" rx="12" fill="url(#gradNode)" stroke="#334155" />
+                            <text x="815" y="377" fill="#e2e8f0" font-size="12.5" text-anchor="middle" font-weight="600">Dashboard</text>
+                            <text x="815" y="392" fill="#94a3b8" font-size="10.5" text-anchor="middle">DashboardController + Blade</text>
+
+                            <line x1="190" y1="193" x2="245" y2="122" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+                            <line x1="190" y1="219" x2="245" y2="286" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+
+                            <line x1="425" y1="122" x2="495" y2="139" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+                            <line x1="425" y1="286" x2="495" y2="219" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+
+                            <line x1="580" y1="170" x2="580" y2="188" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+                            <line x1="580" y1="250" x2="580" y2="268" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+
+                            <line x1="665" y1="299" x2="730" y2="191" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+                            <line x1="815" y1="230" x2="815" y2="260" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+                            <line x1="815" y1="328" x2="815" y2="348" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrowDoc)" />
+                        </svg>
+                        <p class="mt-2 text-xs text-slate-400">{{ $t('Diagram SVG inline ini mengikuti jalur kode aktual: perhitungan latency terjadi di ingest backend (HTTP controller + MQTT worker), sedangkan T-Test terjadi di StatisticsService sebelum dashboard dirender.', 'This inline SVG follows actual code paths: latency is calculated in backend ingest (HTTP controller + MQTT worker), while T-Test runs in StatisticsService before dashboard rendering.') }}</p>
+                    </div>
+
                     <div class="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950 p-4">
 <pre class="text-xs leading-5 text-slate-200">
 ESP32 Firmware (main.cpp)
@@ -355,6 +432,83 @@ Optional simulation branch
    -> simulated_eksperimens table
    -> /?source=simulation dashboard source
 </pre>
+                    </div>
+                </section>
+
+                {{-- SECTION 2B: HTTP vs MQTT timeline --}}
+                <section id="timeline" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
+                    <h2 class="text-lg font-semibold sm:text-xl">{{ $t('Timeline Visual: HTTP Request/Response vs MQTT Publish/Subscribe', 'Visual Timeline: HTTP Request/Response vs MQTT Publish/Subscribe') }}</h2>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Versi awam: kedua protokol berangkat dari titik waktu sensor yang sama, tetapi pola perjalanannya berbeda. HTTP menunggu balasan request, sedangkan MQTT publish lalu diproses subscriber worker.', 'Simple view: both protocols start from sensor timestamp, but the travel pattern differs. HTTP waits for request response, while MQTT publishes and is then processed by subscriber worker.') }}</p>
+                    <p class="mt-2 text-sm text-slate-300">{!! $t('Versi teknis: timeline ini memetakan <code>timestamp_esp</code>, fase transmit, momen server menerima data, dan langkah <code>latency_ms</code> dihitung pada backend ingest. Jalur HTTP terkait <code>sendHTTP()</code> + <code>ApiController::storeHttp</code>; jalur MQTT terkait <code>sendMQTT()</code> + <code>mqtt_worker.php</code>.', 'Technical view: this timeline maps <code>timestamp_esp</code>, transmit phase, server receive moment, and where <code>latency_ms</code> is computed in backend ingest. HTTP path maps to <code>sendHTTP()</code> + <code>ApiController::storeHttp</code>; MQTT path maps to <code>sendMQTT()</code> + <code>mqtt_worker.php</code>.') !!}</p>
+
+                    <div class="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 sm:p-4">
+                        <svg viewBox="0 0 1080 380" class="h-auto w-full" role="img" aria-label="HTTP and MQTT sequence timeline SVG">
+                            <defs>
+                                <marker id="arrowTimeDoc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
+                                </marker>
+                            </defs>
+
+                            <rect x="24" y="24" width="1032" height="330" rx="14" fill="#0b1220" stroke="#23324a" />
+                            <text x="54" y="52" fill="#e2e8f0" font-size="13" font-weight="600">{{ $t('Arah waktu ->', 'Time direction ->') }}</text>
+                            <line x1="190" y1="48" x2="1010" y2="48" stroke="#475569" stroke-width="1.4" marker-end="url(#arrowTimeDoc)" />
+
+                            <rect x="44" y="78" width="992" height="118" rx="10" fill="#111b2f" stroke="#1f3a63" />
+                            <text x="66" y="102" fill="#93c5fd" font-size="12.5" font-weight="700">HTTP</text>
+                            <line x1="190" y1="132" x2="1010" y2="132" stroke="#60a5fa" stroke-width="1.6" />
+
+                            <rect x="44" y="208" width="992" height="118" rx="10" fill="#111f26" stroke="#14532d" />
+                            <text x="66" y="232" fill="#86efac" font-size="12.5" font-weight="700">MQTT</text>
+                            <line x1="190" y1="262" x2="1010" y2="262" stroke="#34d399" stroke-width="1.6" />
+
+                            <!-- HTTP milestones -->
+                            <circle cx="240" cy="132" r="7" fill="#bfdbfe" />
+                            <text x="240" y="118" fill="#e2e8f0" font-size="10" text-anchor="middle">timestamp_esp</text>
+                            <text x="240" y="154" fill="#94a3b8" font-size="10" text-anchor="middle">T0</text>
+
+                            <circle cx="420" cy="132" r="7" fill="#bfdbfe" />
+                            <text x="420" y="118" fill="#e2e8f0" font-size="10" text-anchor="middle">HTTP transmit</text>
+
+                            <circle cx="635" cy="132" r="7" fill="#bfdbfe" />
+                            <text x="635" y="118" fill="#e2e8f0" font-size="10" text-anchor="middle">ApiController receive</text>
+                            <text x="635" y="154" fill="#94a3b8" font-size="10" text-anchor="middle">timestamp_server</text>
+
+                            <circle cx="790" cy="132" r="7" fill="#bfdbfe" />
+                            <text x="790" y="118" fill="#e2e8f0" font-size="10" text-anchor="middle">latency_ms computed</text>
+
+                            <circle cx="930" cy="132" r="7" fill="#bfdbfe" />
+                            <text x="930" y="118" fill="#e2e8f0" font-size="10" text-anchor="middle">HTTP response</text>
+
+                            <line x1="240" y1="132" x2="420" y2="132" stroke="#93c5fd" stroke-width="2.1" marker-end="url(#arrowTimeDoc)" />
+                            <line x1="420" y1="132" x2="635" y2="132" stroke="#93c5fd" stroke-width="2.1" marker-end="url(#arrowTimeDoc)" />
+                            <line x1="635" y1="132" x2="790" y2="132" stroke="#93c5fd" stroke-width="2.1" marker-end="url(#arrowTimeDoc)" />
+                            <line x1="790" y1="132" x2="930" y2="132" stroke="#93c5fd" stroke-width="2.1" marker-end="url(#arrowTimeDoc)" />
+                            <text x="708" y="176" fill="#7dd3fc" font-size="10.5" text-anchor="middle">latency_ms = abs(server_utc - timestamp_esp)</text>
+
+                            <!-- MQTT milestones -->
+                            <circle cx="240" cy="262" r="7" fill="#bbf7d0" />
+                            <text x="240" y="248" fill="#e2e8f0" font-size="10" text-anchor="middle">timestamp_esp</text>
+                            <text x="240" y="284" fill="#94a3b8" font-size="10" text-anchor="middle">T0</text>
+
+                            <circle cx="420" cy="262" r="7" fill="#bbf7d0" />
+                            <text x="420" y="248" fill="#e2e8f0" font-size="10" text-anchor="middle">MQTT publish</text>
+
+                            <circle cx="560" cy="262" r="7" fill="#bbf7d0" />
+                            <text x="560" y="248" fill="#e2e8f0" font-size="10" text-anchor="middle">Broker route</text>
+
+                            <circle cx="705" cy="262" r="7" fill="#bbf7d0" />
+                            <text x="705" y="248" fill="#e2e8f0" font-size="10" text-anchor="middle">mqtt_worker receive</text>
+                            <text x="705" y="284" fill="#94a3b8" font-size="10" text-anchor="middle">timestamp_server</text>
+
+                            <circle cx="860" cy="262" r="7" fill="#bbf7d0" />
+                            <text x="860" y="248" fill="#e2e8f0" font-size="10" text-anchor="middle">latency_ms computed</text>
+
+                            <line x1="240" y1="262" x2="420" y2="262" stroke="#86efac" stroke-width="2.1" marker-end="url(#arrowTimeDoc)" />
+                            <line x1="420" y1="262" x2="560" y2="262" stroke="#86efac" stroke-width="2.1" marker-end="url(#arrowTimeDoc)" />
+                            <line x1="560" y1="262" x2="705" y2="262" stroke="#86efac" stroke-width="2.1" marker-end="url(#arrowTimeDoc)" />
+                            <line x1="705" y1="262" x2="860" y2="262" stroke="#86efac" stroke-width="2.1" marker-end="url(#arrowTimeDoc)" />
+                            <text x="780" y="305" fill="#6ee7b7" font-size="10.5" text-anchor="middle">{{ $t('Publish/subscribe berjalan asinkron; tidak ada HTTP-style response body.', 'Publish/subscribe is asynchronous; there is no HTTP-style response body.') }}</text>
+                        </svg>
                     </div>
                 </section>
 
@@ -771,19 +925,100 @@ WHERE UPPER(protokol) = 'MQTT';</code></pre>
                         <li>{{ $t('Dokumentasi ini implementation-bound; update halaman ini saat schema telemetry, formula, atau runtime path berubah.', 'This documentation is implementation-bound; update this page whenever telemetry schema, formulas, or runtime paths change.') }}</li>
                     </ul>
                 </section>
+
+                {{-- SECTION 14: Glossary --}}
+                <section id="glossary" class="doc-card rounded-2xl border border-white/10 p-4 shadow-glow sm:p-5 lg:p-6">
+                    <h2 class="text-lg font-semibold sm:text-xl">Glossary / {{ $t('Daftar Istilah', 'Glossary') }}</h2>
+                    <p class="mt-3 text-sm text-slate-300">{{ $t('Setiap istilah ditulis dua lapis: penjelasan sederhana untuk pembaca umum, lalu penjelasan teknis sesuai implementasi kode di repository ini.', 'Each term is written in two layers: simple explanation for general readers, followed by technical explanation based on actual repository implementation.') }}</p>
+
+                    <div class="mt-4 grid gap-3 md:grid-cols-2">
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">idempotent upsert</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: mengirim data yang sama berulang kali tidak membuat data dobel.', 'Simple: sending the same data repeatedly does not create duplicates.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: HTTP dan MQTT memakai <code>updateOrCreate</code> dengan identitas <code>(device_id, protokol, packet_seq)</code>, diperkuat unique index database dengan kombinasi key yang sama.', 'Technical: HTTP and MQTT use <code>updateOrCreate</code> with identity <code>(device_id, protokol, packet_seq)</code>, reinforced by database unique index on the same key combination.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">packet_seq</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: nomor urut paket agar sistem tahu ada paket yang hilang atau berulang.', 'Simple: packet order number so the system can detect missing or repeated packets.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: firmware menaikkan <code>httpPacketSeq</code> dan <code>mqttPacketSeq</code> saat kirim; backend memakai nilai ini untuk dedup idempotent dan menghitung sequence reliability.', 'Technical: firmware increments <code>httpPacketSeq</code> and <code>mqttPacketSeq</code> on each send; backend uses this value for idempotent dedup and sequence reliability calculation.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">window analysis</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: sistem hanya mengambil data terbaru dalam jumlah tertentu agar analisis tetap ringan dan relevan.', 'Simple: the system only takes a recent subset of data so analysis remains lightweight and relevant.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: <code>DASHBOARD_ANALYSIS_WINDOW</code> (default ' . $analysisWindow . ') dipakai <code>StatisticsService::getProtocolData()</code>; chart memakai <code>DASHBOARD_CHART_WINDOW</code> (default ' . ($chartWindow === 0 ? '0 (unlimited)' : $chartWindow) . ').', 'Technical: <code>DASHBOARD_ANALYSIS_WINDOW</code> (default ' . $analysisWindow . ') is used by <code>StatisticsService::getProtocolData()</code>; chart uses <code>DASHBOARD_CHART_WINDOW</code> (default ' . ($chartWindow === 0 ? '0 (unlimited)' : $chartWindow) . ').') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">latency_ms</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: waktu tempuh data dari ESP32 sampai server, dalam milidetik.', 'Simple: travel time of data from ESP32 to server, in milliseconds.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: dihitung sebagai <code>abs(server_utc - timestamp_esp)</code> di <code>ApiController::storeHttp</code> dan <code>mqtt_worker.php</code>, lalu disimpan ke kolom <code>latency_ms</code>.', 'Technical: calculated as <code>abs(server_utc - timestamp_esp)</code> in <code>ApiController::storeHttp</code> and <code>mqtt_worker.php</code>, then stored in <code>latency_ms</code> column.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">daya_mw</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: perkiraan konsumsi daya saat pengiriman data.', 'Simple: estimated power usage during data transmission.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: firmware menghitung <code>daya</code> lewat <code>estimateProtocolPower()</code> lalu backend menyimpannya ke kolom <code>daya_mw</code>. Ini estimasi model, bukan pembacaan sensor listrik langsung.', 'Technical: firmware computes <code>daya</code> via <code>estimateProtocolPower()</code> then backend stores it in <code>daya_mw</code>. This is a model estimate, not direct electrical sensor reading.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">Independent Sample T-Test</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: uji statistik untuk mengecek apakah perbedaan dua kelompok data cukup kuat secara ilmiah.', 'Simple: statistical test to check whether differences between two data groups are scientifically strong enough.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: fungsi <code>StatisticsService::tTest()</code> menghitung pooled variance, standard error, dan <code>t_value</code> untuk data MQTT vs HTTP pada metrik <code>latency_ms</code> dan <code>daya_mw</code>.', 'Technical: <code>StatisticsService::tTest()</code> computes pooled variance, standard error, and <code>t_value</code> for MQTT vs HTTP data on <code>latency_ms</code> and <code>daya_mw</code> metrics.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">p-value</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: angka yang membantu menilai apakah perbedaan bisa dianggap kebetulan atau tidak.', 'Simple: a number that helps judge whether the observed difference could be random chance.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: di project ini <code>p_value</code> berasal dari fungsi aproksimasi <code>calculatePValue()</code> (normal CDF untuk df besar, bin kasar untuk df kecil), sehingga bersifat indikatif.', 'Technical: in this project, <code>p_value</code> comes from approximation function <code>calculatePValue()</code> (normal CDF for large df, coarse bins for small df), so it is indicative.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">publish/subscribe</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: pengirim menaruh pesan ke topik, penerima yang berlangganan topik itu akan memprosesnya.', 'Simple: sender puts message into a topic, and subscribed receivers process it.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: firmware <code>sendMQTT()</code> melakukan <code>publish</code> ke topic konfigurasi, lalu <code>mqtt_worker.php</code> melakukan <code>subscribe</code> dan menyimpan payload ke database.', 'Technical: firmware <code>sendMQTT()</code> performs <code>publish</code> to configured topic, then <code>mqtt_worker.php</code> performs <code>subscribe</code> and stores payload into database.') !!}</p>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-slate-800/50 p-4 text-sm">
+                            <h3 class="font-semibold text-brand-300">request/response</h3>
+                            <p class="mt-2 text-slate-300">{{ $t('Sederhana: pengirim meminta server memproses data, lalu server membalas status hasilnya.', 'Simple: sender asks server to process data, then server replies with result status.') }}</p>
+                            <p class="mt-2 text-slate-300">{!! $t('Teknis: firmware <code>sendHTTP()</code> mengirim request ke <code>/api/http-data</code>, <code>ApiController::storeHttp</code> memproses/validasi/upsert, kemudian mengembalikan response JSON dengan status kode HTTP.', 'Technical: firmware <code>sendHTTP()</code> posts to <code>/api/http-data</code>, <code>ApiController::storeHttp</code> handles validation/upsert, then returns JSON response with HTTP status code.') !!}</p>
+                        </article>
+                    </div>
+                </section>
             </main>
         </div>
     </div>
 
-    <a href="#top" class="fixed bottom-4 right-4 rounded-full border border-white/15 bg-slate-900/90 px-3 py-2 text-xs font-medium text-slate-100 shadow-glow hover:border-brand-400 hover:text-white">
-        {{ $t('Ke Atas', 'Top') }}
-    </a>
+    <button
+        id="scroll-top-btn"
+        type="button"
+        aria-label="{{ $t('Ke Atas', 'Scroll to top') }}"
+        class="fixed bottom-4 right-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-slate-900/90 text-slate-100 shadow-glow transition hover:border-brand-400 hover:text-white"
+    >
+        <span class="sr-only">{{ $t('Ke Atas', 'Scroll to top') }}</span>
+        <svg viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+            <path fill-rule="evenodd" d="M10 3a1 1 0 0 1 .707.293l5 5a1 1 0 0 1-1.414 1.414L11 6.414V16a1 1 0 1 1-2 0V6.414L5.707 9.707A1 1 0 0 1 4.293 8.293l5-5A1 1 0 0 1 10 3Z" clip-rule="evenodd" />
+        </svg>
+    </button>
 
     <script>
         // Toggle blur only when mobile/tablet nav is actually stuck at the top.
         (function () {
             const nav = document.getElementById('mobile-doc-nav');
             const sentinel = document.getElementById('mobile-doc-nav-sentinel');
+            const scrollTopButton = document.getElementById('scroll-top-btn');
+
+            // Scroll-to-top button uses smooth scrolling and works independent of #top anchors.
+            if (scrollTopButton) {
+                scrollTopButton.addEventListener('click', () => {
+                    window.scrollTo({
+                        top: 0,
+                        behavior: 'smooth'
+                    });
+                });
+            }
 
             if (!nav || !sentinel || !('IntersectionObserver' in window)) {
                 return;

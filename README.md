@@ -216,6 +216,8 @@ The project has been updated with the following behavior:
 157. Documentation page layout (`/doc`) has been redesigned for stronger responsiveness: adaptive section spacing, mobile/tablet sticky section chips, desktop sidebar from `lg` breakpoint, metadata summary cards, and a floating back-to-top shortcut.
 158. Mobile/tablet sticky section navigation on `/doc` now applies blur/background-elevation only when the nav is actually stuck at top (`IntersectionObserver`-based stuck state), so visual depth appears exactly at the pinned moment.
 159. `/doc` content has been rewritten into a two-layer narrative format (simple explanation + technical explanation) with new sections for simplified system story, end-to-end data flow explanation, step-by-step metric interpretation, concrete calculation examples, and design rationale, while keeping all formulas/mechanisms aligned with actual code paths.
+160. `/doc` now includes stronger inline SVG visuals and academic terminology support: responsive architecture diagram (ESP32 -> HTTP/MQTT ingress -> DB -> `StatisticsService` -> dashboard), HTTP-vs-MQTT timeline sequence visualization, and a two-layer `Glossary / Daftar Istilah` section tied to actual implementation terms.
+161. `/doc` floating back-to-top control is now icon-only (arrow-up, no visible text label) and uses explicit smooth-scroll behavior via JavaScript (`window.scrollTo({ top: 0, behavior: 'smooth' })`).
 
 ## Tech Stack
 
@@ -1174,13 +1176,16 @@ Purpose: technical reference page for current implementation details.
 - Layout is optimized for desktop/tablet/mobile with sticky mobile section navigation, `lg` desktop sidebar navigation, adaptive card spacing, and quick summary cards.
 - Mobile/tablet sticky navigation uses dynamic stuck-state blur/elevation (blur appears only when pinned to top).
 - Main sections now follow a two-layer explanation style: first paragraph for non-technical readers, second paragraph for technical detail tied to implementation.
+- Floating bottom-right back-to-top control uses icon-only UI with accessible label (`aria-label`) and smooth scroll behavior.
 - Contents include:
   - simplified system storyline (`Alur Sistem Secara Sederhana`)
-  - end-to-end flow explanation (`ESP32 -> Server -> Database -> Statistics -> Dashboard`) with visual flowchart
+  - end-to-end flow explanation (`ESP32 -> Server -> Database -> Statistics -> Dashboard`) with inline SVG architecture diagram
+  - visual timeline comparison of `HTTP request/response` vs `MQTT publish/subscribe`, including `timestamp_esp`, server receive time, and backend `latency_ms` computation point
   - actual payload structure (HTTP/MQTT telemetry fields)
   - step-by-step metric explanations for latency, power, reliability/PDR, and independent sample t-test
   - practical numeric examples (single send cycle, latency math, power estimate, p-value interpretation)
   - design rationale for dual protocol comparison, worker separation, and statistical testing
+  - glossary section (`Glossary / Daftar Istilah`) with simple + technical definitions for implementation terms (`idempotent upsert`, `packet_seq`, `window analysis`, `latency_ms`, `daya_mw`, `Independent Sample T-Test`, `p-value`, `publish/subscribe`, `request/response`)
   - database table/relationship summary and ingest-to-dashboard flow
   - statistical validation rules and current implementation limitations
 
