@@ -224,6 +224,7 @@ The project has been updated with the following behavior:
 165. Admin firmware console now supports **remote server build + client USB flash** (`Web Flash`) via browser Web Serial (`esptool-js`): server prepares artifacts (`bootloader.bin`, `partitions.bin`, `firmware.bin`) and connected client browser performs the actual USB flashing.
 166. Admin page layout is streamlined for operational use: verbose advanced-runtime and deploy-snippet panels were removed, while firmware build/flash actions and logs are now centralized in one focused firmware section.
 167. Admin firmware profile now protects selected device context: managed build macros (including `ESP_DEVICE_ID`) are automatically stripped from `extra_build_flags`, so build/webflash output cannot silently override the selected device target.
+168. Dashboard realtime refresh now uses cache-busting query stamps (`__ts`) and dashboard responses explicitly send `Cache-Control: no-store` headers, reducing stale metric issues behind reverse proxies/CDN/browser caches.
 
 ## Tech Stack
 

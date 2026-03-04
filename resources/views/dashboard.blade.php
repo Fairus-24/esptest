@@ -4735,7 +4735,10 @@
         }
 
         function autoRefreshData() {
-            fetch(window.location.href, { cache: 'no-store' })
+            const refreshUrl = new URL(window.location.href);
+            refreshUrl.searchParams.set('__ts', Date.now().toString());
+
+            fetch(refreshUrl.toString(), { cache: 'no-store' })
                 .then(response => response.text())
                 .then(html => {
                     const parser = new DOMParser();

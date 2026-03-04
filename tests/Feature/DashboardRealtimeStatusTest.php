@@ -46,6 +46,19 @@ class DashboardRealtimeStatusTest extends TestCase
             ->assertSee('HTTP Not Found');
     }
 
+    public function test_dashboard_response_disables_http_caching(): void
+    {
+        $response = $this->get('/')->assertOk();
+
+        $cacheControl = (string) $response->headers->get('Cache-Control', '');
+        $pragma = (string) $response->headers->get('Pragma', '');
+
+        $this->assertStringContainsString('no-store', $cacheControl);
+        $this->assertStringContainsString('no-cache', $cacheControl);
+        $this->assertStringContainsString('max-age=0', $cacheControl);
+        $this->assertSame('no-cache', $pragma);
+    }
+
     public function test_dashboard_marks_protocol_disconnected_when_data_is_stale(): void
     {
         $device = $this->createDevice('ESP32-REAL');

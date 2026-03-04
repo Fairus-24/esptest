@@ -95,7 +95,7 @@ class DashboardController extends Controller
             );
             $payload['telemetrySource'] = $this->telemetrySource;
 
-            return response()->view('dashboard', $payload);
+            return $this->renderDashboardPage($payload);
         }
 
         // Ambil data MQTT dan HTTP sekali saja
@@ -552,7 +552,7 @@ class DashboardController extends Controller
         }
         $telemetrySource = $this->telemetrySource;
 
-        return view('dashboard', compact(
+        return $this->renderDashboardPage(compact(
             'summary', 'reliability', 'latencyChartData', 'powerChartData', 'mqttTotal', 'httpTotal',
             'mqttConnected', 'httpConnected', 'esp32Connected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan',
             'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings', 'protocolDiagnostics',
@@ -1317,6 +1317,18 @@ class DashboardController extends Controller
     {
         return response()
             ->view('reset-data', $payload, $statusCode)
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', 'Fri, 01 Jan 1990 00:00:00 GMT');
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function renderDashboardPage(array $payload, int $statusCode = 200): Response
+    {
+        return response()
+            ->view('dashboard', $payload, $statusCode)
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache')
             ->header('Expires', 'Fri, 01 Jan 1990 00:00:00 GMT');
