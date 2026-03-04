@@ -176,6 +176,8 @@ class FirmwareTemplateService
         $iniRendered = $iniTemplate;
         $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'board', trim((string) $profile->board));
         $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'monitor_speed', (string) $monitorSpeed);
+        // Keep direct object linking to avoid fragile archive steps on some server shells/toolchains.
+        $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'lib_archive', 'false');
         $iniRendered = $this->upsertOrRemovePlatformioSetting($iniRendered, 'monitor_port', $monitorPort);
         $iniRendered = $this->upsertOrRemovePlatformioSetting($iniRendered, 'upload_port', $uploadPort);
 

@@ -175,6 +175,7 @@ class AdminConfigPanelTest extends TestCase
             ->assertHeader('content-type', 'text/plain; charset=UTF-8');
 
         $platformioContent = $platformioResponse->streamedContent();
+        $this->assertStringContainsString('lib_archive = false', $platformioContent);
         $this->assertStringContainsString('-DESP_HTTP_INGEST_KEY=\\"runtime-ingest-key\\"', $platformioContent);
         $this->assertStringContainsString('-DESP_HTTP_BASE_URL=\\"https://espdht.mufaza.my.id\\"', $platformioContent);
         $this->assertStringContainsString('-DESP_MQTT_BROKER=\\"202.154.58.51\\"', $platformioContent);

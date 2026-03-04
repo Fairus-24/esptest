@@ -702,7 +702,6 @@
                         <button type="button" class="btn" id="webflash-prepare-btn">Prepare Web Flash Build</button>
                         <button type="button" class="btn" id="webflash-connect-btn">Connect USB Device</button>
                         <button type="button" class="btn primary" id="webflash-flash-btn">Flash From Browser</button>
-                        <button type="button" class="btn danger" id="webflash-disconnect-btn">Disconnect USB</button>
                     </div>
                     <div id="webflash-status" class="note section-gap">Status: idle</div>
                     <textarea id="webflash-log" class="webflash-log" readonly></textarea>
@@ -739,7 +738,6 @@
             const prepareButton = document.getElementById('webflash-prepare-btn');
             const connectButton = document.getElementById('webflash-connect-btn');
             const flashButton = document.getElementById('webflash-flash-btn');
-            const disconnectButton = document.getElementById('webflash-disconnect-btn');
             const statusNode = document.getElementById('webflash-status');
             const logNode = document.getElementById('webflash-log');
 
@@ -776,6 +774,24 @@
                 }
                 logNode.value += message + (newline ? '\n' : '');
                 logNode.scrollTop = logNode.scrollHeight;
+            }
+
+            function isUsbConnected() {
+                return Boolean(esploader && transport);
+            }
+
+            function updateConnectButton() {
+                if (!connectButton) {
+                    return;
+                }
+
+                if (isUsbConnected()) {
+                    connectButton.textContent = 'Disconnect USB';
+                    connectButton.classList.add('danger');
+                } else {
+                    connectButton.textContent = 'Connect USB Device';
+                    connectButton.classList.remove('danger');
+                }
             }
 
             function bytesToBinaryString(uint8Array) {
@@ -841,12 +857,14 @@
                     const chip = await esploader.main();
                     setStatus('Terhubung ke ' + chip);
                     appendLog('Connected chip: ' + chip);
+                    updateConnectButton();
                     return true;
                 } catch (error) {
                     setStatus('Gagal connect ke perangkat.', true);
                     appendLog('ERROR: ' + (error?.message || String(error)));
                     transport = null;
                     esploader = null;
+                    updateConnectButton();
                     return false;
                 }
             }
@@ -862,6 +880,7 @@
                     transport = null;
                     esploader = null;
                     device = null;
+                    updateConnectButton();
                 }
             }
 
@@ -971,6 +990,13 @@
             });
 
             connectButton?.addEventListener('click', async () => {
+                if (isUsbConnected()) {
+                    await disconnectDevice();
+                    setStatus('USB disconnected.');
+                    appendLog('Disconnected from device.');
+                    return;
+                }
+
                 await ensureConnected();
             });
 
@@ -978,11 +1004,17 @@
                 await flashFromBrowser();
             });
 
-            disconnectButton?.addEventListener('click', async () => {
-                await disconnectDevice();
-                setStatus('USB disconnected.');
-                appendLog('Disconnected from device.');
-            });
+            if ('serial' in navigator) {
+                navigator.serial.addEventListener('disconnect', async (event) => {
+                    if (device && event?.target === device) {
+                        await disconnectDevice();
+                        setStatus('USB disconnected.');
+                        appendLog('Device disconnected by browser/OS.');
+                    }
+                });
+            }
+
+            updateConnectButton();
         })();
     </script>
 </body>

@@ -1186,10 +1186,12 @@ Security notes:
   - `ADMIN_FIRMWARE_CLI_OUTPUT_LIMIT` (default `60000` chars)
   - command lookup fallback: if primary command is missing (`exit code 127`), service retries common alternatives (`pio`, `platformio`, `python3 -m platformio`, `python -m platformio`) plus common absolute locations (for example `~/.local/bin/pio`, `~/.platformio/penv/bin/platformio` on Linux)
   - if all candidates fail, last CLI output includes checked command list and explicit guidance to set absolute `ADMIN_PLATFORMIO_COMMAND`
+  - generated `platformio.ini` now enforces `lib_archive = false` to avoid archive-step shell failures seen on some server environments
 - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
   - does not require USB connection on remote Debian server
+  - Web Flash control now uses a single USB button toggle: `Connect USB Device` changes to `Disconnect USB` after connection
 
 ### Documentation Route (`/doc`)
 
@@ -1809,6 +1811,13 @@ php artisan optimize:clear
 php artisan view:clear
 pm2 reload ecosystem.config.cjs --update-env
 ```
+
+### Build fails on archive step with `sh: No such file or directory` for `.pio/build/.../lib*.a`
+
+- Symptom example:
+  - `*** [.pio/build/.../libDHT sensor library for ESPx.a] sh: No such file or directory`
+- Current firmware template writes `lib_archive = false` into `platformio.ini` so PlatformIO links library objects directly without `.a` archive step.
+- If your workspace still uses old `platformio.ini`, re-apply firmware from admin panel (or pull latest file), then rebuild.
 
 ### ESP32 serial monitor appears frozen (`macet`)
 
