@@ -165,11 +165,20 @@ class AdminConfigPanelTest extends TestCase
         $this->mockGoogleCallback('mufaza2408@gmail.com');
         $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
 
-        $this->get('/admin/config?device_id=' . $device->id)
+        $response = $this->get('/admin/config?device_id=' . $device->id)
             ->assertOk()
             ->assertSee('Start Serial Monitor')
             ->assertSee('Serial Baud')
-            ->assertSee('Serial Monitor: idle');
+            ->assertSee('Serial Monitor: idle')
+            ->assertSee('id="serial-monitor-baud"', false)
+            ->assertSee('<option value="9600"', false)
+            ->assertSee('<option value="115200"', false)
+            ->assertSee('<option value="921600"', false);
+
+        $this->assertStringNotContainsString(
+            '<input id="serial-monitor-baud" type="number"',
+            (string) $response->getContent()
+        );
     }
 
     public function test_admin_profile_extra_build_flags_cannot_override_selected_device_id(): void
@@ -588,6 +597,56 @@ class AdminConfigPanelTest extends TestCase
                     ['name', 'address', 'size', 'url'],
                 ],
             ]);
+    }
+
+    public function test_admin_prepare_webflash_reports_git_conflict_marker_in_project_files(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-WEBFLASH-CONFLICT',
+            'lokasi' => 'Remote Browser',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $iniPath = base_path('ESP32_Firmware/platformio.ini');
+        $iniBackup = File::exists($iniPath) ? (string) File::get($iniPath) : null;
+
+        try {
+            File::put($iniPath, implode("\n", [
+                '[env:esp32doit-devkit-v1]',
+                'platform = espressif32',
+                '<<<<<<< Updated upstream',
+                'board = esp32doit-devkit-v1',
+                '=======',
+                'board = esp32-s3-devkitc-1',
+                '>>>>>>> Stashed changes',
+            ]) . "\n");
+
+            Process::fake();
+
+            $this->postJson('/admin/config/devices/' . $device->id . '/firmware/webflash/prepare')
+                ->assertStatus(422)
+                ->assertJsonPath('ok', false)
+                ->assertJsonPath('build.exit_code', 2)
+                ->assertJsonPath('build.command', 'validation')
+                ->assertJsonPath('message', 'Build firmware gagal. Cek output build pada response.')
+                ->assertJsonPath('build.output', function ($value): bool {
+                    if (!is_string($value)) {
+                        return false;
+                    }
+
+                    return str_contains($value, 'Git conflict marker terdeteksi')
+                        && str_contains($value, 'platformio.ini')
+                        && str_contains($value, 'Lines:');
+                });
+
+            Process::assertNothingRan();
+        } finally {
+            if ($iniBackup !== null) {
+                File::put($iniPath, $iniBackup);
+            }
+        }
     }
 
     public function test_admin_webflash_artifact_download_returns_binary_file(): void

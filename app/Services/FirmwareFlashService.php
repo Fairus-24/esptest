@@ -58,6 +58,19 @@ class FirmwareFlashService
             $workdir = base_path('ESP32_Firmware');
         }
 
+        $projectValidationError = $this->validateProjectFilesBeforeBuild($workdir);
+        if ($projectValidationError !== null) {
+            return [
+                'ok' => false,
+                'mode' => $mode,
+                'command' => 'validation',
+                'workdir' => $workdir,
+                'timeout_seconds' => 0,
+                'exit_code' => 2,
+                'output' => $this->truncateOutput($projectValidationError),
+            ];
+        }
+
         $timeoutSeconds = max(60, (int) config('admin.platformio_timeout_seconds', 900));
         $environment = $this->resolveBuildEnvironment();
         $candidateBaseCommands = $this->resolvePlatformioCommandCandidates();
@@ -178,6 +191,58 @@ class FirmwareFlashService
                 $guidance . PHP_EOL . PHP_EOL . implode(PHP_EOL . PHP_EOL, $attemptLogs)
             ),
         ];
+    }
+
+    private function validateProjectFilesBeforeBuild(string $workdir): ?string
+    {
+        $paths = [
+            $workdir . DIRECTORY_SEPARATOR . 'platformio.ini',
+            $workdir . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'main.cpp',
+        ];
+
+        foreach ($paths as $path) {
+            if (!is_file($path)) {
+                continue;
+            }
+
+            $conflictLines = $this->findGitConflictMarkerLines($path);
+            if ($conflictLines === []) {
+                continue;
+            }
+
+            return implode(PHP_EOL, [
+                'Git conflict marker terdeteksi di file project sebelum build.',
+                'Selesaikan konflik lalu jalankan build ulang.',
+                '',
+                'File: ' . $path,
+                'Lines: ' . implode(', ', $conflictLines),
+                '',
+                'Contoh marker: <<<<<<< ======= >>>>>>>',
+            ]);
+        }
+
+        return null;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function findGitConflictMarkerLines(string $path): array
+    {
+        $lines = file($path, FILE_IGNORE_NEW_LINES);
+        if (!is_array($lines) || $lines === []) {
+            return [];
+        }
+
+        $found = [];
+        foreach ($lines as $idx => $line) {
+            $trimmed = trim((string) $line);
+            if (preg_match('/^(<<<<<<<|=======|>>>>>>>)(?:\s.*)?$/', $trimmed) === 1) {
+                $found[] = $idx + 1;
+            }
+        }
+
+        return $found;
     }
 
     /**

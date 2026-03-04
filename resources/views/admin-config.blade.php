@@ -302,6 +302,35 @@
                     ? $brokerCandidate
                     : $serverCandidate;
             }
+            $serialBaudOptions = [
+                1200,
+                2400,
+                4800,
+                9600,
+                14400,
+                19200,
+                28800,
+                38400,
+                57600,
+                74880,
+                115200,
+                128000,
+                230400,
+                250000,
+                256000,
+                460800,
+                500000,
+                512000,
+                921600,
+                1000000,
+                1500000,
+                2000000,
+            ];
+            $serialDefaultBaud = max(1200, (int) (($selectedProfile->monitor_speed ?? null) ?: 115200));
+            if (!in_array($serialDefaultBaud, $serialBaudOptions, true)) {
+                $serialBaudOptions[] = $serialDefaultBaud;
+                sort($serialBaudOptions);
+            }
         @endphp
 
         <div class="topbar">
@@ -762,7 +791,11 @@
                     <div class="actions section-gap">
                         <div class="field" style="max-width: 180px; margin: 0;">
                             <label for="serial-monitor-baud">Serial Baud</label>
-                            <input id="serial-monitor-baud" type="number" min="1200" max="3000000" value="115200">
+                            <select id="serial-monitor-baud">
+                                @foreach ($serialBaudOptions as $baudOption)
+                                    <option value="{{ $baudOption }}" @selected((int) $baudOption === $serialDefaultBaud)>{{ $baudOption }}</option>
+                                @endforeach
+                            </select>
                         </div>
                         <button type="button" class="btn" id="serial-monitor-toggle-btn">Start Serial Monitor</button>
                         <button type="button" class="btn" id="serial-monitor-clear-btn">Clear Serial Log</button>
@@ -920,7 +953,7 @@
             const serialMonitorClearButton = document.getElementById('serial-monitor-clear-btn');
             const serialMonitorStatusNode = document.getElementById('serial-monitor-status');
             const serialMonitorLogNode = document.getElementById('serial-monitor-log');
-            const serialMonitorBaudInput = document.getElementById('serial-monitor-baud');
+            const serialMonitorBaudSelect = document.getElementById('serial-monitor-baud');
 
             let manifest = null;
             let transport = null;
@@ -930,6 +963,7 @@
             let serialMonitorReader = null;
             let serialMonitorRunning = false;
             let serialMonitorTail = '';
+            let serialMonitorLastChunkAt = 0;
 
             const terminal = {
                 clean() {
@@ -1022,6 +1056,33 @@
                 serialMonitorLogNode.scrollTop = serialMonitorLogNode.scrollHeight;
             }
 
+            function resolveSerialMonitorBaudRate() {
+                const requestedBaud = Number(serialMonitorBaudSelect?.value || 115200);
+                if (!Number.isFinite(requestedBaud) || requestedBaud < 1200) {
+                    return 115200;
+                }
+
+                return Math.floor(requestedBaud);
+            }
+
+            function flushSerialMonitorTail(force = false) {
+                if (!serialMonitorTail) {
+                    return;
+                }
+
+                const now = Date.now();
+                const readyToFlush = force
+                    || serialMonitorTail.length >= 512
+                    || (serialMonitorLastChunkAt > 0 && now - serialMonitorLastChunkAt >= 800);
+
+                if (!readyToFlush) {
+                    return;
+                }
+
+                appendSerialMonitorLog(serialMonitorTail, false);
+                serialMonitorTail = '';
+            }
+
             function updateSerialMonitorToggleButton() {
                 if (!serialMonitorToggleButton) {
                     return;
@@ -1099,6 +1160,7 @@
             async function stopSerialMonitor(options = {}) {
                 const silent = options && options.silent === true;
                 serialMonitorRunning = false;
+                flushSerialMonitorTail(true);
                 serialMonitorTail = '';
                 await closeSerialMonitorPort();
                 updateSerialMonitorToggleButton();
@@ -1132,23 +1194,34 @@
                         device = serialMonitorPort;
                     }
 
-                    const requestedBaud = Number(serialMonitorBaudInput?.value || 115200);
-                    const baudRate = Number.isFinite(requestedBaud) && requestedBaud >= 1200
-                        ? Math.floor(requestedBaud)
-                        : 115200;
+                    const baudRate = resolveSerialMonitorBaudRate();
 
-                    if (!serialMonitorPort.readable && !serialMonitorPort.writable) {
-                        await serialMonitorPort.open({
-                            baudRate,
-                            dataBits: 8,
-                            stopBits: 1,
-                            parity: 'none',
-                            flowControl: 'none',
-                        });
+                    if (serialMonitorPort.readable || serialMonitorPort.writable) {
+                        await serialMonitorPort.close();
+                    }
+                    await serialMonitorPort.open({
+                        baudRate,
+                        dataBits: 8,
+                        stopBits: 1,
+                        parity: 'none',
+                        flowControl: 'none',
+                        bufferSize: 16384,
+                    });
+                    // Ensure board is not held in reset and serial line is active.
+                    if (typeof serialMonitorPort.setSignals === 'function') {
+                        try {
+                            await serialMonitorPort.setSignals({
+                                dataTerminalReady: true,
+                                requestToSend: false,
+                            });
+                        } catch (_) {
+                            // Ignore adapter that does not expose signal control.
+                        }
                     }
 
                     serialMonitorRunning = true;
                     serialMonitorTail = '';
+                    serialMonitorLastChunkAt = 0;
                     setSerialMonitorStatus('running @ ' + baudRate + ' baud');
                     appendSerialMonitorLog('Serial monitor started @ ' + baudRate + ' baud.');
                     updateSerialMonitorToggleButton();
@@ -1171,11 +1244,15 @@
                                 }
 
                                 const chunk = decoder.decode(value, { stream: true });
+                                serialMonitorLastChunkAt = Date.now();
                                 const merged = serialMonitorTail + chunk;
-                                const normalized = merged.replace(/\r\n/g, '\n');
+                                const normalized = merged
+                                    .replace(/\r\n/g, '\n')
+                                    .replace(/\r/g, '\n');
                                 const lines = normalized.split('\n');
                                 serialMonitorTail = lines.pop() || '';
                                 lines.forEach((line) => appendSerialMonitorLog(line));
+                                flushSerialMonitorTail(false);
                             }
                         } finally {
                             try {

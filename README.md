@@ -233,6 +233,7 @@ The project has been updated with the following behavior:
 174. Debian git runtime sync now supports `always` mode (alias `full`) and cron installer defaults to full sync every minute (`pull + auto-commit + auto-push`), with auto commit messages generated from actual changed file scopes.
 175. Git sync now supports event-driven mode: local source changes can be auto-committed/pushed via filesystem watcher (`inotify`), and remote pushes can trigger instant pull via signed webhook endpoint (`POST /api/git-sync/webhook`), so sync is no longer strictly timer-based.
 176. Admin panel action guard coverage is expanded: `Save Quick Runtime Setup`, `Update Device`, and `Delete Device` are disabled until actual changes/requirements are met, selected device row now shows disabled `Selected` state (no redundant re-select), and legacy duplicate firmware fields were simplified (`mqtt_broker` primary, `server_host` auto-managed from HTTP base URL).
+177. Admin Web Serial Monitor reliability was improved: baud selector is now a global-standard dropdown (from `1200` to `2000000` with common ESP rates), serial stream parsing now normalizes both `CRLF` and `CR`, partial-line tail is flushed safely, and monitor start explicitly reapplies 8N1 + signal activation (`DTR/RTS`) so output is more consistently visible after connect/flash cycles.
 
 ## Tech Stack
 
@@ -1964,6 +1965,23 @@ pm2 reload ecosystem.config.cjs --update-env
   - pull latest code,
   - run admin `Apply to Workspace` once,
   - then run `Prepare Web Flash Build` again.
+
+### Web Flash `prepare` returns `422` with `InvalidProjectConfError` and `<<<<<<<` / `=======` / `>>>>>>>`
+
+- Symptom example in build output:
+  - `InvalidProjectConfError: Invalid '.../ESP32_Firmware/platformio.ini'`
+  - lines containing `<<<<<<< Updated upstream`, `=======`, `>>>>>>> Stashed changes`
+- Cause: unresolved Git merge conflict marker was committed/stashed-pop into firmware workspace file.
+- Current backend now performs a pre-build validation and stops early with explicit message (`Git conflict marker terdeteksi...`) before invoking PlatformIO.
+- Recovery:
+  - open conflicted file (`ESP32_Firmware/platformio.ini` and/or `ESP32_Firmware/src/main.cpp`),
+  - resolve conflict markers completely,
+  - save clean file, then run `Prepare Web Flash Build` again.
+- Quick server-side checks:
+
+```bash
+grep -nE '^(<<<<<<<|=======|>>>>>>>)' ESP32_Firmware/platformio.ini ESP32_Firmware/src/main.cpp
+```
 
 ### ESP32 serial monitor appears frozen (`macet`)
 
