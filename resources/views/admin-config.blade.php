@@ -294,6 +294,15 @@
                 ->map(fn (string $key) => $settings[$key] ?? null)
                 ->filter();
             $firmwareCliResult = session('firmware_cli_result');
+            $effectiveMqttServer = null;
+            if ($selectedProfile !== null) {
+                $brokerCandidate = trim((string) ($selectedProfile->mqtt_broker ?? ''));
+                $hostCandidate = trim((string) ($selectedProfile->mqtt_host ?? ''));
+                $serverCandidate = trim((string) ($selectedProfile->server_host ?? ''));
+                $effectiveMqttServer = $brokerCandidate !== ''
+                    ? $brokerCandidate
+                    : ($hostCandidate !== '' ? $hostCandidate : $serverCandidate);
+            }
         @endphp
 
         <div class="topbar">
@@ -323,6 +332,7 @@
                 <div class="panel">
                     <h2>Quick Setup Runtime</h2>
                     <p class="sub">Edit core production values first. This saves runtime overrides to database without manual `.env` editing.</p>
+                    <p class="note">Runtime overrides affect Laravel worker/app runtime. Existing per-device firmware profile values are not overwritten automatically.</p>
 
                     <form method="POST" action="{{ route('admin.config.runtime.save', [], false) }}" class="stack">
                         @csrf
@@ -487,6 +497,15 @@
                 <h2>Firmware Profile - Device #{{ $selectedDevice->id }} ({{ $selectedDevice->nama_device }})</h2>
                 <p class="sub">Use production-ready network targets here. Firmware generator will output consistent `main.cpp` and `platformio.ini` for this device.</p>
                 <p class="note">Active target is locked to <strong>Device ID {{ $selectedDevice->id }}</strong> from the current selection. Build, upload, and webflash always follow this selected device context.</p>
+                <details class="section-gap">
+                    <summary>How this firmware panel works</summary>
+                    <div class="note">
+                        <p>1) <strong>Save Firmware Profile</strong> writes values to `device_firmware_profiles` for this selected device.</p>
+                        <p>2) <strong>Apply to Workspace</strong> syncs generated `main.cpp` and `platformio.ini` into `ESP32_Firmware/*`.</p>
+                        <p>3) <strong>Build / Build & Upload / Web Flash</strong> always regenerate from saved profile before running action.</p>
+                        <p>4) <strong>MQTT Broker Override</strong> is the primary MQTT server for generated firmware. `MQTT Host` is legacy fallback only.</p>
+                    </div>
+                </details>
 
                 <form
                     id="firmware-profile-form"
@@ -540,6 +559,7 @@
                             <input name="http_endpoint" value="{{ $selectedProfile->http_endpoint }}" placeholder="/api/http-data" required>
                         </div>
                     </div>
+                    <p class="note">Effective MQTT server for generated firmware: <strong>{{ $effectiveMqttServer ?: '-' }}</strong> (resolved with priority: `mqtt_broker` -> `mqtt_host` -> `server_host`).</p>
 
                     <div class="row-3">
                         <div class="field">
@@ -550,12 +570,12 @@
                         <div class="field">
                             <label>MQTT Broker Override</label>
                             <input name="mqtt_broker" value="{{ $selectedProfile->mqtt_broker }}" placeholder="202.154.58.51" required>
-                            <small>Used for `ESP_MQTT_BROKER` in `platformio.ini`.</small>
+                            <small>Primary MQTT server. Used for `ESP_MQTT_BROKER` and generated firmware output.</small>
                         </div>
                         <div class="field">
                             <label>MQTT Host (Legacy Fallback)</label>
                             <input name="mqtt_host" value="{{ $selectedProfile->mqtt_host }}" placeholder="Auto from MQTT broker">
-                            <small>Optional. If empty, MQTT broker value is reused.</small>
+                            <small>Optional fallback only. Leave empty to follow MQTT broker automatically.</small>
                         </div>
                     </div>
 
@@ -784,6 +804,10 @@
 
             const workspaceSynced = applyButton.dataset.workspaceSync === '1';
             const trackedFields = Array.from(profileForm.querySelectorAll('input[name], select[name], textarea[name]'));
+            const mqttBrokerField = profileForm.querySelector('input[name="mqtt_broker"]');
+            const mqttHostField = profileForm.querySelector('input[name="mqtt_host"]');
+            const initialMqttBroker = mqttBrokerField ? (mqttBrokerField.value || '').trim() : '';
+            const initialMqttHost = mqttHostField ? (mqttHostField.value || '').trim() : '';
             const snapshotField = (field) => {
                 const type = (field.getAttribute('type') || '').toLowerCase();
                 if (type === 'checkbox' || type === 'radio') {
@@ -798,6 +822,22 @@
 
             const initialSnapshot = snapshotForm();
 
+            const syncMqttHostFromBrokerIfNeeded = () => {
+                if (!mqttBrokerField || !mqttHostField) {
+                    return;
+                }
+
+                const hostValue = (mqttHostField.value || '').trim();
+                const initialHostMirrorsBroker = initialMqttHost === '' || initialMqttHost === initialMqttBroker;
+                const hostStillUntouched = hostValue === initialMqttHost;
+                const shouldFollowBroker = hostValue === '' || (initialHostMirrorsBroker && hostStillUntouched);
+                if (!shouldFollowBroker) {
+                    return;
+                }
+
+                mqttHostField.value = (mqttBrokerField.value || '').trim();
+            };
+
             const refreshActionButtons = () => {
                 const dirty = snapshotForm() !== initialSnapshot;
                 saveButton.disabled = !dirty;
@@ -808,14 +848,22 @@
                 }
 
                 if (dirty) {
-                    stateNode.textContent = 'Perubahan profile terdeteksi. Save Firmware Profile dan Apply to Workspace aktif.';
+                    stateNode.textContent = 'Unsaved profile changes detected. Save Firmware Profile first, then Apply to Workspace if workspace files must follow latest saved profile.';
                 } else if (workspaceSynced) {
                     stateNode.textContent = 'Workspace firmware sudah sinkron dengan profile tersimpan.';
                 } else {
-                    stateNode.textContent = 'Workspace firmware berbeda dengan profile tersimpan. Gunakan Apply to Workspace untuk sinkronisasi.';
+                    stateNode.textContent = 'Saved profile and workspace firmware differ. Click Apply to Workspace to synchronize source files.';
                 }
             };
 
+            mqttBrokerField?.addEventListener('input', () => {
+                syncMqttHostFromBrokerIfNeeded();
+                refreshActionButtons();
+            });
+            mqttBrokerField?.addEventListener('change', () => {
+                syncMqttHostFromBrokerIfNeeded();
+                refreshActionButtons();
+            });
             profileForm.addEventListener('input', refreshActionButtons);
             profileForm.addEventListener('change', refreshActionButtons);
             refreshActionButtons();

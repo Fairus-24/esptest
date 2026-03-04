@@ -135,8 +135,8 @@ class FirmwareTemplateService
             $httpEndpoint = '/api/http-data';
         }
         $httpEndpoint = '/' . ltrim($httpEndpoint, '/');
-        $mqttHost = trim((string) ($profile->mqtt_host ?: $profile->mqtt_broker ?: $serverHost));
-        $mqttBroker = trim((string) ($profile->mqtt_broker ?: $mqttHost));
+        $mqttBroker = trim((string) ($profile->mqtt_broker ?: $profile->mqtt_host ?: $serverHost));
+        $mqttHost = $mqttBroker;
         $mqttPort = max(1, (int) $profile->mqtt_port);
         $mqttTopic = trim((string) $profile->mqtt_topic);
         $mqttUser = (string) $profile->mqtt_user;

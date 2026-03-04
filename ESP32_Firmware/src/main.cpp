@@ -20,7 +20,7 @@ const char* WIFI_SSID = "Free";
 const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
-#define SERVER_HOST "espdht.mufaza.my.id"  // Windows host LAN IP (update if DHCP IP changes)
+#define SERVER_HOST "localhost"  // Windows host LAN IP (update if DHCP IP changes)
 #ifndef ESP_HTTP_BASE_URL
 #define ESP_HTTP_BASE_URL "http://" SERVER_HOST
 #endif
@@ -56,9 +56,9 @@ const char* WIFI_PASSWORD = "gratiskok";
 #endif
 #endif
 const char* HTTP_SERVER = ESP_HTTP_BASE_URL;
-const char* HTTP_ENDPOINT = ESP_HTTP_ENDPOINT;
-const char* MQTT_SERVER = ESP_MQTT_BROKER;
-const int MQTT_PORT = ESP_MQTT_PORT;
+const char* HTTP_ENDPOINT = "/api/http-data";
+const char* MQTT_SERVER = "192.168.0.104";
+const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";
 const char* MQTT_PASSWORD = "esp32";
@@ -75,7 +75,7 @@ const char* HTTP_INGEST_KEY = ESP_HTTP_INGEST_KEY;
 #define DHTPIN 4
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
-const int DEVICE_ID = ESP_DEVICE_ID;
+const int DEVICE_ID = 1;
 
 // Timing Settings
 #ifndef ESP_SENSOR_INTERVAL_MS

@@ -375,6 +375,59 @@ class AdminConfigPanelTest extends TestCase
         $this->assertStringContainsString('-DESP_DHT_MIN_READ_INTERVAL_MS=2500UL', $platformioContent);
     }
 
+    public function test_admin_mqtt_broker_change_updates_effective_generated_mqtt_server(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-MQTT-SWITCH',
+            'lokasi' => 'Broker Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $payload = [
+            'board' => 'esp32doit-devkit-v1',
+            'wifi_ssid' => 'LAB-WIFI',
+            'wifi_password' => 'password-lab',
+            'server_host' => '192.168.1.120',
+            'http_base_url' => 'https://iot.example.com',
+            'http_endpoint' => '/api/http-data',
+            'mqtt_broker' => 'mqtt-old.example.com',
+            'mqtt_host' => 'mqtt-old.example.com',
+            'mqtt_port' => 1883,
+            'mqtt_topic' => 'iot/esp32/suhu',
+            'mqtt_user' => 'esp32',
+            'mqtt_password' => 'esp32',
+            'http_tls_insecure' => '1',
+            'dht_pin' => 4,
+            'dht_model' => 'DHT11',
+        ];
+
+        $this->post('/admin/config/devices/' . $device->id . '/profile', $payload)
+            ->assertRedirect('/admin/config?device_id=' . $device->id);
+
+        $payload['mqtt_broker'] = 'mqtt-new.example.com';
+        // Simulate unchanged legacy host input from the page before this fix.
+        $payload['mqtt_host'] = 'mqtt-old.example.com';
+
+        $this->post('/admin/config/devices/' . $device->id . '/profile', $payload)
+            ->assertRedirect('/admin/config?device_id=' . $device->id);
+
+        $profile = DeviceFirmwareProfile::query()->where('device_id', $device->id)->firstOrFail();
+        $this->assertSame('mqtt-new.example.com', $profile->mqtt_broker);
+        $this->assertSame('mqtt-new.example.com', $profile->mqtt_host);
+
+        $mainContent = $this->get('/admin/config/devices/' . $device->id . '/firmware/main.cpp')
+            ->assertOk()
+            ->streamedContent();
+        $this->assertStringContainsString('const char* MQTT_SERVER = "mqtt-new.example.com";', $mainContent);
+
+        $platformioContent = $this->get('/admin/config/devices/' . $device->id . '/firmware/platformio.ini')
+            ->assertOk()
+            ->streamedContent();
+        $this->assertStringContainsString('-DESP_MQTT_BROKER=\\"mqtt-new.example.com\\"', $platformioContent);
+    }
+
     public function test_admin_can_trigger_firmware_build_from_panel(): void
     {
         $device = Device::query()->create([

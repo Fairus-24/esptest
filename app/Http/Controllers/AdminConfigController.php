@@ -310,6 +310,10 @@ class AdminConfigController extends Controller
         ]);
 
         $profile = $this->firmwareTemplateService->ensureProfile($device);
+        $currentMqttBroker = trim((string) ($profile->mqtt_broker ?? ''));
+        $currentMqttHost = trim((string) ($profile->mqtt_host ?? ''));
+
+        $validated['mqtt_broker'] = trim((string) $validated['mqtt_broker']);
 
         $httpBaseUrl = rtrim(trim((string) ($validated['http_base_url'] ?? '')), '/');
         $parsedServerHost = (string) (parse_url($httpBaseUrl, PHP_URL_HOST) ?: '');
@@ -319,13 +323,15 @@ class AdminConfigController extends Controller
         }
         $validated['server_host'] = $serverHost !== '' ? $serverHost : trim((string) ($validated['mqtt_broker'] ?? '127.0.0.1'));
 
-        $mqttHost = trim((string) ($validated['mqtt_host'] ?? ''));
-        if ($mqttHost === '') {
-            $mqttHost = trim((string) ($validated['mqtt_broker'] ?? '127.0.0.1'));
+        $mqttHostInput = trim((string) ($validated['mqtt_host'] ?? ''));
+        $brokerChanged = $validated['mqtt_broker'] !== $currentMqttBroker;
+        $hostWasAutoFollowingBroker = $currentMqttHost === '' || $currentMqttHost === $currentMqttBroker;
+        $hostInputUnchanged = $mqttHostInput === $currentMqttHost;
+        if ($mqttHostInput === '' || ($brokerChanged && $hostWasAutoFollowingBroker && $hostInputUnchanged)) {
+            $mqttHostInput = trim((string) ($validated['mqtt_broker'] ?? '127.0.0.1'));
         }
-        $validated['mqtt_host'] = $mqttHost;
+        $validated['mqtt_host'] = $mqttHostInput;
         $validated['http_base_url'] = $httpBaseUrl;
-        $validated['mqtt_broker'] = trim((string) $validated['mqtt_broker']);
         $validated['http_tls_insecure'] = filter_var($validated['http_tls_insecure'], FILTER_VALIDATE_BOOL);
         $validated['http_read_timeout_ms'] = (int) ($validated['http_read_timeout_ms'] ?? $profile->http_read_timeout_ms ?? 5000);
         $validated['sensor_interval_ms'] = (int) ($validated['sensor_interval_ms'] ?? $profile->sensor_interval_ms ?? 5000);

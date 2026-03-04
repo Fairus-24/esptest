@@ -229,6 +229,7 @@ The project has been updated with the following behavior:
 170. Admin Web Flash panel now includes browser-based Serial Monitor (Web Serial): configurable baud rate, start/stop toggle, live serial log stream, and clear-log action for remote USB client diagnostics.
 171. ESP32 firmware config constants now follow compile-time macros (`ESP_HTTP_BASE_URL`, `ESP_HTTP_ENDPOINT`, `ESP_MQTT_BROKER`, `ESP_MQTT_PORT`, `ESP_DEVICE_ID`, interval macros), so profile/build-flag values are no longer silently overridden by stale hardcoded literals in `main.cpp`.
 172. ESP32 firmware now blocks loopback transport targets (`localhost`/`127.0.0.1`) for both HTTP and MQTT at runtime with explicit serial error messages, preventing silent no-data scenarios when device network and server host are different machines.
+173. Admin firmware profile MQTT behavior is now explicit and consistent: `mqtt_broker` is the primary server target for generated firmware, `mqtt_host` is legacy fallback only, and saving a changed broker auto-syncs legacy host when it was previously following broker value.
 
 ## Tech Stack
 
@@ -1199,6 +1200,7 @@ Security notes:
 - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
 - multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
 - `extra_build_flags` is now sanitized before save/render: reserved managed macros are ignored (`ESP_DEVICE_ID`, network/auth macros, interval macros, timeout/debug/packet-size macros), so selected device/profile values stay authoritative.
+- MQTT target resolution for generated firmware is now deterministic: `mqtt_broker` -> `mqtt_host` -> `server_host`; admin save flow auto-syncs `mqtt_host` when it still mirrors prior broker value and broker is changed.
 - firmware action buttons are state-aware:
   - `Save Firmware Profile` is disabled until profile form changes (dirty state)
   - `Apply to Workspace` is disabled when generated bundle already matches current workspace files (`ESP32_Firmware/src/main.cpp` + `ESP32_Firmware/platformio.ini`)
@@ -1387,6 +1389,7 @@ Used for runtime GUI overrides from Admin Config panel (no direct `.env` edit re
 - timestamps
 
 Used by firmware generator to render per-device `main.cpp` and `platformio.ini`.
+MQTT mapping rule in generator: `mqtt_broker` is primary output target, `mqtt_host` is legacy fallback.
 
 ## Quick Verification Checklist
 
