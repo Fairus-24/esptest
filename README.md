@@ -231,6 +231,7 @@ The project has been updated with the following behavior:
 172. ESP32 firmware now blocks loopback transport targets (`localhost`/`127.0.0.1`) for both HTTP and MQTT at runtime with explicit serial error messages, preventing silent no-data scenarios when device network and server host are different machines.
 173. Admin firmware profile MQTT behavior is now explicit and consistent: `mqtt_broker` is the primary server target for generated firmware, `mqtt_host` is legacy fallback only, and saving a changed broker auto-syncs legacy host when it was previously following broker value.
 174. Debian git runtime sync now supports `always` mode (alias `full`) and cron installer defaults to full sync every minute (`pull + auto-commit + auto-push`), with auto commit messages generated from actual changed file scopes.
+175. Git sync now supports event-driven mode: local source changes can be auto-committed/pushed via filesystem watcher (`inotify`), and remote pushes can trigger instant pull via signed webhook endpoint (`POST /api/git-sync/webhook`), so sync is no longer strictly timer-based.
 
 ## Tech Stack
 
@@ -478,6 +479,12 @@ Runtime override note:
 | `AUTO_SYNC_RUN_OPTIMIZE_CLEAR` | Recommended | `true` | Run `php artisan optimize:clear` after successful pull |
 | `AUTO_SYNC_PM2_ECOSYSTEM` | Recommended | `ecosystem.config.cjs` | PM2 config path to reload after pull |
 | `AUTO_SYNC_COMPOSER_MEMORY_LIMIT` | Recommended | `512M` | Composer memory cap for low-RAM servers |
+| `AUTO_SYNC_TEST_FALLBACK_CMD` | Optional | `php artisan schedule:list` | Command used when `php artisan test` is unavailable in runtime |
+| `AUTO_SYNC_WATCH_DEBOUNCE_SECONDS` | Optional | `2` | Debounce window for local filesystem watcher |
+| `GIT_SYNC_WEBHOOK_ENABLED` | Optional | `true` | Enable signed webhook endpoint for remote-triggered pull |
+| `GIT_SYNC_WEBHOOK_SECRET` | Recommended | `replace-with-random-secret` | Shared secret for webhook signature/token validation |
+| `GIT_SYNC_WEBHOOK_REPO_FULL_NAME` | Recommended | `Fairus-24/esptest` | Restrict webhook accept to exact repository |
+| `GIT_SYNC_SCRIPT_PATH` | Optional | `scripts/debian/git_runtime_sync.sh` | Sync script path used by webhook trigger |
 
 ### Mosquitto Auto-start
 
@@ -573,6 +580,12 @@ AUTO_SYNC_RUN_MIGRATIONS=true
 AUTO_SYNC_RUN_OPTIMIZE_CLEAR=true
 AUTO_SYNC_PM2_ECOSYSTEM=ecosystem.config.cjs
 AUTO_SYNC_COMPOSER_MEMORY_LIMIT=512M
+AUTO_SYNC_TEST_FALLBACK_CMD="php artisan schedule:list"
+AUTO_SYNC_WATCH_DEBOUNCE_SECONDS=2
+GIT_SYNC_WEBHOOK_ENABLED=true
+GIT_SYNC_WEBHOOK_SECRET=replace-with-random-secret
+GIT_SYNC_WEBHOOK_REPO_FULL_NAME=Fairus-24/esptest
+GIT_SYNC_SCRIPT_PATH=scripts/debian/git_runtime_sync.sh
 
 MOSQUITTO_AUTO_START=true
 MOSQUITTO_ONLY_LOCAL=true
@@ -823,6 +836,36 @@ bash scripts/debian/install_runtime_sync_cron.sh /var/www/esptest split
 ```
 
 Before enabling `AUTO_SYNC_ENABLE_PUSH=true`, ensure non-interactive git auth is ready on server (SSH deploy key or HTTPS PAT credential helper).
+
+### 7B) Event-driven git sync (no timer loop)
+
+This mode is closer to "sync on change" behavior:
+
+1) Local source change -> watcher triggers `commit-push` immediately.
+2) Remote push to `main` -> webhook triggers `pull` immediately.
+
+Install local watcher (PM2-managed):
+
+```bash
+cd /var/www/esptest
+chmod +x scripts/debian/*.sh
+bash scripts/debian/install_runtime_sync_event.sh /var/www/esptest
+pm2 logs esptest-git-watch --lines 100
+```
+
+Configure GitHub webhook:
+
+- URL: `https://<your-domain>/api/git-sync/webhook`
+- Method: `POST`
+- Content type: `application/json`
+- Event: `Just the push event`
+- Secret: same value as `GIT_SYNC_WEBHOOK_SECRET`
+
+Webhook flow notes:
+
+- Endpoint validates `X-Hub-Signature-256` (HMAC SHA-256), or optional `X-Git-Sync-Token` for manual internal trigger.
+- Branch is filtered using `AUTO_SYNC_BRANCH` (default `main`).
+- Repository can be restricted with `GIT_SYNC_WEBHOOK_REPO_FULL_NAME`.
 
 One-command production bootstrap alternative:
 
@@ -1536,6 +1579,15 @@ GROUP BY protokol;
   - `tail -f storage/logs/git_runtime_sync.cron.log`
 - Run manual smoke:
   - `bash scripts/debian/git_runtime_sync.sh full`
+
+### `php artisan test` not found in auto sync runtime
+
+- Cause: some production builds do not expose `artisan test` command.
+- The sync script now auto-falls back to `AUTO_SYNC_TEST_FALLBACK_CMD`.
+- Recommended `.env`:
+  - `AUTO_SYNC_TEST_FALLBACK_CMD="php artisan schedule:list"`
+- Verify manually:
+  - `php artisan list --raw | grep '^test$'`
 
 ### Auto commit exists but push does not happen
 
