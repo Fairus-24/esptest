@@ -177,6 +177,7 @@ class AdminConfigPanelTest extends TestCase
         $platformioContent = $platformioResponse->streamedContent();
         $this->assertStringContainsString('lib_archive = false', $platformioContent);
         $this->assertStringNotContainsString('DHT sensor library for ESPx', $platformioContent);
+        $this->assertStringNotContainsString('ArduinoJson@6.21.3adafruit/DHT sensor library', $platformioContent);
         $this->assertStringContainsString('-DESP_HTTP_INGEST_KEY=\\"runtime-ingest-key\\"', $platformioContent);
         $this->assertStringContainsString('-DESP_HTTP_BASE_URL=\\"https://espdht.mufaza.my.id\\"', $platformioContent);
         $this->assertStringContainsString('-DESP_MQTT_BROKER=\\"202.154.58.51\\"', $platformioContent);

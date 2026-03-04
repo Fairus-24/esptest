@@ -904,13 +904,23 @@
                         credentials: 'same-origin',
                     });
 
-                    const data = await response.json();
+                    const rawBody = await response.text();
+                    let data = {};
+                    try {
+                        data = rawBody ? JSON.parse(rawBody) : {};
+                    } catch (parseError) {
+                        data = {};
+                        appendLog('WARN: response prepare bukan JSON valid: ' + (parseError?.message || String(parseError)));
+                    }
+
                     if (!response.ok || !data.ok) {
                         manifest = null;
                         setStatus('Prepare gagal.', true);
-                        appendLog('ERROR: ' + (data.message || 'Prepare failed.'));
+                        appendLog('ERROR: HTTP ' + response.status + ' - ' + (data.message || 'Prepare failed.'));
                         if (data.build && data.build.output) {
                             appendLog(data.build.output);
+                        } else if (rawBody) {
+                            appendLog(rawBody);
                         }
                         return;
                     }

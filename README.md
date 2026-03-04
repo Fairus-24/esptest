@@ -1187,12 +1187,14 @@ Security notes:
   - command lookup fallback: if primary command is missing (`exit code 127`), service retries common alternatives (`pio`, `platformio`, `python3 -m platformio`, `python -m platformio`) plus common absolute locations (for example `~/.local/bin/pio`, `~/.platformio/penv/bin/platformio` on Linux)
   - if all candidates fail, last CLI output includes checked command list and explicit guidance to set absolute `ADMIN_PLATFORMIO_COMMAND`
   - generated `platformio.ini` now enforces `lib_archive = false` to avoid archive-step shell failures seen on some server environments
-  - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
+- firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
+  - multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
   - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
   - does not require USB connection on remote Debian server
   - Web Flash control now uses a single USB button toggle: `Connect USB Device` changes to `Disconnect USB` after connection
+  - Web Flash prepare logger now prints HTTP status + raw response body when prepare endpoint fails, so 422/500 causes are visible directly in the panel
 
 ### Documentation Route (`/doc`)
 
@@ -1826,6 +1828,17 @@ pm2 reload ecosystem.config.cjs --update-env
 - Current firmware template writes `lib_archive = false` into `platformio.ini` so PlatformIO links library objects directly without `.a` archive step.
 - Generator also rewrites `lib_deps` during render/apply, so stale old dependency entries are automatically normalized after running admin build/apply actions.
 - If your workspace still uses old `platformio.ini`, re-apply firmware from admin panel (or pull latest file), then rebuild.
+
+### Web Flash `prepare` returns `422` with PlatformIO VCS/dependency parse error
+
+- Symptom example in build output:
+  - `VCS: Unknown repository type bblanchon/ArduinoJson@6.21.3adafruit/DHT sensor library`
+- Cause: corrupted `lib_deps` block (dependency lines merged without newline) in generated/stale `platformio.ini`.
+- Current generator rewrites full `lib_deps` block atomically to prevent this corruption.
+- Recovery:
+  - pull latest code,
+  - run admin `Apply to Workspace` once,
+  - then run `Prepare Web Flash Build` again.
 
 ### ESP32 serial monitor appears frozen (`macet`)
 

@@ -369,13 +369,15 @@ class FirmwareTemplateService
         if ($cleanItems !== []) {
             $block .= "\n    " . implode("\n    ", $cleanItems);
         }
+        $block .= "\n";
 
-        $pattern = '/^' . preg_quote($key, '/') . '\s*=\s*(?:\r?\n[ \t]+[^\r\n]*)*/m';
+        // Replace the entire multi-line block until next non-indented line.
+        $pattern = '/^' . preg_quote($key, '/') . '\s*=.*?(?=^\S|\z)/ms';
         if (preg_match($pattern, $content) === 1) {
             return preg_replace($pattern, $block, $content, 1) ?: $content;
         }
 
-        return rtrim($content) . "\n" . $block . "\n";
+        return rtrim($content) . "\n" . $block;
     }
 
     private function resolveDhtTypeToken(string $model): string
