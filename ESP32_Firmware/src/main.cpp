@@ -20,7 +20,7 @@ const char* WIFI_SSID = "Free";
 const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
-#define SERVER_HOST "localhost"  // Windows host LAN IP (update if DHCP IP changes)
+#define SERVER_HOST "espdht.mufaza.my.id"  // Windows host LAN IP (update if DHCP IP changes)
 #ifndef ESP_HTTP_BASE_URL
 #define ESP_HTTP_BASE_URL "http://" SERVER_HOST
 #endif
@@ -58,7 +58,7 @@ const char* WIFI_PASSWORD = "gratiskok";
 const char* HTTP_SERVER = ESP_HTTP_BASE_URL;
 const char* HTTP_ENDPOINT = "/api/http-data";
 <<<<<<< HEAD
-const char* MQTT_SERVER = "192.168.0.104";
+const char* MQTT_SERVER = "202.154.58.51";
 =======
 const char* MQTT_SERVER = "202.154.58.51";
 >>>>>>> b833f86 (chore(auto-sync): runtime sync | scope=ESP32_Firmware | files=1 | sample=ESP32_Firmware/src/main.cpp)
@@ -79,7 +79,7 @@ const char* HTTP_INGEST_KEY = ESP_HTTP_INGEST_KEY;
 #define DHTPIN 4
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
-const int DEVICE_ID = 1;
+const int DEVICE_ID = 3;
 
 // Timing Settings
 #ifndef ESP_SENSOR_INTERVAL_MS
