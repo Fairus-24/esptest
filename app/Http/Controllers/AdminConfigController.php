@@ -284,11 +284,9 @@ class AdminConfigController extends Controller
             'board' => ['required', 'string', Rule::in($boardOptions)],
             'wifi_ssid' => ['required', 'string', 'max:120'],
             'wifi_password' => ['required', 'string', 'max:120'],
-            'server_host' => ['nullable', 'string', 'max:120'],
             'http_base_url' => ['required', 'string', 'max:200'],
             'http_endpoint' => ['required', 'string', 'max:160'],
             'mqtt_broker' => ['required', 'string', 'max:120'],
-            'mqtt_host' => ['nullable', 'string', 'max:120'],
             'mqtt_port' => ['required', 'integer', 'min:1', 'max:65535'],
             'mqtt_topic' => ['required', 'string', 'max:120'],
             'mqtt_user' => ['required', 'string', 'max:80'],
@@ -310,27 +308,14 @@ class AdminConfigController extends Controller
         ]);
 
         $profile = $this->firmwareTemplateService->ensureProfile($device);
-        $currentMqttBroker = trim((string) ($profile->mqtt_broker ?? ''));
-        $currentMqttHost = trim((string) ($profile->mqtt_host ?? ''));
-
         $validated['mqtt_broker'] = trim((string) $validated['mqtt_broker']);
 
         $httpBaseUrl = rtrim(trim((string) ($validated['http_base_url'] ?? '')), '/');
         $parsedServerHost = (string) (parse_url($httpBaseUrl, PHP_URL_HOST) ?: '');
-        $serverHost = trim((string) ($validated['server_host'] ?? ''));
-        if ($serverHost === '' && $parsedServerHost !== '') {
-            $serverHost = $parsedServerHost;
-        }
-        $validated['server_host'] = $serverHost !== '' ? $serverHost : trim((string) ($validated['mqtt_broker'] ?? '127.0.0.1'));
-
-        $mqttHostInput = trim((string) ($validated['mqtt_host'] ?? ''));
-        $brokerChanged = $validated['mqtt_broker'] !== $currentMqttBroker;
-        $hostWasAutoFollowingBroker = $currentMqttHost === '' || $currentMqttHost === $currentMqttBroker;
-        $hostInputUnchanged = $mqttHostInput === $currentMqttHost;
-        if ($mqttHostInput === '' || ($brokerChanged && $hostWasAutoFollowingBroker && $hostInputUnchanged)) {
-            $mqttHostInput = trim((string) ($validated['mqtt_broker'] ?? '127.0.0.1'));
-        }
-        $validated['mqtt_host'] = $mqttHostInput;
+        $validated['server_host'] = $parsedServerHost !== ''
+            ? $parsedServerHost
+            : trim((string) ($validated['mqtt_broker'] ?? '127.0.0.1'));
+        $validated['mqtt_host'] = trim((string) ($validated['mqtt_broker'] ?? '127.0.0.1'));
         $validated['http_base_url'] = $httpBaseUrl;
         $validated['http_tls_insecure'] = filter_var($validated['http_tls_insecure'], FILTER_VALIDATE_BOOL);
         $validated['http_read_timeout_ms'] = (int) ($validated['http_read_timeout_ms'] ?? $profile->http_read_timeout_ms ?? 5000);

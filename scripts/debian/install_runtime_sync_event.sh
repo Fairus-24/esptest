@@ -22,13 +22,18 @@ if ! command -v pm2 >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v inotifywait >/dev/null 2>&1; then
+  echo "error: inotifywait command not found. install package: inotify-tools" >&2
+  exit 1
+fi
+
 chmod +x "$WATCH_SCRIPT" "$TARGET_DIR/scripts/debian/git_runtime_sync.sh"
 
 if pm2 describe "$PROCESS_NAME" >/dev/null 2>&1; then
   pm2 delete "$PROCESS_NAME" >/dev/null 2>&1 || true
 fi
 
-pm2 start "$WATCH_SCRIPT" --name "$PROCESS_NAME" --cwd "$TARGET_DIR"
+pm2 start "$WATCH_SCRIPT" --name "$PROCESS_NAME" --cwd "$TARGET_DIR" --interpreter bash
 pm2 save
 
 echo "event-driven git sync watcher installed"

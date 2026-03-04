@@ -232,6 +232,7 @@ The project has been updated with the following behavior:
 173. Admin firmware profile MQTT behavior is now explicit and consistent: `mqtt_broker` is the primary server target for generated firmware, `mqtt_host` is legacy fallback only, and saving a changed broker auto-syncs legacy host when it was previously following broker value.
 174. Debian git runtime sync now supports `always` mode (alias `full`) and cron installer defaults to full sync every minute (`pull + auto-commit + auto-push`), with auto commit messages generated from actual changed file scopes.
 175. Git sync now supports event-driven mode: local source changes can be auto-committed/pushed via filesystem watcher (`inotify`), and remote pushes can trigger instant pull via signed webhook endpoint (`POST /api/git-sync/webhook`), so sync is no longer strictly timer-based.
+176. Admin panel action guard coverage is expanded: `Save Quick Runtime Setup`, `Update Device`, and `Delete Device` are disabled until actual changes/requirements are met, selected device row now shows disabled `Selected` state (no redundant re-select), and legacy duplicate firmware fields were simplified (`mqtt_broker` primary, `server_host` auto-managed from HTTP base URL).
 
 ## Tech Stack
 
@@ -853,6 +854,11 @@ bash scripts/debian/install_runtime_sync_event.sh /var/www/esptest
 pm2 logs esptest-git-watch --lines 100
 ```
 
+Prerequisites:
+
+- `inotify-tools` package must be installed (`inotifywait` binary is required by watcher).
+- watcher installer now enforces Bash interpreter in PM2 to avoid shell script startup issues.
+
 Configure GitHub webhook:
 
 - URL: `https://<your-domain>/api/git-sync/webhook`
@@ -1258,6 +1264,10 @@ Security notes:
 - firmware action buttons are state-aware:
   - `Save Firmware Profile` is disabled until profile form changes (dirty state)
   - `Apply to Workspace` is disabled when generated bundle already matches current workspace files (`ESP32_Firmware/src/main.cpp` + `ESP32_Firmware/platformio.ini`)
+  - `Save Quick Runtime Setup` is disabled until quick runtime values actually change
+  - `Update Device` is disabled until selected device name/location changes
+  - `Delete Device` is disabled until `DELETE` confirmation is typed (and purge checkbox is checked when linked rows exist)
+  - selected row in `Registered Devices` now shows disabled `Selected` action instead of clickable `Select`
 - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
@@ -1579,6 +1589,19 @@ GROUP BY protokol;
   - `tail -f storage/logs/git_runtime_sync.cron.log`
 - Run manual smoke:
   - `bash scripts/debian/git_runtime_sync.sh full`
+
+### `esptest-git-watch` shows `errored` in PM2
+
+- Check PM2/app logs:
+  - `pm2 logs esptest-git-watch --lines 100`
+  - `tail -f storage/logs/git_runtime_watch.log`
+- Common causes:
+  - `inotifywait` missing -> install `inotify-tools`.
+  - watcher started with wrong interpreter -> reinstall watcher using installer.
+- Recovery sequence:
+  - `sudo apt update && sudo apt install -y inotify-tools`
+  - `bash scripts/debian/install_runtime_sync_event.sh /var/www/esptest`
+  - `pm2 restart esptest-git-watch`
 
 ### `php artisan test` not found in auto sync runtime
 

@@ -297,11 +297,10 @@
             $effectiveMqttServer = null;
             if ($selectedProfile !== null) {
                 $brokerCandidate = trim((string) ($selectedProfile->mqtt_broker ?? ''));
-                $hostCandidate = trim((string) ($selectedProfile->mqtt_host ?? ''));
                 $serverCandidate = trim((string) ($selectedProfile->server_host ?? ''));
                 $effectiveMqttServer = $brokerCandidate !== ''
                     ? $brokerCandidate
-                    : ($hostCandidate !== '' ? $hostCandidate : $serverCandidate);
+                    : $serverCandidate;
             }
         @endphp
 
@@ -334,7 +333,7 @@
                     <p class="sub">Edit core production values first. This saves runtime overrides to database without manual `.env` editing.</p>
                     <p class="note">Runtime overrides affect Laravel worker/app runtime. Existing per-device firmware profile values are not overwritten automatically.</p>
 
-                    <form method="POST" action="{{ route('admin.config.runtime.save', [], false) }}" class="stack">
+                    <form id="quick-runtime-form" method="POST" action="{{ route('admin.config.runtime.save', [], false) }}" class="stack">
                         @csrf
                         <div class="row">
                             @foreach ($quickRuntimeItems as $item)
@@ -372,7 +371,7 @@
                             @endforeach
                         </div>
                         <div class="actions">
-                            <button class="btn primary" type="submit">Save Quick Runtime Setup</button>
+                            <button id="quick-runtime-save-btn" class="btn primary" type="submit" disabled>Save Quick Runtime Setup</button>
                         </div>
                     </form>
                 </div>
@@ -432,7 +431,11 @@
                                     <td>{{ $device->eksperimens_count ?? 0 }}</td>
                                     <td>
                                         <div class="cell-actions">
-                                            <a class="btn" href="{{ route('admin.config.index', ['device_id' => $device->id], false) }}">Select</a>
+                                            @if ($selectedDevice && (int) $selectedDevice->id === (int) $device->id)
+                                                <button class="btn" type="button" disabled>Selected</button>
+                                            @else
+                                                <a class="btn" href="{{ route('admin.config.index', ['device_id' => $device->id], false) }}">Select</a>
+                                            @endif
                                         </div>
                                     </td>
                                 </tr>
@@ -448,7 +451,7 @@
                         <h2>Edit Selected Device</h2>
                         <p class="sub">Selected: #{{ $selectedDevice->id }} - {{ $selectedDevice->nama_device }}</p>
 
-                        <form method="POST" action="{{ route('admin.config.devices.update', $selectedDevice, false) }}" class="stack">
+                        <form id="edit-device-form" method="POST" action="{{ route('admin.config.devices.update', $selectedDevice, false) }}" class="stack">
                             @csrf
                             @method('PATCH')
                             <div class="row">
@@ -462,13 +465,13 @@
                                 </div>
                             </div>
                             <div class="actions">
-                                <button class="btn primary" type="submit">Update Device</button>
+                                <button id="update-device-btn" class="btn primary" type="submit" disabled>Update Device</button>
                             </div>
                         </form>
 
                         <div class="section-gap"></div>
 
-                        <form method="POST" action="{{ route('admin.config.devices.destroy', $selectedDevice, false) }}" class="stack">
+                        <form id="delete-device-form" method="POST" action="{{ route('admin.config.devices.destroy', $selectedDevice, false) }}" class="stack" data-has-rows="{{ ((int) ($selectedDevice->eksperimens_count ?? 0)) > 0 ? '1' : '0' }}">
                             @csrf
                             @method('DELETE')
                             <div class="field">
@@ -478,13 +481,13 @@
                             </div>
                             <div class="field">
                                 <label style="display:flex;align-items:center;gap:8px;">
-                                    <input type="checkbox" name="purge_experiments" value="1" style="width:auto;">
+                                    <input id="purge_experiments" type="checkbox" name="purge_experiments" value="1" style="width:auto;">
                                     Purge all experiment rows linked to this device
                                 </label>
                                 <small>Required when the device still has measurement rows because DB foreign key blocks delete.</small>
                             </div>
                             <div class="actions">
-                                <button class="btn danger" type="submit">Delete Device</button>
+                                <button id="delete-device-btn" class="btn danger" type="submit" disabled>Delete Device</button>
                             </div>
                         </form>
                     </div>
@@ -559,23 +562,18 @@
                             <input name="http_endpoint" value="{{ $selectedProfile->http_endpoint }}" placeholder="/api/http-data" required>
                         </div>
                     </div>
-                    <p class="note">Effective MQTT server for generated firmware: <strong>{{ $effectiveMqttServer ?: '-' }}</strong> (resolved with priority: `mqtt_broker` -> `mqtt_host` -> `server_host`).</p>
+                    <p class="note">Effective MQTT server for generated firmware: <strong>{{ $effectiveMqttServer ?: '-' }}</strong> (resolved with priority: `mqtt_broker` -> `server_host`).</p>
 
-                    <div class="row-3">
-                        <div class="field">
-                            <label>Server Host (Legacy Fallback)</label>
-                            <input name="server_host" value="{{ $selectedProfile->server_host }}" placeholder="Auto from HTTP Base URL">
-                            <small>Optional. If empty, host from HTTP base URL is used.</small>
-                        </div>
+                    <div class="row">
                         <div class="field">
                             <label>MQTT Broker Override</label>
                             <input name="mqtt_broker" value="{{ $selectedProfile->mqtt_broker }}" placeholder="202.154.58.51" required>
                             <small>Primary MQTT server. Used for `ESP_MQTT_BROKER` and generated firmware output.</small>
                         </div>
                         <div class="field">
-                            <label>MQTT Host (Legacy Fallback)</label>
-                            <input name="mqtt_host" value="{{ $selectedProfile->mqtt_host }}" placeholder="Auto from MQTT broker">
-                            <small>Optional fallback only. Leave empty to follow MQTT broker automatically.</small>
+                            <label>Server Host (Auto)</label>
+                            <input value="{{ $selectedProfile->server_host }}" readonly>
+                            <small>Auto-derived from HTTP Base URL host. This field is managed automatically.</small>
                         </div>
                     </div>
 
@@ -724,7 +722,7 @@
                         <button class="btn warn" type="submit">Build & Upload</button>
                     </form>
                 </div>
-                <p class="note">Build/Upload will always regenerate latest firmware from selected profile, apply to workspace, then run PlatformIO command in <code>ESP32_Firmware</code>.</p>
+                <p class="note">Build/Upload will always regenerate latest firmware from selected profile, apply to workspace, then run PlatformIO command in <code>ESP32_Firmware</code>. Manual edits directly in generated workspace files will be overwritten by this flow.</p>
 
                 @if (is_array($firmwareCliResult))
                     <div class="field section-gap">
@@ -793,6 +791,67 @@
 
     <script>
         (function () {
+            const quickForm = document.getElementById('quick-runtime-form');
+            const quickSaveButton = document.getElementById('quick-runtime-save-btn');
+            if (quickForm && quickSaveButton) {
+                const quickFields = Array.from(quickForm.querySelectorAll('input[name], select[name], textarea[name]'));
+                const snapshotField = (field) => {
+                    const type = (field.getAttribute('type') || '').toLowerCase();
+                    if (type === 'checkbox' || type === 'radio') {
+                        return field.checked ? '1' : '0';
+                    }
+
+                    return (field.value || '').trim();
+                };
+                const snapshotQuickForm = () => quickFields.map((field) => `${field.name}=${snapshotField(field)}`).join('&');
+                const initialQuickSnapshot = snapshotQuickForm();
+                const refreshQuickSaveButton = () => {
+                    quickSaveButton.disabled = snapshotQuickForm() === initialQuickSnapshot;
+                };
+
+                quickForm.addEventListener('input', refreshQuickSaveButton);
+                quickForm.addEventListener('change', refreshQuickSaveButton);
+                refreshQuickSaveButton();
+            }
+
+            const editForm = document.getElementById('edit-device-form');
+            const updateDeviceButton = document.getElementById('update-device-btn');
+            if (editForm && updateDeviceButton) {
+                const editFields = Array.from(editForm.querySelectorAll('input[name]'));
+                const snapshotEditForm = () => editFields
+                    .map((field) => `${field.name}=${(field.value || '').trim()}`)
+                    .join('&');
+                const initialEditSnapshot = snapshotEditForm();
+                const refreshUpdateButton = () => {
+                    updateDeviceButton.disabled = snapshotEditForm() === initialEditSnapshot;
+                };
+
+                editForm.addEventListener('input', refreshUpdateButton);
+                editForm.addEventListener('change', refreshUpdateButton);
+                refreshUpdateButton();
+            }
+
+            const deleteForm = document.getElementById('delete-device-form');
+            const deleteButton = document.getElementById('delete-device-btn');
+            const confirmDeleteInput = document.getElementById('confirm_delete');
+            const purgeCheckbox = document.getElementById('purge_experiments');
+            if (deleteForm && deleteButton && confirmDeleteInput && purgeCheckbox) {
+                const hasRows = deleteForm.dataset.hasRows === '1';
+                const refreshDeleteButton = () => {
+                    const confirmOk = (confirmDeleteInput.value || '').trim().toUpperCase() === 'DELETE';
+                    const purgeOk = !hasRows || purgeCheckbox.checked;
+                    deleteButton.disabled = !(confirmOk && purgeOk);
+                };
+
+                confirmDeleteInput.addEventListener('input', refreshDeleteButton);
+                purgeCheckbox.addEventListener('change', refreshDeleteButton);
+                refreshDeleteButton();
+            }
+        })();
+    </script>
+
+    <script>
+        (function () {
             const profileForm = document.getElementById('firmware-profile-form');
             const saveButton = document.getElementById('firmware-profile-save-btn');
             const applyButton = document.getElementById('firmware-apply-btn');
@@ -804,10 +863,6 @@
 
             const workspaceSynced = applyButton.dataset.workspaceSync === '1';
             const trackedFields = Array.from(profileForm.querySelectorAll('input[name], select[name], textarea[name]'));
-            const mqttBrokerField = profileForm.querySelector('input[name="mqtt_broker"]');
-            const mqttHostField = profileForm.querySelector('input[name="mqtt_host"]');
-            const initialMqttBroker = mqttBrokerField ? (mqttBrokerField.value || '').trim() : '';
-            const initialMqttHost = mqttHostField ? (mqttHostField.value || '').trim() : '';
             const snapshotField = (field) => {
                 const type = (field.getAttribute('type') || '').toLowerCase();
                 if (type === 'checkbox' || type === 'radio') {
@@ -821,22 +876,6 @@
                 .join('&');
 
             const initialSnapshot = snapshotForm();
-
-            const syncMqttHostFromBrokerIfNeeded = () => {
-                if (!mqttBrokerField || !mqttHostField) {
-                    return;
-                }
-
-                const hostValue = (mqttHostField.value || '').trim();
-                const initialHostMirrorsBroker = initialMqttHost === '' || initialMqttHost === initialMqttBroker;
-                const hostStillUntouched = hostValue === initialMqttHost;
-                const shouldFollowBroker = hostValue === '' || (initialHostMirrorsBroker && hostStillUntouched);
-                if (!shouldFollowBroker) {
-                    return;
-                }
-
-                mqttHostField.value = (mqttBrokerField.value || '').trim();
-            };
 
             const refreshActionButtons = () => {
                 const dirty = snapshotForm() !== initialSnapshot;
@@ -856,14 +895,6 @@
                 }
             };
 
-            mqttBrokerField?.addEventListener('input', () => {
-                syncMqttHostFromBrokerIfNeeded();
-                refreshActionButtons();
-            });
-            mqttBrokerField?.addEventListener('change', () => {
-                syncMqttHostFromBrokerIfNeeded();
-                refreshActionButtons();
-            });
             profileForm.addEventListener('input', refreshActionButtons);
             profileForm.addEventListener('change', refreshActionButtons);
             refreshActionButtons();

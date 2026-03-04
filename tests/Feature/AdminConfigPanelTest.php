@@ -134,6 +134,27 @@ class AdminConfigPanelTest extends TestCase
         }
     }
 
+    public function test_admin_runtime_device_actions_are_guarded_until_input_changes_or_requirements_met(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-GUARD',
+            'lokasi' => 'Guard Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $html = $this->get('/admin/config?device_id=' . $device->id)
+            ->assertOk()
+            ->getContent();
+
+        $this->assertIsString($html);
+        $this->assertMatchesRegularExpression('/id="quick-runtime-save-btn"[^>]*disabled/', $html);
+        $this->assertMatchesRegularExpression('/id="update-device-btn"[^>]*disabled/', $html);
+        $this->assertMatchesRegularExpression('/id="delete-device-btn"[^>]*disabled/', $html);
+        $this->assertMatchesRegularExpression('/<button class="btn" type="button" disabled>Selected<\/button>/', $html);
+    }
+
     public function test_admin_page_exposes_web_serial_monitor_controls(): void
     {
         $device = Device::query()->create([
