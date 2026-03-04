@@ -120,6 +120,7 @@ class AdminConfigController extends Controller
         $selectedDevice = null;
         $selectedProfile = null;
         $renderedFirmware = null;
+        $workspaceInSync = false;
 
         if ($devices->isNotEmpty()) {
             $selectedId = (int) $request->query('device_id', (int) $devices->first()->id);
@@ -127,6 +128,7 @@ class AdminConfigController extends Controller
             if ($selectedDevice !== null) {
                 $selectedProfile = $this->firmwareTemplateService->ensureProfile($selectedDevice);
                 $renderedFirmware = $this->firmwareTemplateService->render($selectedDevice, $selectedProfile, $settings);
+                $workspaceInSync = $this->firmwareTemplateService->isWorkspaceSynchronized($renderedFirmware);
             }
         }
 
@@ -136,6 +138,7 @@ class AdminConfigController extends Controller
             'selectedDevice' => $selectedDevice,
             'selectedProfile' => $selectedProfile,
             'renderedFirmware' => $renderedFirmware,
+            'workspaceInSync' => $workspaceInSync,
             'boardOptions' => (array) config('admin.board_options', []),
             'dhtModels' => (array) config('admin.dht_models', []),
             'adminSessionMiddleware' => EnsureAdminSession::class,

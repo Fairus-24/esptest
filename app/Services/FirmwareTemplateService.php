@@ -268,6 +268,27 @@ class FirmwareTemplateService
         ];
     }
 
+    /**
+     * @param array<string, string> $rendered
+     */
+    public function isWorkspaceSynchronized(array $rendered): bool
+    {
+        $mainPath = base_path('ESP32_Firmware/src/main.cpp');
+        $iniPath = base_path('ESP32_Firmware/platformio.ini');
+
+        if (!is_file($mainPath) || !is_file($iniPath)) {
+            return false;
+        }
+
+        $workspaceMain = (string) file_get_contents($mainPath);
+        $workspaceIni = (string) file_get_contents($iniPath);
+        $renderedMain = (string) ($rendered['main_cpp'] ?? '');
+        $renderedIni = (string) ($rendered['platformio_ini'] ?? '');
+
+        return $this->normalizeLineEndings($workspaceMain) === $this->normalizeLineEndings($renderedMain)
+            && $this->normalizeLineEndings($workspaceIni) === $this->normalizeLineEndings($renderedIni);
+    }
+
     private function replaceOne(string $content, string $pattern, string $replacement): string
     {
         return preg_replace($pattern, $replacement, $content, 1) ?: $content;
@@ -453,5 +474,10 @@ class FirmwareTemplateService
             'HTTP_CLIENT_TIMEOUT',
             'MQTT_MAX_PACKET_SIZE',
         ];
+    }
+
+    private function normalizeLineEndings(string $value): string
+    {
+        return str_replace("\r\n", "\n", $value);
     }
 }

@@ -90,6 +90,67 @@ class AdminConfigPanelTest extends TestCase
         );
     }
 
+    public function test_admin_firmware_action_buttons_are_disabled_when_workspace_is_in_sync(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-SYNC',
+            'lokasi' => 'Sync Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $mainPath = base_path('ESP32_Firmware/src/main.cpp');
+        $iniPath = base_path('ESP32_Firmware/platformio.ini');
+        $mainBackup = File::exists($mainPath) ? (string) File::get($mainPath) : null;
+        $iniBackup = File::exists($iniPath) ? (string) File::get($iniPath) : null;
+
+        try {
+            $generatedMain = $this->get('/admin/config/devices/' . $device->id . '/firmware/main.cpp')
+                ->assertOk()
+                ->streamedContent();
+            $generatedIni = $this->get('/admin/config/devices/' . $device->id . '/firmware/platformio.ini')
+                ->assertOk()
+                ->streamedContent();
+
+            File::put($mainPath, $generatedMain);
+            File::put($iniPath, $generatedIni);
+
+            $html = $this->get('/admin/config?device_id=' . $device->id)
+                ->assertOk()
+                ->getContent();
+
+            $this->assertIsString($html);
+            $this->assertStringContainsString('data-workspace-sync="1"', $html);
+            $this->assertMatchesRegularExpression('/id="firmware-profile-save-btn"[^>]*disabled/', $html);
+            $this->assertMatchesRegularExpression('/id="firmware-apply-btn"[^>]*disabled/', $html);
+        } finally {
+            if ($mainBackup !== null) {
+                File::put($mainPath, $mainBackup);
+            }
+            if ($iniBackup !== null) {
+                File::put($iniPath, $iniBackup);
+            }
+        }
+    }
+
+    public function test_admin_page_exposes_web_serial_monitor_controls(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-SERIAL',
+            'lokasi' => 'Serial Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $this->get('/admin/config?device_id=' . $device->id)
+            ->assertOk()
+            ->assertSee('Start Serial Monitor')
+            ->assertSee('Serial Baud')
+            ->assertSee('Serial Monitor: idle');
+    }
+
     public function test_admin_profile_extra_build_flags_cannot_override_selected_device_id(): void
     {
         Device::query()->create([

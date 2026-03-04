@@ -225,6 +225,10 @@ The project has been updated with the following behavior:
 166. Admin page layout is streamlined for operational use: verbose advanced-runtime and deploy-snippet panels were removed, while firmware build/flash actions and logs are now centralized in one focused firmware section.
 167. Admin firmware profile now protects selected device context: managed build macros (including `ESP_DEVICE_ID`) are automatically stripped from `extra_build_flags`, so build/webflash output cannot silently override the selected device target.
 168. Dashboard realtime refresh now uses cache-busting query stamps (`__ts`) and dashboard responses explicitly send `Cache-Control: no-store` headers, reducing stale metric issues behind reverse proxies/CDN/browser caches.
+169. Admin firmware panel now applies smart action-state guards: `Save Firmware Profile` stays disabled while form values are unchanged, and `Apply to Workspace` is disabled when workspace files are already synchronized with the saved profile (auto-enabled again when profile changes or workspace is out-of-sync).
+170. Admin Web Flash panel now includes browser-based Serial Monitor (Web Serial): configurable baud rate, start/stop toggle, live serial log stream, and clear-log action for remote USB client diagnostics.
+171. ESP32 firmware config constants now follow compile-time macros (`ESP_HTTP_BASE_URL`, `ESP_HTTP_ENDPOINT`, `ESP_MQTT_BROKER`, `ESP_MQTT_PORT`, `ESP_DEVICE_ID`, interval macros), so profile/build-flag values are no longer silently overridden by stale hardcoded literals in `main.cpp`.
+172. ESP32 firmware now blocks loopback transport targets (`localhost`/`127.0.0.1`) for both HTTP and MQTT at runtime with explicit serial error messages, preventing silent no-data scenarios when device network and server host are different machines.
 
 ## Tech Stack
 
@@ -1195,11 +1199,15 @@ Security notes:
 - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
 - multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
 - `extra_build_flags` is now sanitized before save/render: reserved managed macros are ignored (`ESP_DEVICE_ID`, network/auth macros, interval macros, timeout/debug/packet-size macros), so selected device/profile values stay authoritative.
+- firmware action buttons are state-aware:
+  - `Save Firmware Profile` is disabled until profile form changes (dirty state)
+  - `Apply to Workspace` is disabled when generated bundle already matches current workspace files (`ESP32_Firmware/src/main.cpp` + `ESP32_Firmware/platformio.ini`)
 - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
   - does not require USB connection on remote Debian server
   - Web Flash control now uses a single USB button toggle: `Connect USB Device` changes to `Disconnect USB` after connection
+  - built-in Serial Monitor is available in the same panel (`Start/Stop Serial Monitor` + baud selector + live serial log) for client-side device debugging
   - Web Flash prepare logger now prints HTTP status + raw response body when prepare endpoint fails, so 422/500 causes are visible directly in the panel
   - `Flash From Browser` button is disabled until `Prepare Web Flash Build` succeeds, preventing accidental `No manifest loaded` flow
 - PM2 ecosystem now propagates a guaranteed runtime `PATH` into all apps (`esptest-http`, `esptest-mqtt-worker`, `esptest-scheduler`) to reduce missing-shell/missing-binary issues on production service environments
@@ -1670,10 +1678,14 @@ GROUP BY protokol;
 ### ESP32 shows HTTP code `-1` and MQTT code `-2`
 
 - This usually means ESP32 is targeting the wrong server IP (often itself).
+- Never use `127.0.0.1` or `localhost` as ESP32 HTTP/MQTT target unless broker/API are literally running inside the ESP32 device (they are not in this architecture).
 - In serial monitor, if WiFi IP is `192.168.0.100`, do not set `SERVER_HOST` to `192.168.0.100` unless your Laravel/Mosquitto host is truly on that IP.
 - Set firmware target correctly:
   - `ESP_HTTP_BASE_URL` -> actual HTTP ingest base (`http://<lan-ip>` or `https://<domain>`),
   - `ESP_MQTT_BROKER` (or `SERVER_HOST`) -> actual broker host.
+- Current firmware now prints explicit runtime errors when loopback target is detected:
+  - `[HTTP] ERROR: HTTP_SERVER points to localhost/127.0.0.1`
+  - `[MQTT] ERROR: MQTT_SERVER points to localhost/127.0.0.1`
 - Then rebuild and flash:
   `pio run -t upload`.
 - Keep Laravel worker broker target aligned with ESP32:

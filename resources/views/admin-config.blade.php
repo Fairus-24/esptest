@@ -94,6 +94,12 @@
             color: #fecaca;
         }
 
+        .btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+            filter: saturate(.6);
+        }
+
         .flash {
             border-radius: 10px;
             padding: 10px 12px;
@@ -236,6 +242,12 @@
         }
 
         .webflash-log {
+            min-height: 180px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .serial-monitor-log {
             min-height: 180px;
             white-space: pre-wrap;
             word-break: break-word;
@@ -476,7 +488,12 @@
                 <p class="sub">Use production-ready network targets here. Firmware generator will output consistent `main.cpp` and `platformio.ini` for this device.</p>
                 <p class="note">Active target is locked to <strong>Device ID {{ $selectedDevice->id }}</strong> from the current selection. Build, upload, and webflash always follow this selected device context.</p>
 
-                <form method="POST" action="{{ route('admin.config.devices.profile.save', $selectedDevice, false) }}" class="stack">
+                <form
+                    id="firmware-profile-form"
+                    method="POST"
+                    action="{{ route('admin.config.devices.profile.save', $selectedDevice, false) }}"
+                    class="stack"
+                >
                     @csrf
                     <div class="row-3">
                         <div class="field">
@@ -647,7 +664,7 @@
                     </div>
 
                     <div class="actions">
-                        <button type="submit" class="btn primary">Save Firmware Profile</button>
+                        <button id="firmware-profile-save-btn" type="submit" class="btn primary" disabled>Save Firmware Profile</button>
                     </div>
                 </form>
             </div>
@@ -656,12 +673,27 @@
                 <h2>Generated Firmware Bundle</h2>
                 <p class="sub">Output below is generated from selected device profile + active runtime override.</p>
                 <p class="note">Generated firmware target: <strong>Device ID {{ $selectedDevice->id }}</strong>.</p>
+                <p id="firmware-action-state" class="note">
+                    @if ($workspaceInSync ?? false)
+                        Workspace firmware sudah sinkron dengan profile tersimpan.
+                    @else
+                        Workspace firmware berbeda dengan profile tersimpan. Gunakan Apply to Workspace untuk sinkronisasi.
+                    @endif
+                </p>
                 <div class="actions" style="margin-bottom:10px;">
                     <a class="btn" href="{{ route('admin.config.devices.firmware.main', $selectedDevice, false) }}">Download main.cpp</a>
                     <a class="btn" href="{{ route('admin.config.devices.firmware.platformio', $selectedDevice, false) }}">Download platformio.ini</a>
-                    <form method="POST" action="{{ route('admin.config.devices.firmware.apply', $selectedDevice, false) }}">
+                    <form id="firmware-apply-form" method="POST" action="{{ route('admin.config.devices.firmware.apply', $selectedDevice, false) }}">
                         @csrf
-                        <button class="btn primary" type="submit">Apply to Workspace</button>
+                        <button
+                            id="firmware-apply-btn"
+                            class="btn primary"
+                            type="submit"
+                            @disabled($workspaceInSync ?? false)
+                            data-workspace-sync="{{ ($workspaceInSync ?? false) ? '1' : '0' }}"
+                        >
+                            Apply to Workspace
+                        </button>
                     </form>
                     <form method="POST" action="{{ route('admin.config.devices.firmware.build', $selectedDevice, false) }}">
                         @csrf
@@ -708,6 +740,17 @@
                     </div>
                     <div id="webflash-status" class="note section-gap">Status: idle</div>
                     <textarea id="webflash-log" class="webflash-log" readonly></textarea>
+
+                    <div class="actions section-gap">
+                        <div class="field" style="max-width: 180px; margin: 0;">
+                            <label for="serial-monitor-baud">Serial Baud</label>
+                            <input id="serial-monitor-baud" type="number" min="1200" max="3000000" value="115200">
+                        </div>
+                        <button type="button" class="btn" id="serial-monitor-toggle-btn">Start Serial Monitor</button>
+                        <button type="button" class="btn" id="serial-monitor-clear-btn">Clear Serial Log</button>
+                    </div>
+                    <div id="serial-monitor-status" class="note section-gap">Serial Monitor: idle</div>
+                    <textarea id="serial-monitor-log" class="serial-monitor-log" readonly></textarea>
                 </div>
 
                 <div class="row">
@@ -728,6 +771,57 @@
         @endif
     </div>
 
+    <script>
+        (function () {
+            const profileForm = document.getElementById('firmware-profile-form');
+            const saveButton = document.getElementById('firmware-profile-save-btn');
+            const applyButton = document.getElementById('firmware-apply-btn');
+            const stateNode = document.getElementById('firmware-action-state');
+
+            if (!profileForm || !saveButton || !applyButton) {
+                return;
+            }
+
+            const workspaceSynced = applyButton.dataset.workspaceSync === '1';
+            const trackedFields = Array.from(profileForm.querySelectorAll('input[name], select[name], textarea[name]'));
+            const snapshotField = (field) => {
+                const type = (field.getAttribute('type') || '').toLowerCase();
+                if (type === 'checkbox' || type === 'radio') {
+                    return field.checked ? '1' : '0';
+                }
+
+                return (field.value || '').trim();
+            };
+            const snapshotForm = () => trackedFields
+                .map((field) => `${field.name}=${snapshotField(field)}`)
+                .join('&');
+
+            const initialSnapshot = snapshotForm();
+
+            const refreshActionButtons = () => {
+                const dirty = snapshotForm() !== initialSnapshot;
+                saveButton.disabled = !dirty;
+                applyButton.disabled = !(dirty || !workspaceSynced);
+
+                if (!stateNode) {
+                    return;
+                }
+
+                if (dirty) {
+                    stateNode.textContent = 'Perubahan profile terdeteksi. Save Firmware Profile dan Apply to Workspace aktif.';
+                } else if (workspaceSynced) {
+                    stateNode.textContent = 'Workspace firmware sudah sinkron dengan profile tersimpan.';
+                } else {
+                    stateNode.textContent = 'Workspace firmware berbeda dengan profile tersimpan. Gunakan Apply to Workspace untuk sinkronisasi.';
+                }
+            };
+
+            profileForm.addEventListener('input', refreshActionButtons);
+            profileForm.addEventListener('change', refreshActionButtons);
+            refreshActionButtons();
+        })();
+    </script>
+
     <script type="module">
         (function () {
             const panel = document.getElementById('webflash-panel');
@@ -743,11 +837,20 @@
             const flashButton = document.getElementById('webflash-flash-btn');
             const statusNode = document.getElementById('webflash-status');
             const logNode = document.getElementById('webflash-log');
+            const serialMonitorToggleButton = document.getElementById('serial-monitor-toggle-btn');
+            const serialMonitorClearButton = document.getElementById('serial-monitor-clear-btn');
+            const serialMonitorStatusNode = document.getElementById('serial-monitor-status');
+            const serialMonitorLogNode = document.getElementById('serial-monitor-log');
+            const serialMonitorBaudInput = document.getElementById('serial-monitor-baud');
 
             let manifest = null;
             let transport = null;
             let esploader = null;
             let device = null;
+            let serialMonitorPort = null;
+            let serialMonitorReader = null;
+            let serialMonitorRunning = false;
+            let serialMonitorTail = '';
 
             const terminal = {
                 clean() {
@@ -804,12 +907,53 @@
                     return;
                 }
 
+                if (serialMonitorRunning) {
+                    connectButton.textContent = 'Connect USB Device';
+                    connectButton.classList.remove('danger');
+                    connectButton.disabled = true;
+                    connectButton.title = 'Stop Serial Monitor terlebih dahulu.';
+                    return;
+                }
+
+                connectButton.disabled = false;
+                connectButton.title = '';
+
                 if (isUsbConnected()) {
                     connectButton.textContent = 'Disconnect USB';
                     connectButton.classList.add('danger');
                 } else {
                     connectButton.textContent = 'Connect USB Device';
                     connectButton.classList.remove('danger');
+                }
+            }
+
+            function setSerialMonitorStatus(message, error = false) {
+                if (!serialMonitorStatusNode) {
+                    return;
+                }
+                serialMonitorStatusNode.textContent = 'Serial Monitor: ' + message;
+                serialMonitorStatusNode.style.color = error ? '#fecaca' : '#9bb2c6';
+            }
+
+            function appendSerialMonitorLog(message, newline = true) {
+                if (!serialMonitorLogNode) {
+                    return;
+                }
+                serialMonitorLogNode.value += message + (newline ? '\n' : '');
+                serialMonitorLogNode.scrollTop = serialMonitorLogNode.scrollHeight;
+            }
+
+            function updateSerialMonitorToggleButton() {
+                if (!serialMonitorToggleButton) {
+                    return;
+                }
+
+                if (serialMonitorRunning) {
+                    serialMonitorToggleButton.textContent = 'Stop Serial Monitor';
+                    serialMonitorToggleButton.classList.add('danger');
+                } else {
+                    serialMonitorToggleButton.textContent = 'Start Serial Monitor';
+                    serialMonitorToggleButton.classList.remove('danger');
                 }
             }
 
@@ -845,7 +989,142 @@
                 throw lastError || new Error('Gagal memuat modul esptool-js.');
             }
 
+            async function closeSerialMonitorPort() {
+                if (serialMonitorReader) {
+                    try {
+                        await serialMonitorReader.cancel();
+                    } catch (error) {
+                        appendSerialMonitorLog('WARN: serial reader cancel issue: ' + (error?.message || String(error)));
+                    }
+                    try {
+                        serialMonitorReader.releaseLock();
+                    } catch (_) {
+                        // ignore
+                    }
+                    serialMonitorReader = null;
+                }
+
+                if (!serialMonitorPort) {
+                    return;
+                }
+
+                try {
+                    if (serialMonitorPort.readable || serialMonitorPort.writable) {
+                        await serialMonitorPort.close();
+                    }
+                } catch (error) {
+                    appendSerialMonitorLog('WARN: serial close issue: ' + (error?.message || String(error)));
+                }
+            }
+
+            async function stopSerialMonitor(options = {}) {
+                const silent = options && options.silent === true;
+                serialMonitorRunning = false;
+                serialMonitorTail = '';
+                await closeSerialMonitorPort();
+                updateSerialMonitorToggleButton();
+                updateConnectButton();
+
+                if (!silent) {
+                    setSerialMonitorStatus('stopped');
+                    appendSerialMonitorLog('Serial monitor stopped.');
+                }
+            }
+
+            async function startSerialMonitor() {
+                if (!('serial' in navigator)) {
+                    setSerialMonitorStatus('Web Serial not supported in this browser.', true);
+                    appendSerialMonitorLog('ERROR: Web Serial API is not available.');
+                    return;
+                }
+
+                if (isUsbConnected()) {
+                    await disconnectDevice();
+                    appendSerialMonitorLog('Info: USB flasher transport disconnected before serial monitor.');
+                }
+
+                try {
+                    setSerialMonitorStatus('requesting USB serial access...');
+
+                    if (!serialMonitorPort) {
+                        serialMonitorPort = device || await navigator.serial.requestPort({});
+                    }
+                    if (!device) {
+                        device = serialMonitorPort;
+                    }
+
+                    const requestedBaud = Number(serialMonitorBaudInput?.value || 115200);
+                    const baudRate = Number.isFinite(requestedBaud) && requestedBaud >= 1200
+                        ? Math.floor(requestedBaud)
+                        : 115200;
+
+                    if (!serialMonitorPort.readable && !serialMonitorPort.writable) {
+                        await serialMonitorPort.open({
+                            baudRate,
+                            dataBits: 8,
+                            stopBits: 1,
+                            parity: 'none',
+                            flowControl: 'none',
+                        });
+                    }
+
+                    serialMonitorRunning = true;
+                    serialMonitorTail = '';
+                    setSerialMonitorStatus('running @ ' + baudRate + ' baud');
+                    appendSerialMonitorLog('Serial monitor started @ ' + baudRate + ' baud.');
+                    updateSerialMonitorToggleButton();
+                    updateConnectButton();
+
+                    const decoder = new TextDecoder();
+                    while (serialMonitorRunning && serialMonitorPort.readable) {
+                        const reader = serialMonitorPort.readable.getReader();
+                        serialMonitorReader = reader;
+
+                        try {
+                            while (serialMonitorRunning) {
+                                const { value, done } = await reader.read();
+                                if (done) {
+                                    break;
+                                }
+
+                                if (!value) {
+                                    continue;
+                                }
+
+                                const chunk = decoder.decode(value, { stream: true });
+                                const merged = serialMonitorTail + chunk;
+                                const normalized = merged.replace(/\r\n/g, '\n');
+                                const lines = normalized.split('\n');
+                                serialMonitorTail = lines.pop() || '';
+                                lines.forEach((line) => appendSerialMonitorLog(line));
+                            }
+                        } finally {
+                            try {
+                                reader.releaseLock();
+                            } catch (_) {
+                                // ignore
+                            }
+                            serialMonitorReader = null;
+                        }
+                    }
+                } catch (error) {
+                    setSerialMonitorStatus('failed to start monitor', true);
+                    appendSerialMonitorLog('ERROR: ' + (error?.message || String(error)));
+                } finally {
+                    if (serialMonitorRunning) {
+                        await stopSerialMonitor({ silent: true });
+                        setSerialMonitorStatus('stopped');
+                    }
+                }
+            }
+
             async function ensureConnected() {
+                if (serialMonitorRunning) {
+                    setStatus('Stop Serial Monitor terlebih dahulu.', true);
+                    appendLog('ERROR: Serial monitor is running. Stop it before connecting Web Flash transport.');
+                    return false;
+                }
+
                 if (esploader && transport) {
                     return true;
                 }
@@ -861,7 +1140,7 @@
                     const { ESPLoader, Transport } = await loadEspToolLib();
 
                     if (!device) {
-                        device = await navigator.serial.requestPort({});
+                        device = serialMonitorPort || await navigator.serial.requestPort({});
                     }
 
                     transport = new Transport(device, true);
@@ -1034,12 +1313,34 @@
                 await ensureConnected();
             });
 
+            serialMonitorToggleButton?.addEventListener('click', async () => {
+                if (serialMonitorRunning) {
+                    await stopSerialMonitor();
+                    return;
+                }
+
+                await startSerialMonitor();
+            });
+
+            serialMonitorClearButton?.addEventListener('click', () => {
+                if (serialMonitorLogNode) {
+                    serialMonitorLogNode.value = '';
+                }
+            });
+
             flashButton?.addEventListener('click', async () => {
                 await flashFromBrowser();
             });
 
             if ('serial' in navigator) {
                 navigator.serial.addEventListener('disconnect', async (event) => {
+                    if (serialMonitorPort && event?.target === serialMonitorPort) {
+                        await stopSerialMonitor({ silent: true });
+                        serialMonitorPort = null;
+                        setSerialMonitorStatus('USB disconnected.', true);
+                        appendSerialMonitorLog('Device disconnected by browser/OS.');
+                    }
+
                     if (device && event?.target === device) {
                         await disconnectDevice();
                         setStatus('USB disconnected.');
@@ -1049,6 +1350,8 @@
             }
 
             updateConnectButton();
+            updateSerialMonitorToggleButton();
+            setSerialMonitorStatus('idle');
             updateFlashButtonState();
         })();
     </script>

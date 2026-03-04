@@ -20,7 +20,7 @@ const char* WIFI_SSID = "Free";
 const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
-#define SERVER_HOST "localhost"  // Windows host LAN IP (update if DHCP IP changes)
+#define SERVER_HOST "localhost"  // Fallback host if build flags are not provided
 #ifndef ESP_HTTP_BASE_URL
 #define ESP_HTTP_BASE_URL "http://" SERVER_HOST
 #endif
@@ -165,6 +165,8 @@ bool captureSensorSnapshot(const char* sourceTag, bool printSuccessLog);
 void printStatus();
 void updateTime();
 void seedPacketSequenceFromTime();
+bool isLoopbackHost(const char* host);
+bool isLoopbackHttpTarget(const char* baseUrl);
 bool isServerHostSelfTarget();
 void printServerTargetConfig();
 
@@ -287,6 +289,33 @@ void setupWiFi() {
     }
 }
 
+bool isLoopbackHost(const char* host) {
+    if (host == nullptr) {
+        return false;
+    }
+
+    String normalized = String(host);
+    normalized.trim();
+    normalized.toLowerCase();
+
+    return normalized == "127.0.0.1" || normalized == "localhost";
+}
+
+bool isLoopbackHttpTarget(const char* baseUrl) {
+    if (baseUrl == nullptr) {
+        return false;
+    }
+
+    String normalized = String(baseUrl);
+    normalized.trim();
+    normalized.toLowerCase();
+
+    return normalized == "127.0.0.1"
+        || normalized == "localhost"
+        || normalized.indexOf("://127.0.0.1") >= 0
+        || normalized.indexOf("://localhost") >= 0;
+}
+
 bool isServerHostSelfTarget() {
     if (WiFi.status() != WL_CONNECTED) {
         return false;
@@ -303,6 +332,15 @@ bool isServerHostSelfTarget() {
 void printServerTargetConfig() {
     Serial.println("[CONFIG] HTTP target: " + String(HTTP_SERVER) + String(HTTP_ENDPOINT));
     Serial.println("[CONFIG] MQTT target: " + String(MQTT_SERVER) + ":" + String(MQTT_PORT));
+
+    if (isLoopbackHttpTarget(HTTP_SERVER)) {
+        Serial.println("[CONFIG] ERROR: HTTP target points to localhost/127.0.0.1.");
+        Serial.println("[CONFIG] ESP32 must use public/LAN server host, not local loopback.");
+    }
+    if (isLoopbackHost(MQTT_SERVER)) {
+        Serial.println("[CONFIG] ERROR: MQTT target points to localhost/127.0.0.1.");
+        Serial.println("[CONFIG] ESP32 must use broker host/IP reachable from ESP32 network.");
+    }
 
     if (isServerHostSelfTarget()) {
         Serial.println("[CONFIG] ERROR: SERVER_HOST points to ESP32 IP itself.");
@@ -372,6 +410,12 @@ void sendHTTP() {
     long timestampEsp = (long) time(nullptr);
     if (timestampEsp < 1640995200L) {
         Serial.println("[HTTP] NTP time not synced, skipping send");
+        httpSendFail++;
+        return;
+    }
+
+    if (isLoopbackHttpTarget(HTTP_SERVER)) {
+        Serial.println("[HTTP] ERROR: HTTP_SERVER points to localhost/127.0.0.1, request aborted.");
         httpSendFail++;
         return;
     }
@@ -631,6 +675,11 @@ void sendMQTT() {
 void connectMQTT() {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[MQTT] WiFi not connected, skipping connection");
+        return;
+    }
+
+    if (isLoopbackHost(MQTT_SERVER)) {
+        Serial.println("[MQTT] ERROR: MQTT_SERVER points to localhost/127.0.0.1, connection aborted.");
         return;
     }
 
