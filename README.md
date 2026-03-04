@@ -233,8 +233,9 @@ The project has been updated with the following behavior:
 174. Debian git runtime sync now supports `always` mode (alias `full`) and cron installer defaults to full sync every minute (`pull + auto-commit + auto-push`), with auto commit messages generated from actual changed file scopes.
 175. Git sync now supports event-driven mode: local source changes can be auto-committed/pushed via filesystem watcher (`inotify`), and remote pushes can trigger instant pull via signed webhook endpoint (`POST /api/git-sync/webhook`), so sync is no longer strictly timer-based.
 176. Admin panel action guard coverage is expanded: `Save Quick Runtime Setup`, `Update Device`, and `Delete Device` are disabled until actual changes/requirements are met, selected device row now shows disabled `Selected` state (no redundant re-select), and legacy duplicate firmware fields were simplified (`mqtt_broker` primary, `server_host` auto-managed from HTTP base URL).
-177. Admin Web Serial Monitor reliability was improved: baud selector is now a global-standard dropdown (from `1200` to `2000000` with common ESP rates), serial stream parsing now normalizes both `CRLF` and `CR`, partial-line tail is flushed safely, and monitor start explicitly reapplies 8N1 + signal activation (`DTR/RTS`) so output is more consistently visible after connect/flash cycles.
+177. Admin Web Serial Monitor reliability was improved: baud selector is now a global-standard dropdown (from `1200` to `2000000` with common ESP rates), serial stream parsing now normalizes both `CRLF` and `CR`, partial-line tail is flushed safely, monitor open applies stable 8N1 defaults, and stream-close now enters reconnect retry loop instead of instantly stopping.
 178. Firmware template conflict safety was restored by removing accidental Git merge markers from `ESP32_Firmware/platformio.ini` and `ESP32_Firmware/src/main.cpp`; MQTT target constant now follows build macro (`ESP_MQTT_BROKER`) to avoid stale hardcoded broker host after profile/runtime updates.
+179. Admin firmware profile save flow now blocks invalid ESP32 network targets (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, and placeholder macro host), preventing successful flash with guaranteed no-data runtime. Serial Monitor runtime loop was also hardened to survive stream-close/reconnect cycles without instantly stopping.
 
 ## Tech Stack
 
@@ -1999,6 +2000,19 @@ Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'pio device
 Stop-Process -Id <PID> -Force
 pio device monitor --port COM5 --baud 115200
 ```
+
+### Serial monitor starts then immediately stops in admin Web Flash panel
+
+- Typical symptom in serial log:
+  - `Serial monitor started @ 115200 baud.`
+  - immediately followed by `Serial monitor stopped.`
+- Current panel now retries read-stream reconnect automatically, but you still need valid runtime conditions:
+  - ensure firmware is already running (flash finished and board rebooted),
+  - verify selected baud matches firmware (`Serial.begin(...)`, default `115200`),
+  - ensure no other app holds the same COM/TTY port.
+- If monitor is still empty, validate firmware network targets before reflash:
+  - `HTTP Base URL` host must not be `localhost/127.0.0.1`,
+  - `MQTT Broker Override` must not be `localhost/127.0.0.1` or placeholder macro text.
 
 ### Broker conflict / multiple Mosquitto instances
 

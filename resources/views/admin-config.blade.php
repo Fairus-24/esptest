@@ -295,12 +295,24 @@
                 ->filter();
             $firmwareCliResult = session('firmware_cli_result');
             $effectiveMqttServer = null;
+            $firmwareTargetWarnings = [];
             if ($selectedProfile !== null) {
                 $brokerCandidate = trim((string) ($selectedProfile->mqtt_broker ?? ''));
                 $serverCandidate = trim((string) ($selectedProfile->server_host ?? ''));
                 $effectiveMqttServer = $brokerCandidate !== ''
                     ? $brokerCandidate
                     : $serverCandidate;
+
+                $unsafeHosts = ['localhost', '127.0.0.1', '::1', '0.0.0.0', 'esp_mqtt_broker'];
+                $effectiveMqttLower = strtolower($effectiveMqttServer ?? '');
+                if ($effectiveMqttLower === '' || in_array($effectiveMqttLower, $unsafeHosts, true) || str_starts_with($effectiveMqttLower, '127.')) {
+                    $firmwareTargetWarnings[] = 'MQTT target masih localhost/loopback/placeholder. ESP32 di jaringan tidak akan bisa kirim data ke target ini.';
+                }
+
+                $httpBaseHost = strtolower((string) (parse_url((string) ($selectedProfile->http_base_url ?? ''), PHP_URL_HOST) ?: ''));
+                if ($httpBaseHost === '' || in_array($httpBaseHost, $unsafeHosts, true) || str_starts_with($httpBaseHost, '127.')) {
+                    $firmwareTargetWarnings[] = 'HTTP Base URL host tidak valid untuk ESP32 (localhost/loopback). Ganti ke domain/IP server yang bisa diakses ESP32.';
+                }
             }
             $serialBaudOptions = [
                 1200,
@@ -529,6 +541,16 @@
                 <h2>Firmware Profile - Device #{{ $selectedDevice->id }} ({{ $selectedDevice->nama_device }})</h2>
                 <p class="sub">Use production-ready network targets here. Firmware generator will output consistent `main.cpp` and `platformio.ini` for this device.</p>
                 <p class="note">Active target is locked to <strong>Device ID {{ $selectedDevice->id }}</strong> from the current selection. Build, upload, and webflash always follow this selected device context.</p>
+                @if ($firmwareTargetWarnings !== [])
+                    <div class="flash err section-gap">
+                        <strong>Firmware target warning:</strong>
+                        <ul style="margin:8px 0 0 18px; padding:0;">
+                            @foreach ($firmwareTargetWarnings as $warn)
+                                <li>{{ $warn }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
                 <details class="section-gap">
                     <summary>How this firmware panel works</summary>
                     <div class="note">
@@ -1083,6 +1105,10 @@
                 serialMonitorTail = '';
             }
 
+            function sleep(ms) {
+                return new Promise((resolve) => setTimeout(resolve, ms));
+            }
+
             function updateSerialMonitorToggleButton() {
                 if (!serialMonitorToggleButton) {
                     return;
@@ -1196,29 +1222,6 @@
 
                     const baudRate = resolveSerialMonitorBaudRate();
 
-                    if (serialMonitorPort.readable || serialMonitorPort.writable) {
-                        await serialMonitorPort.close();
-                    }
-                    await serialMonitorPort.open({
-                        baudRate,
-                        dataBits: 8,
-                        stopBits: 1,
-                        parity: 'none',
-                        flowControl: 'none',
-                        bufferSize: 16384,
-                    });
-                    // Ensure board is not held in reset and serial line is active.
-                    if (typeof serialMonitorPort.setSignals === 'function') {
-                        try {
-                            await serialMonitorPort.setSignals({
-                                dataTerminalReady: true,
-                                requestToSend: false,
-                            });
-                        } catch (_) {
-                            // Ignore adapter that does not expose signal control.
-                        }
-                    }
-
                     serialMonitorRunning = true;
                     serialMonitorTail = '';
                     serialMonitorLastChunkAt = 0;
@@ -1228,14 +1231,41 @@
                     updateConnectButton();
 
                     const decoder = new TextDecoder();
-                    while (serialMonitorRunning && serialMonitorPort.readable) {
-                        const reader = serialMonitorPort.readable.getReader();
-                        serialMonitorReader = reader;
-
+                    while (serialMonitorRunning) {
                         try {
+                            if (!serialMonitorPort.readable && !serialMonitorPort.writable) {
+                                await serialMonitorPort.open({
+                                    baudRate,
+                                    dataBits: 8,
+                                    stopBits: 1,
+                                    parity: 'none',
+                                    flowControl: 'none',
+                                    bufferSize: 16384,
+                                });
+                            }
+                            // Keep serial line active but avoid forcing reset state.
+                            if (typeof serialMonitorPort.setSignals === 'function') {
+                                try {
+                                    await serialMonitorPort.setSignals({
+                                        dataTerminalReady: false,
+                                        requestToSend: false,
+                                    });
+                                } catch (_) {
+                                    // Ignore adapter that does not expose signal control.
+                                }
+                            }
+
+                            if (!serialMonitorPort.readable) {
+                                await sleep(250);
+                                continue;
+                            }
+
+                            const reader = serialMonitorPort.readable.getReader();
+                            serialMonitorReader = reader;
                             while (serialMonitorRunning) {
                                 const { value, done } = await reader.read();
                                 if (done) {
+                                    appendSerialMonitorLog('Info: serial stream closed, waiting for reconnect...');
                                     break;
                                 }
 
@@ -1254,23 +1284,37 @@
                                 lines.forEach((line) => appendSerialMonitorLog(line));
                                 flushSerialMonitorTail(false);
                             }
+                        } catch (error) {
+                            if (!serialMonitorRunning) {
+                                break;
+                            }
+                            appendSerialMonitorLog('WARN: serial read loop issue: ' + (error?.message || String(error)));
+                            await sleep(400);
                         } finally {
                             try {
-                                reader.releaseLock();
+                                serialMonitorReader?.releaseLock();
                             } catch (_) {
                                 // ignore
                             }
                             serialMonitorReader = null;
                         }
+
+                        if (!serialMonitorRunning) {
+                            break;
+                        }
+
+                        try {
+                            if (serialMonitorPort.readable || serialMonitorPort.writable) {
+                                await serialMonitorPort.close();
+                            }
+                        } catch (_) {
+                            // ignore close retry
+                        }
+                        await sleep(350);
                     }
                 } catch (error) {
                     setSerialMonitorStatus('failed to start monitor', true);
                     appendSerialMonitorLog('ERROR: ' + (error?.message || String(error)));
-                } finally {
-                    if (serialMonitorRunning) {
-                        await stopSerialMonitor({ silent: true });
-                        setSerialMonitorStatus('stopped');
-                    }
                 }
             }
 

@@ -458,6 +458,35 @@ class AdminConfigPanelTest extends TestCase
         $this->assertStringContainsString('-DESP_MQTT_BROKER=\\"mqtt-new.example.com\\"', $platformioContent);
     }
 
+    public function test_admin_profile_rejects_loopback_targets_for_firmware(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-LOOPBACK-BLOCK',
+            'lokasi' => 'Validation Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $this->post('/admin/config/devices/' . $device->id . '/profile', [
+            'board' => 'esp32doit-devkit-v1',
+            'wifi_ssid' => 'LAB-WIFI',
+            'wifi_password' => 'password-lab',
+            'http_base_url' => 'http://localhost',
+            'http_endpoint' => '/api/http-data',
+            'mqtt_broker' => '127.0.0.1',
+            'mqtt_port' => 1883,
+            'mqtt_topic' => 'iot/esp32/suhu',
+            'mqtt_user' => 'esp32',
+            'mqtt_password' => 'esp32',
+            'http_tls_insecure' => '1',
+            'dht_pin' => 4,
+            'dht_model' => 'DHT11',
+        ])
+            ->assertRedirect('/admin/config?device_id=' . $device->id)
+            ->assertSessionHasErrors('http_base_url');
+    }
+
     public function test_admin_can_trigger_firmware_build_from_panel(): void
     {
         $device = Device::query()->create([

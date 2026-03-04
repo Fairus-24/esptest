@@ -32,6 +32,9 @@ class FirmwareTemplateService
             : '/api/http-data';
 
         $mqttHost = trim((string) config('mqtt.host', ''));
+        if ($this->isUnsafeFirmwareTargetHost($mqttHost)) {
+            $mqttHost = '';
+        }
         if ($mqttHost === '') {
             $mqttHost = $serverHost;
         }
@@ -136,6 +139,9 @@ class FirmwareTemplateService
         }
         $httpEndpoint = '/' . ltrim($httpEndpoint, '/');
         $mqttBroker = trim((string) ($profile->mqtt_broker ?: $profile->mqtt_host ?: $serverHost));
+        if ($this->isUnsafeFirmwareTargetHost($mqttBroker)) {
+            $mqttBroker = $serverHost;
+        }
         $mqttHost = $mqttBroker;
         $mqttPort = max(1, (int) $profile->mqtt_port);
         $mqttTopic = trim((string) $profile->mqtt_topic);
@@ -479,5 +485,23 @@ class FirmwareTemplateService
     private function normalizeLineEndings(string $value): string
     {
         return str_replace("\r\n", "\n", $value);
+    }
+
+    private function isUnsafeFirmwareTargetHost(string $host): bool
+    {
+        $candidate = strtolower(trim($host));
+        if ($candidate === '') {
+            return true;
+        }
+
+        if (in_array($candidate, ['localhost', '127.0.0.1', '::1', '0.0.0.0', 'esp_mqtt_broker'], true)) {
+            return true;
+        }
+
+        if (str_starts_with($candidate, '127.')) {
+            return true;
+        }
+
+        return false;
     }
 }

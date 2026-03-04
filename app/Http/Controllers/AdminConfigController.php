@@ -312,6 +312,34 @@ class AdminConfigController extends Controller
 
         $httpBaseUrl = rtrim(trim((string) ($validated['http_base_url'] ?? '')), '/');
         $parsedServerHost = (string) (parse_url($httpBaseUrl, PHP_URL_HOST) ?: '');
+
+        if ($parsedServerHost === '') {
+            return redirect()
+                ->route('admin.config.index', ['device_id' => $device->id])
+                ->withInput()
+                ->withErrors([
+                    'http_base_url' => 'HTTP Base URL tidak valid. Host tidak dapat dibaca.',
+                ]);
+        }
+
+        if ($this->isUnsafeFirmwareTargetHost($parsedServerHost)) {
+            return redirect()
+                ->route('admin.config.index', ['device_id' => $device->id])
+                ->withInput()
+                ->withErrors([
+                    'http_base_url' => 'HTTP Base URL host tidak boleh localhost/loopback untuk firmware ESP32.',
+                ]);
+        }
+
+        if ($this->isUnsafeFirmwareTargetHost($validated['mqtt_broker'])) {
+            return redirect()
+                ->route('admin.config.index', ['device_id' => $device->id])
+                ->withInput()
+                ->withErrors([
+                    'mqtt_broker' => 'MQTT Broker tidak boleh localhost/loopback atau placeholder macro.',
+                ]);
+        }
+
         $validated['server_host'] = $parsedServerHost !== ''
             ? $parsedServerHost
             : trim((string) ($validated['mqtt_broker'] ?? '127.0.0.1'));
@@ -626,5 +654,23 @@ class AdminConfigController extends Controller
             'HTTP_CLIENT_TIMEOUT',
             'MQTT_MAX_PACKET_SIZE',
         ];
+    }
+
+    private function isUnsafeFirmwareTargetHost(string $host): bool
+    {
+        $candidate = strtolower(trim($host));
+        if ($candidate === '') {
+            return true;
+        }
+
+        if (in_array($candidate, ['localhost', '127.0.0.1', '::1', '0.0.0.0', 'esp_mqtt_broker'], true)) {
+            return true;
+        }
+
+        if (str_starts_with($candidate, '127.')) {
+            return true;
+        }
+
+        return false;
     }
 }
