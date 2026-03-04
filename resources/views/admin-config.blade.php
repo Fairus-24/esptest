@@ -776,6 +776,22 @@
                 logNode.scrollTop = logNode.scrollHeight;
             }
 
+            function hasManifestReady() {
+                return Boolean(manifest && Array.isArray(manifest.images) && manifest.images.length > 0);
+            }
+
+            function updateFlashButtonState() {
+                if (!flashButton) {
+                    return;
+                }
+
+                const enabled = hasManifestReady();
+                flashButton.disabled = !enabled;
+                flashButton.style.opacity = enabled ? '1' : '0.55';
+                flashButton.style.cursor = enabled ? 'pointer' : 'not-allowed';
+                flashButton.title = enabled ? '' : 'Jalankan "Prepare Web Flash Build" terlebih dahulu.';
+            }
+
             function isUsbConnected() {
                 return Boolean(esploader && transport);
             }
@@ -890,6 +906,8 @@
                     return;
                 }
 
+                manifest = null;
+                updateFlashButtonState();
                 setStatus('Menjalankan build webflash di server...');
                 appendLog('Preparing webflash artifacts from server...');
 
@@ -915,6 +933,7 @@
 
                     if (!response.ok || !data.ok) {
                         manifest = null;
+                        updateFlashButtonState();
                         setStatus('Prepare gagal.', true);
                         appendLog('ERROR: HTTP ' + response.status + ' - ' + (data.message || 'Prepare failed.'));
                         if (data.build && data.build.output) {
@@ -926,20 +945,22 @@
                     }
 
                     manifest = data;
+                    updateFlashButtonState();
                     const totalBytes = (data.images || []).reduce((sum, item) => sum + (item.size || 0), 0);
                     setStatus('Artifacts siap. Total ' + (data.images || []).length + ' file.');
                     appendLog('Webflash artifacts ready. Env: ' + data.environment + ', bytes: ' + totalBytes);
                 } catch (error) {
                     manifest = null;
+                    updateFlashButtonState();
                     setStatus('Prepare gagal (network/server error).', true);
                     appendLog('ERROR: ' + (error?.message || String(error)));
                 }
             }
 
             async function flashFromBrowser() {
-                if (!manifest || !Array.isArray(manifest.images) || manifest.images.length === 0) {
+                if (!hasManifestReady()) {
                     setStatus('Artifacts belum siap. Klik Prepare dulu.', true);
-                    appendLog('ERROR: No manifest loaded.');
+                    appendLog('WARN: Flash dibatalkan karena artifact belum siap.');
                     return;
                 }
 
@@ -1025,6 +1046,7 @@
             }
 
             updateConnectButton();
+            updateFlashButtonState();
         })();
     </script>
 </body>

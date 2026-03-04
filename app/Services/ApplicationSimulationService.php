@@ -37,7 +37,8 @@ class ApplicationSimulationService
 
         if ($storageReady) {
             try {
-                $deviceId = $this->resolveSimulatorDeviceId($deviceId > 0 ? $deviceId : null);
+                $resolvedStatusDeviceId = $this->resolveSimulatorDeviceIdForStatus($deviceId > 0 ? $deviceId : null);
+                $deviceId = $resolvedStatusDeviceId ?? 0;
                 $mqttRows = $deviceId > 0
                     ? SimulatedEksperimen::query()->where('device_id', $deviceId)->where('protokol', 'MQTT')->count()
                     : 0;
@@ -585,6 +586,26 @@ class ApplicationSimulationService
         }
 
         return $this->ensureSimulatorDevice()->id;
+    }
+
+    private function resolveSimulatorDeviceIdForStatus(?int $candidateDeviceId): ?int
+    {
+        if ($candidateDeviceId !== null && $candidateDeviceId > 0) {
+            $isSimulatorDevice = Device::query()
+                ->whereKey($candidateDeviceId)
+                ->where('nama_device', self::DEVICE_NAME)
+                ->exists();
+
+            if ($isSimulatorDevice) {
+                return $candidateDeviceId;
+            }
+        }
+
+        $existingId = Device::query()
+            ->where('nama_device', self::DEVICE_NAME)
+            ->value('id');
+
+        return $existingId !== null ? (int) $existingId : null;
     }
 
     private function deleteSimulatorRows(int $deviceId): void

@@ -1146,6 +1146,7 @@ Purpose: simulate full MQTT-vs-HTTP application behavior without physical ESP32.
 Data safety note:
 - simulator state validates `device_id` against `SIMULATOR-APP`; stale/non-simulator IDs in state file are ignored and auto-corrected.
 - simulator writes/reads no longer share telemetry table with real device data.
+- `GET /simulation/status` is now read-only for device registry: it no longer auto-creates `SIMULATOR-APP` when simulation is not running, so a manually deleted simulator device does not immediately reappear.
 
 ### Admin Config Routes (`/admin/*`)
 
@@ -1197,6 +1198,7 @@ Security notes:
   - does not require USB connection on remote Debian server
   - Web Flash control now uses a single USB button toggle: `Connect USB Device` changes to `Disconnect USB` after connection
   - Web Flash prepare logger now prints HTTP status + raw response body when prepare endpoint fails, so 422/500 causes are visible directly in the panel
+  - `Flash From Browser` button is disabled until `Prepare Web Flash Build` succeeds, preventing accidental `No manifest loaded` flow
 - PM2 ecosystem now propagates a guaranteed runtime `PATH` into all apps (`esptest-http`, `esptest-mqtt-worker`, `esptest-scheduler`) to reduce missing-shell/missing-binary issues on production service environments
 
 ### Documentation Route (`/doc`)

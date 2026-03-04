@@ -21,6 +21,29 @@ class SimulationFlowTest extends TestCase
             ->assertSee('Start Simulasi');
     }
 
+    public function test_simulation_status_does_not_recreate_simulator_device_when_not_running(): void
+    {
+        $simulator = Device::query()->create([
+            'nama_device' => 'SIMULATOR-APP',
+            'lokasi' => 'Virtual Lab',
+        ]);
+
+        $simulator->delete();
+        $this->assertDatabaseMissing('devices', [
+            'nama_device' => 'SIMULATOR-APP',
+        ]);
+
+        $this->get('/simulation/status')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.running', false)
+            ->assertJsonPath('data.device_id', null);
+
+        $this->assertDatabaseMissing('devices', [
+            'nama_device' => 'SIMULATOR-APP',
+        ]);
+    }
+
     public function test_simulation_start_tick_and_stop_flow(): void
     {
         $this->post('/simulation/start', [
