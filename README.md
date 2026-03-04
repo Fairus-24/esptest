@@ -1190,12 +1190,13 @@ Security notes:
   - generated `platformio.ini` now enforces `lib_archive = false` to avoid archive-step shell failures seen on some server environments
 - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
   - multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
-  - browser-based Web Flash requires:
+- browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
   - does not require USB connection on remote Debian server
   - Web Flash control now uses a single USB button toggle: `Connect USB Device` changes to `Disconnect USB` after connection
   - Web Flash prepare logger now prints HTTP status + raw response body when prepare endpoint fails, so 422/500 causes are visible directly in the panel
+- PM2 ecosystem now propagates a guaranteed runtime `PATH` into all apps (`esptest-http`, `esptest-mqtt-worker`, `esptest-scheduler`) to reduce missing-shell/missing-binary issues on production service environments
 
 ### Documentation Route (`/doc`)
 

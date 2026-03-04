@@ -1,3 +1,8 @@
+const defaultUnixPath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+const runtimePath = (process.env.PATH && process.env.PATH.trim() !== '')
+  ? process.env.PATH
+  : defaultUnixPath;
+
 module.exports = {
   apps: [
     {
@@ -11,6 +16,7 @@ module.exports = {
       max_restarts: 30,
       env: {
         APP_ENV: 'production',
+        PATH: runtimePath,
       },
     },
     {
@@ -24,6 +30,7 @@ module.exports = {
       max_restarts: 30,
       env: {
         APP_ENV: 'production',
+        PATH: runtimePath,
       },
     },
     {
@@ -37,6 +44,7 @@ module.exports = {
       max_restarts: 30,
       env: {
         APP_ENV: 'production',
+        PATH: runtimePath,
       },
     },
   ],
