@@ -791,7 +791,23 @@
             }
 
             async function loadEspToolLib() {
-                return import('https://unpkg.com/esptool-js@0.5.7/lib/index.js');
+                // Use bundled ESM build so browser does not fail on bare imports like `pako`.
+                const candidates = [
+                    'https://esm.sh/esptool-js@0.5.7?bundle',
+                    'https://cdn.jsdelivr.net/npm/esptool-js@0.5.7/+esm',
+                ];
+
+                let lastError = null;
+                for (const url of candidates) {
+                    try {
+                        return await import(url);
+                    } catch (error) {
+                        lastError = error;
+                        appendLog('WARN: gagal memuat modul esptool-js dari ' + url + ' -> ' + (error?.message || String(error)));
+                    }
+                }
+
+                throw lastError || new Error('Gagal memuat modul esptool-js.');
             }
 
             async function ensureConnected() {

@@ -519,9 +519,14 @@ class AdminConfigController extends Controller
                 ->with('firmware_cli_result', $resultPayload);
         }
 
+        $errorMessage = $modeLabel . ' gagal (exit code ' . (int) $run['exit_code'] . ').';
+        if ((int) $run['exit_code'] === 127) {
+            $errorMessage = $modeLabel . ' gagal: PlatformIO CLI tidak ditemukan pada runtime server (exit code 127).';
+        }
+
         return $route
             ->withErrors([
-                'firmware_cli' => $modeLabel . ' gagal (exit code ' . (int) $run['exit_code'] . ').',
+                'firmware_cli' => $errorMessage,
             ])
             ->with('firmware_cli_result', $resultPayload);
     }

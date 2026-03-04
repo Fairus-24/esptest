@@ -53,11 +53,6 @@ class FirmwareFlashService
      */
     private function run(string $mode): array
     {
-        $platformioCommand = trim((string) config('admin.platformio_command', 'pio'));
-        if ($platformioCommand === '') {
-            $platformioCommand = 'pio';
-        }
-
         $workdir = trim((string) config('admin.platformio_workdir', base_path('ESP32_Firmware')));
         if ($workdir === '') {
             $workdir = base_path('ESP32_Firmware');
@@ -65,37 +60,122 @@ class FirmwareFlashService
 
         $timeoutSeconds = max(60, (int) config('admin.platformio_timeout_seconds', 900));
         $environment = $this->resolveBuildEnvironment();
-        $command = $platformioCommand . ' run -e ' . $environment . ($mode === 'upload' ? ' -t upload' : '');
+        $candidateBaseCommands = $this->resolvePlatformioCommandCandidates();
+        $attemptLogs = [];
+        $finalResult = null;
 
-        try {
-            $result = Process::path($workdir)
-                ->timeout($timeoutSeconds)
-                ->run($command);
-        } catch (Throwable $e) {
-            return [
+        foreach ($candidateBaseCommands as $baseCommand) {
+            $command = $baseCommand . ' run -e ' . $environment . ($mode === 'upload' ? ' -t upload' : '');
+
+            try {
+                $result = Process::path($workdir)
+                    ->timeout($timeoutSeconds)
+                    ->run($command);
+            } catch (Throwable $e) {
+                return [
+                    'ok' => false,
+                    'mode' => $mode,
+                    'command' => $command,
+                    'workdir' => $workdir,
+                    'timeout_seconds' => $timeoutSeconds,
+                    'exit_code' => 255,
+                    'output' => $this->truncateOutput('Failed to run PlatformIO command: ' . $e->getMessage()),
+                ];
+            }
+
+            $combinedOutput = $this->normalizeOutput($result->output(), $result->errorOutput());
+            $exitCode = (int) $result->exitCode();
+            $isMissingCommand = $this->isMissingCommandError($exitCode, $combinedOutput);
+
+            if ($result->successful()) {
+                if ($attemptLogs !== []) {
+                    $combinedOutput =
+                        "PlatformIO fallback activated after command lookup failure(s)." . PHP_EOL .
+                        implode(PHP_EOL . PHP_EOL, $attemptLogs) . PHP_EOL . PHP_EOL .
+                        "=== Successful Command Output ===" . PHP_EOL .
+                        $combinedOutput;
+                }
+
+                return [
+                    'ok' => true,
+                    'mode' => $mode,
+                    'command' => $command,
+                    'workdir' => $workdir,
+                    'timeout_seconds' => $timeoutSeconds,
+                    'exit_code' => $exitCode,
+                    'output' => $this->truncateOutput($combinedOutput),
+                ];
+            }
+
+            $finalResult = [
                 'ok' => false,
                 'mode' => $mode,
                 'command' => $command,
                 'workdir' => $workdir,
                 'timeout_seconds' => $timeoutSeconds,
+                'exit_code' => $exitCode,
+                'output' => $combinedOutput,
+            ];
+
+            if (!$isMissingCommand) {
+                if ($attemptLogs !== []) {
+                    $finalResult['output'] =
+                        "PlatformIO fallback attempt log:" . PHP_EOL .
+                        implode(PHP_EOL . PHP_EOL, $attemptLogs) . PHP_EOL . PHP_EOL .
+                        "=== Last Command Output ===" . PHP_EOL .
+                        $combinedOutput;
+                }
+                $finalResult['output'] = $this->truncateOutput((string) $finalResult['output']);
+
+                return $finalResult;
+            }
+
+            $attemptLogs[] = sprintf(
+                '[%s] exit=%d%s%s',
+                $command,
+                $exitCode,
+                PHP_EOL,
+                $combinedOutput
+            );
+        }
+
+        if ($finalResult === null) {
+            return [
+                'ok' => false,
+                'mode' => $mode,
+                'command' => 'n/a',
+                'workdir' => $workdir,
+                'timeout_seconds' => $timeoutSeconds,
                 'exit_code' => 255,
-                'output' => $this->truncateOutput('Failed to run PlatformIO command: ' . $e->getMessage()),
+                'output' => $this->truncateOutput('PlatformIO command candidate list is empty.'),
             ];
         }
 
-        $combinedOutput = trim($result->output() . PHP_EOL . $result->errorOutput());
-        if ($combinedOutput === '') {
-            $combinedOutput = '(no command output)';
-        }
+        $checkedCommands = array_map(
+            static fn (string $base): string => $base . ' run -e ' . $environment . ($mode === 'upload' ? ' -t upload' : ''),
+            $candidateBaseCommands
+        );
+
+        $guidance = implode(PHP_EOL, [
+            'PlatformIO CLI command was not found from Laravel runtime PATH.',
+            'Set ADMIN_PLATFORMIO_COMMAND to an absolute executable path if needed.',
+            'Checked commands:',
+            '- ' . implode(PHP_EOL . '- ', $checkedCommands),
+            '',
+            'Example:',
+            'ADMIN_PLATFORMIO_COMMAND=/home/your-user/.local/bin/pio',
+        ]);
 
         return [
-            'ok' => $result->successful(),
+            'ok' => false,
             'mode' => $mode,
-            'command' => $command,
+            'command' => (string) ($finalResult['command'] ?? 'n/a'),
             'workdir' => $workdir,
             'timeout_seconds' => $timeoutSeconds,
-            'exit_code' => (int) $result->exitCode(),
-            'output' => $this->truncateOutput($combinedOutput),
+            'exit_code' => (int) ($finalResult['exit_code'] ?? 127),
+            'output' => $this->truncateOutput(
+                $guidance . PHP_EOL . PHP_EOL . implode(PHP_EOL . PHP_EOL, $attemptLogs)
+            ),
         ];
     }
 
@@ -204,5 +284,160 @@ class FirmwareFlashService
         $head = mb_substr($output, 0, $limit);
 
         return $head . PHP_EOL . '...[truncated]';
+    }
+
+    /**
+     * @return string[]
+     */
+    private function resolvePlatformioCommandCandidates(): array
+    {
+        $configuredCommand = trim((string) config('admin.platformio_command', 'pio'));
+        if ($configuredCommand === '') {
+            $configuredCommand = 'pio';
+        }
+
+        $candidates = [
+            $configuredCommand,
+            'pio',
+            'platformio',
+            'python3 -m platformio',
+            'python -m platformio',
+            'py -m platformio',
+        ];
+
+        foreach ($this->resolveAbsolutePlatformioPaths() as $path) {
+            $candidates[] = $this->quoteCommandPath($path);
+        }
+
+        return array_values(array_unique(array_filter(array_map('trim', $candidates), static function (string $value): bool {
+            return $value !== '';
+        })));
+    }
+
+    /**
+     * @return string[]
+     */
+    private function resolveAbsolutePlatformioPaths(): array
+    {
+        $paths = [];
+
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $appData = trim((string) getenv('APPDATA'));
+            if ($appData !== '') {
+                foreach (glob($appData . DIRECTORY_SEPARATOR . 'Python' . DIRECTORY_SEPARATOR . 'Python*' . DIRECTORY_SEPARATOR . 'Scripts' . DIRECTORY_SEPARATOR . 'pio.exe') ?: [] as $path) {
+                    $paths[] = $path;
+                }
+                foreach (glob($appData . DIRECTORY_SEPARATOR . 'Python' . DIRECTORY_SEPARATOR . 'Python*' . DIRECTORY_SEPARATOR . 'Scripts' . DIRECTORY_SEPARATOR . 'platformio.exe') ?: [] as $path) {
+                    $paths[] = $path;
+                }
+            }
+
+            $userProfile = trim((string) getenv('USERPROFILE'));
+            if ($userProfile !== '') {
+                $paths[] = $userProfile . DIRECTORY_SEPARATOR . '.platformio' . DIRECTORY_SEPARATOR . 'penv' . DIRECTORY_SEPARATOR . 'Scripts' . DIRECTORY_SEPARATOR . 'pio.exe';
+                $paths[] = $userProfile . DIRECTORY_SEPARATOR . '.platformio' . DIRECTORY_SEPARATOR . 'penv' . DIRECTORY_SEPARATOR . 'Scripts' . DIRECTORY_SEPARATOR . 'platformio.exe';
+            }
+        } else {
+            $paths = array_merge($paths, [
+                '/usr/local/bin/pio',
+                '/usr/bin/pio',
+                '/usr/local/bin/platformio',
+                '/usr/bin/platformio',
+                '/opt/homebrew/bin/pio',
+                '/opt/homebrew/bin/platformio',
+            ]);
+
+            foreach ($this->resolveHomeDirectories() as $home) {
+                $paths[] = $home . '/.local/bin/pio';
+                $paths[] = $home . '/.local/bin/platformio';
+                $paths[] = $home . '/.platformio/penv/bin/pio';
+                $paths[] = $home . '/.platformio/penv/bin/platformio';
+            }
+        }
+
+        $resolved = [];
+        foreach ($paths as $path) {
+            if (is_string($path) && $path !== '' && is_file($path)) {
+                $resolved[] = $path;
+            }
+        }
+
+        return array_values(array_unique($resolved));
+    }
+
+    /**
+     * @return string[]
+     */
+    private function resolveHomeDirectories(): array
+    {
+        $homes = [];
+
+        $home = trim((string) getenv('HOME'));
+        if ($home !== '') {
+            $homes[] = $home;
+        }
+
+        if (function_exists('posix_geteuid') && function_exists('posix_getpwuid')) {
+            $info = @posix_getpwuid(posix_geteuid());
+            if (is_array($info)) {
+                $posixHome = trim((string) ($info['dir'] ?? ''));
+                if ($posixHome !== '') {
+                    $homes[] = $posixHome;
+                }
+            }
+        }
+
+        return array_values(array_unique($homes));
+    }
+
+    private function normalizeOutput(string $stdout, string $stderr): string
+    {
+        $combinedOutput = trim($stdout . PHP_EOL . $stderr);
+        if ($combinedOutput === '') {
+            return '(no command output)';
+        }
+
+        return $combinedOutput;
+    }
+
+    private function isMissingCommandError(int $exitCode, string $output): bool
+    {
+        if ($exitCode === 127) {
+            return true;
+        }
+
+        $normalized = strtolower($output);
+        if (str_contains($normalized, '/bin/sh:') && str_contains($normalized, 'not found')) {
+            return true;
+        }
+
+        $needles = [
+            'command not found',
+            'is not recognized as an internal or external command',
+            'could not open input file: platformio',
+            'no module named platformio',
+            'platformio: not found',
+            'pio: not found',
+            'python3: not found',
+            'python: not found',
+            'py: not found',
+        ];
+
+        foreach ($needles as $needle) {
+            if (str_contains($normalized, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function quoteCommandPath(string $path): string
+    {
+        if (!str_contains($path, ' ')) {
+            return $path;
+        }
+
+        return '"' . str_replace('"', '\"', $path) . '"';
     }
 }

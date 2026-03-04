@@ -277,6 +277,54 @@ class AdminConfigPanelTest extends TestCase
         });
     }
 
+    public function test_admin_build_uses_fallback_when_primary_platformio_command_is_missing(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-BUILD-FALLBACK',
+            'lokasi' => 'Build Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        config([
+            'admin.platformio_command' => 'missing-platformio-cli',
+        ]);
+
+        Process::fake(function ($process) {
+            $command = is_array($process->command)
+                ? implode(' ', $process->command)
+                : (string) $process->command;
+
+            if (str_contains($command, 'missing-platformio-cli')) {
+                return Process::result('', '/bin/sh: 1: missing-platformio-cli: not found', 127);
+            }
+
+            return Process::result('BUILD OK FROM FALLBACK', '', 0);
+        });
+
+        $this->post('/admin/config/devices/' . $device->id . '/firmware/build')
+            ->assertRedirect('/admin/config?device_id=' . $device->id)
+            ->assertSessionHas('admin_status')
+            ->assertSessionHas('firmware_cli_result', function ($value) {
+                if (!is_array($value)) {
+                    return false;
+                }
+
+                return (bool) ($value['ok'] ?? false)
+                    && str_contains((string) ($value['output'] ?? ''), 'PlatformIO fallback activated')
+                    && !str_contains((string) ($value['command'] ?? ''), 'missing-platformio-cli');
+            });
+
+        Process::assertRan(function ($process) {
+            $command = is_array($process->command)
+                ? implode(' ', $process->command)
+                : (string) $process->command;
+
+            return str_contains($command, 'missing-platformio-cli');
+        });
+    }
+
     public function test_admin_upload_firmware_failure_is_reported_in_session(): void
     {
         $device = Device::query()->create([

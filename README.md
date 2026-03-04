@@ -1184,6 +1184,8 @@ Security notes:
   - `ADMIN_PLATFORMIO_ENV` (optional fixed PlatformIO environment name; if empty auto-detected from `platformio.ini`)
   - `ADMIN_PLATFORMIO_TIMEOUT_SECONDS` (default `900`)
   - `ADMIN_FIRMWARE_CLI_OUTPUT_LIMIT` (default `60000` chars)
+  - command lookup fallback: if primary command is missing (`exit code 127`), service retries common alternatives (`pio`, `platformio`, `python3 -m platformio`, `python -m platformio`) plus common absolute locations (for example `~/.local/bin/pio`, `~/.platformio/penv/bin/platformio` on Linux)
+  - if all candidates fail, last CLI output includes checked command list and explicit guidance to set absolute `ADMIN_PLATFORMIO_COMMAND`
 - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
@@ -1762,6 +1764,50 @@ GROUP BY protokol;
 
 ```bash
 pio run -t upload
+```
+
+### Admin build firmware fails with `exit code 127`
+
+- Meaning: Laravel runtime cannot find PlatformIO CLI executable from current PATH.
+- Check what binary is available on server:
+
+```bash
+which pio
+which platformio
+python3 -m platformio --version
+```
+
+- Set absolute command path in `.env` when needed (Debian PM2/Nginx environments often have limited PATH):
+
+```env
+ADMIN_PLATFORMIO_COMMAND=/home/<server-user>/.local/bin/pio
+```
+
+- Then reload Laravel runtime/process manager and clear cache:
+
+```bash
+php artisan optimize:clear
+pm2 reload ecosystem.config.cjs --update-env
+```
+
+- Quick verify from the same runtime user that runs PM2:
+
+```bash
+sudo -u <pm2-user> /home/<server-user>/.local/bin/pio --version
+```
+
+### Web Flash error: `Failed to resolve module specifier "pako"`
+
+- Cause: browser tried loading a non-bundled `esptool-js` module where dependency `pako` is still a bare import.
+- Current admin panel now loads bundled ESM (`esm.sh` with jsDelivr fallback), so this error should be resolved after deploy/update.
+- If still appears:
+  - hard refresh browser (`Ctrl+F5`) to bypass cached old JS,
+  - clear Laravel view cache and redeploy:
+
+```bash
+php artisan optimize:clear
+php artisan view:clear
+pm2 reload ecosystem.config.cjs --update-env
 ```
 
 ### ESP32 serial monitor appears frozen (`macet`)
