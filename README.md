@@ -1187,7 +1187,8 @@ Security notes:
   - command lookup fallback: if primary command is missing (`exit code 127`), service retries common alternatives (`pio`, `platformio`, `python3 -m platformio`, `python -m platformio`) plus common absolute locations (for example `~/.local/bin/pio`, `~/.platformio/penv/bin/platformio` on Linux)
   - if all candidates fail, last CLI output includes checked command list and explicit guidance to set absolute `ADMIN_PLATFORMIO_COMMAND`
   - generated `platformio.ini` now enforces `lib_archive = false` to avoid archive-step shell failures seen on some server environments
-- browser-based Web Flash requires:
+  - generated baseline dependency list removes unused `DHT sensor library for ESPx` (firmware uses Adafruit DHT), reducing shell/path issues on constrained build hosts
+  - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
   - does not require USB connection on remote Debian server
@@ -1817,6 +1818,7 @@ pm2 reload ecosystem.config.cjs --update-env
 - Symptom example:
   - `*** [.pio/build/.../libDHT sensor library for ESPx.a] sh: No such file or directory`
 - Current firmware template writes `lib_archive = false` into `platformio.ini` so PlatformIO links library objects directly without `.a` archive step.
+- Baseline `platformio.ini` also removes unused `DHT sensor library for ESPx` dependency to avoid unnecessary archive/path handling.
 - If your workspace still uses old `platformio.ini`, re-apply firmware from admin panel (or pull latest file), then rebuild.
 
 ### ESP32 serial monitor appears frozen (`macet`)
