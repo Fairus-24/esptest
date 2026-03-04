@@ -57,7 +57,11 @@ const char* WIFI_PASSWORD = "gratiskok";
 #endif
 const char* HTTP_SERVER = ESP_HTTP_BASE_URL;
 const char* HTTP_ENDPOINT = "/api/http-data";
+<<<<<<< HEAD
 const char* MQTT_SERVER = "192.168.0.104";
+=======
+const char* MQTT_SERVER = "202.154.58.51";
+>>>>>>> b833f86 (chore(auto-sync): runtime sync | scope=ESP32_Firmware | files=1 | sample=ESP32_Firmware/src/main.cpp)
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";
