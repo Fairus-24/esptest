@@ -520,8 +520,19 @@ class AdminConfigController extends Controller
         }
 
         $errorMessage = $modeLabel . ' gagal (exit code ' . (int) $run['exit_code'] . ').';
+        $outputLower = strtolower((string) ($run['output'] ?? ''));
         if ((int) $run['exit_code'] === 127) {
             $errorMessage = $modeLabel . ' gagal: PlatformIO CLI tidak ditemukan pada runtime server (exit code 127).';
+        } elseif ($mode === 'upload' && (
+            str_contains($outputLower, 'upload_port') ||
+            str_contains($outputLower, 'serial port') ||
+            str_contains($outputLower, 'could not open port') ||
+            str_contains($outputLower, 'could not find the file') ||
+            str_contains($outputLower, 'resource busy') ||
+            str_contains($outputLower, 'permission denied')
+        )) {
+            $errorMessage = 'Upload firmware gagal: port USB serial tidak tersedia/terkunci di server. '
+                . 'Jika server remote tanpa USB, gunakan Web Flash dari browser client.';
         }
 
         return $route

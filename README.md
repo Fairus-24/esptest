@@ -1187,7 +1187,7 @@ Security notes:
   - command lookup fallback: if primary command is missing (`exit code 127`), service retries common alternatives (`pio`, `platformio`, `python3 -m platformio`, `python -m platformio`) plus common absolute locations (for example `~/.local/bin/pio`, `~/.platformio/penv/bin/platformio` on Linux)
   - if all candidates fail, last CLI output includes checked command list and explicit guidance to set absolute `ADMIN_PLATFORMIO_COMMAND`
   - generated `platformio.ini` now enforces `lib_archive = false` to avoid archive-step shell failures seen on some server environments
-  - generated baseline dependency list removes unused `DHT sensor library for ESPx` (firmware uses Adafruit DHT), reducing shell/path issues on constrained build hosts
+  - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
   - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
@@ -1769,6 +1769,12 @@ GROUP BY protokol;
 pio run -t upload
 ```
 
+- On remote-server deployment without direct USB attachment, server-side upload is expected to fail.
+- Use admin Web Flash flow instead:
+  - `Prepare Web Flash Build` (server compile)
+  - `Connect USB Device` on client browser
+  - `Flash From Browser` (client-side USB flashing)
+
 ### Admin build firmware fails with `exit code 127`
 
 - Meaning: Laravel runtime cannot find PlatformIO CLI executable from current PATH.
@@ -1818,7 +1824,7 @@ pm2 reload ecosystem.config.cjs --update-env
 - Symptom example:
   - `*** [.pio/build/.../libDHT sensor library for ESPx.a] sh: No such file or directory`
 - Current firmware template writes `lib_archive = false` into `platformio.ini` so PlatformIO links library objects directly without `.a` archive step.
-- Baseline `platformio.ini` also removes unused `DHT sensor library for ESPx` dependency to avoid unnecessary archive/path handling.
+- Generator also rewrites `lib_deps` during render/apply, so stale old dependency entries are automatically normalized after running admin build/apply actions.
 - If your workspace still uses old `platformio.ini`, re-apply firmware from admin panel (or pull latest file), then rebuild.
 
 ### ESP32 serial monitor appears frozen (`macet`)

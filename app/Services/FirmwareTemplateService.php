@@ -178,6 +178,12 @@ class FirmwareTemplateService
         $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'monitor_speed', (string) $monitorSpeed);
         // Keep direct object linking to avoid fragile archive steps on some server shells/toolchains.
         $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'lib_archive', 'false');
+        $iniRendered = $this->upsertPlatformioMultilineSetting($iniRendered, 'lib_deps', [
+            'adafruit/DHT sensor library@1.4.4',
+            'adafruit/Adafruit Unified Sensor@1.1.14',
+            'knolleary/PubSubClient@2.8',
+            'bblanchon/ArduinoJson@6.21.3',
+        ]);
         $iniRendered = $this->upsertOrRemovePlatformioSetting($iniRendered, 'monitor_port', $monitorPort);
         $iniRendered = $this->upsertOrRemovePlatformioSetting($iniRendered, 'upload_port', $uploadPort);
 
@@ -347,6 +353,29 @@ class FirmwareTemplateService
         }
 
         return rtrim($content) . "\n" . $line . "\n";
+    }
+
+    /**
+     * @param list<string> $items
+     */
+    private function upsertPlatformioMultilineSetting(string $content, string $key, array $items): string
+    {
+        $cleanItems = array_values(array_filter(array_map(
+            static fn (string $item): string => trim($item),
+            $items
+        ), static fn (string $item): bool => $item !== ''));
+
+        $block = $key . ' =';
+        if ($cleanItems !== []) {
+            $block .= "\n    " . implode("\n    ", $cleanItems);
+        }
+
+        $pattern = '/^' . preg_quote($key, '/') . '\s*=\s*(?:\r?\n[ \t]+[^\r\n]*)*/m';
+        if (preg_match($pattern, $content) === 1) {
+            return preg_replace($pattern, $block, $content, 1) ?: $content;
+        }
+
+        return rtrim($content) . "\n" . $block . "\n";
     }
 
     private function resolveDhtTypeToken(string $model): string
