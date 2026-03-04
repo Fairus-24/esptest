@@ -1188,7 +1188,8 @@ Security notes:
   - if all candidates fail, last CLI output includes checked command list and explicit guidance to set absolute `ADMIN_PLATFORMIO_COMMAND`
   - PlatformIO subprocess now normalizes runtime `PATH` (and `SHELL=/bin/sh` on Unix) to prevent PM2/Laravel environment issues such as `sh: No such file or directory`
   - generated `platformio.ini` now enforces `lib_archive = false` to avoid archive-step shell failures seen on some server environments
-- firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
+  - generated `platformio.ini` also enforces `extra_scripts = pre:scripts/pio_env_fix.py` so PlatformIO/SCons receives safe PATH + shell settings even under restricted service runtimes
+  - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
   - multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
 - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
@@ -1809,7 +1810,9 @@ pm2 reload ecosystem.config.cjs --update-env
   - `*** [.pio/build/.../src/main.cpp.o] sh: No such file or directory`
   - `*** [.pio/build/.../bootloader.bin] sh: No such file or directory`
 - Cause: runtime PATH used by Laravel/PM2 does not include shell/system binary directories (for example `/bin`).
-- Current firmware build runner now injects normalized PATH + `SHELL=/bin/sh` on Unix before running PlatformIO.
+- Current fixes (both active):
+  - firmware build runner injects normalized PATH + `SHELL=/bin/sh` on Unix before running PlatformIO.
+  - PlatformIO `extra_scripts` (`ESP32_Firmware/scripts/pio_env_fix.py`) normalizes PATH + shell inside SCons runtime itself.
 - After update, reload runtime environment:
 
 ```bash

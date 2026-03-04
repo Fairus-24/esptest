@@ -176,6 +176,7 @@ class AdminConfigPanelTest extends TestCase
 
         $platformioContent = $platformioResponse->streamedContent();
         $this->assertStringContainsString('lib_archive = false', $platformioContent);
+        $this->assertStringContainsString('extra_scripts = pre:scripts/pio_env_fix.py', $platformioContent);
         $this->assertStringNotContainsString('DHT sensor library for ESPx', $platformioContent);
         $this->assertStringNotContainsString('ArduinoJson@6.21.3adafruit/DHT sensor library', $platformioContent);
         $this->assertStringContainsString('-DESP_HTTP_INGEST_KEY=\\"runtime-ingest-key\\"', $platformioContent);

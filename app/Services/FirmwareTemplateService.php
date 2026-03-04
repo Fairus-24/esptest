@@ -178,6 +178,7 @@ class FirmwareTemplateService
         $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'monitor_speed', (string) $monitorSpeed);
         // Keep direct object linking to avoid fragile archive steps on some server shells/toolchains.
         $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'lib_archive', 'false');
+        $iniRendered = $this->upsertPlatformioSetting($iniRendered, 'extra_scripts', 'pre:scripts/pio_env_fix.py');
         $iniRendered = $this->upsertPlatformioMultilineSetting($iniRendered, 'lib_deps', [
             'adafruit/DHT sensor library@1.4.4',
             'adafruit/Adafruit Unified Sensor@1.1.14',
