@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Middleware\EnsureAdminSession;
 use App\Models\Device;
 use App\Services\AdminEnvironmentService;
+use App\Services\FirmwareFlashService;
 use App\Services\FirmwareTemplateService;
 use App\Services\RuntimeConfigOverrideService;
 use Illuminate\Database\QueryException;
@@ -13,9 +14,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
 use Laravel\Socialite\Facades\Socialite;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -24,7 +27,8 @@ class AdminConfigController extends Controller
     public function __construct(
         private readonly AdminEnvironmentService $adminEnvironmentService,
         private readonly RuntimeConfigOverrideService $runtimeConfigOverrideService,
-        private readonly FirmwareTemplateService $firmwareTemplateService
+        private readonly FirmwareTemplateService $firmwareTemplateService,
+        private readonly FirmwareFlashService $firmwareFlashService
     ) {
     }
 
@@ -108,7 +112,6 @@ class AdminConfigController extends Controller
     public function index(Request $request)
     {
         $settings = $this->adminEnvironmentService->getFormState();
-        $envSnippet = $this->adminEnvironmentService->renderEnvSnippet();
 
         $devices = Device::query()
             ->withCount('eksperimens')
@@ -129,7 +132,6 @@ class AdminConfigController extends Controller
 
         return view('admin-config', [
             'settings' => $settings,
-            'envSnippet' => $envSnippet,
             'devices' => $devices,
             'selectedDevice' => $selectedDevice,
             'selectedProfile' => $selectedProfile,
@@ -373,6 +375,97 @@ class AdminConfigController extends Controller
             ->with('admin_status', 'Template firmware diterapkan ke workspace. Backup: ' . $result['backup_dir']);
     }
 
+    public function buildFirmware(Device $device): RedirectResponse
+    {
+        return $this->runFirmwareCliCommand($device, 'build');
+    }
+
+    public function uploadFirmware(Device $device): RedirectResponse
+    {
+        return $this->runFirmwareCliCommand($device, 'upload');
+    }
+
+    public function prepareWebFlash(Device $device): JsonResponse
+    {
+        try {
+            // Always regenerate latest source before creating browser-flash artifacts.
+            $bundle = $this->prepareFirmwareBundle($device);
+            $applyResult = $this->firmwareTemplateService->applyToWorkspace($device, $bundle);
+        } catch (Throwable $e) {
+            Log::error('Webflash preparation failed on workspace apply stage.', [
+                'device_id' => $device->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Gagal menyiapkan source firmware terbaru di workspace.',
+            ], 500);
+        }
+
+        $build = $this->firmwareFlashService->runBuild();
+        if (!$build['ok']) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Build firmware gagal. Cek output build pada response.',
+                'build' => $build,
+            ], 422);
+        }
+
+        $artifacts = $this->firmwareFlashService->resolveWebFlashArtifacts();
+        if ($artifacts['required_missing'] !== []) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Build selesai tetapi artifact binary wajib belum lengkap.',
+                'missing' => $artifacts['required_missing'],
+                'artifacts' => $artifacts,
+                'build' => $build,
+            ], 422);
+        }
+
+        $images = collect($artifacts['images'])
+            ->map(function (array $image) use ($device): array {
+                return [
+                    'name' => $image['name'],
+                    'address' => (int) $image['address'],
+                    'size' => (int) $image['size'],
+                    'url' => route('admin.config.devices.firmware.webflash.artifact', [
+                        'device' => $device->id,
+                        'artifact' => $image['name'],
+                    ], false),
+                ];
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Artifact web flash siap digunakan dari browser client.',
+            'device_id' => $device->id,
+            'build' => $build,
+            'environment' => $artifacts['environment'],
+            'build_dir' => $artifacts['build_dir'],
+            'backup_dir' => (string) ($applyResult['backup_dir'] ?? ''),
+            'images' => $images,
+        ]);
+    }
+
+    public function downloadWebFlashArtifact(Device $device, string $artifact): BinaryFileResponse
+    {
+        $resolved = $this->firmwareFlashService->findWebFlashArtifact($artifact);
+        if ($resolved === null) {
+            abort(404, 'Artifact firmware tidak ditemukan. Jalankan build terlebih dahulu.');
+        }
+
+        $filename = 'esp32-' . $device->id . '-' . $resolved['name'] . '.bin';
+
+        return response()->download((string) $resolved['path'], $filename, [
+            'Content-Type' => 'application/octet-stream',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+        ]);
+    }
+
     /**
      * @return array<string, string>
      */
@@ -382,6 +475,55 @@ class AdminConfigController extends Controller
         $profile = $this->firmwareTemplateService->ensureProfile($device);
 
         return $this->firmwareTemplateService->render($device, $profile, $settings);
+    }
+
+    private function runFirmwareCliCommand(Device $device, string $mode): RedirectResponse
+    {
+        $modeLabel = $mode === 'upload' ? 'Upload firmware' : 'Build firmware';
+        $route = redirect()->route('admin.config.index', ['device_id' => $device->id]);
+
+        try {
+            // Always regenerate + apply first so CLI operation runs on latest profile output.
+            $bundle = $this->prepareFirmwareBundle($device);
+            $applyResult = $this->firmwareTemplateService->applyToWorkspace($device, $bundle);
+        } catch (Throwable $e) {
+            Log::error('Firmware workspace apply failed before CLI command.', [
+                'mode' => $mode,
+                'device_id' => $device->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $route->withErrors([
+                'firmware_cli' => $modeLabel . ' gagal: tidak dapat menyiapkan file firmware di workspace.',
+            ]);
+        }
+
+        $run = $mode === 'upload'
+            ? $this->firmwareFlashService->runUpload()
+            : $this->firmwareFlashService->runBuild();
+
+        $resultPayload = [
+            'mode' => $run['mode'],
+            'ok' => (bool) $run['ok'],
+            'command' => (string) $run['command'],
+            'workdir' => (string) $run['workdir'],
+            'timeout_seconds' => (int) $run['timeout_seconds'],
+            'exit_code' => (int) $run['exit_code'],
+            'output' => (string) $run['output'],
+            'backup_dir' => (string) ($applyResult['backup_dir'] ?? ''),
+        ];
+
+        if ($run['ok']) {
+            return $route
+                ->with('admin_status', $modeLabel . ' berhasil dijalankan.')
+                ->with('firmware_cli_result', $resultPayload);
+        }
+
+        return $route
+            ->withErrors([
+                'firmware_cli' => $modeLabel . ' gagal (exit code ' . (int) $run['exit_code'] . ').',
+            ])
+            ->with('firmware_cli_result', $resultPayload);
     }
 
     /**

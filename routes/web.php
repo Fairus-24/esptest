@@ -42,6 +42,12 @@ Route::prefix('/admin/config')
         Route::get('/devices/{device}/firmware/main.cpp', [AdminConfigController::class, 'downloadMain'])->name('devices.firmware.main');
         Route::get('/devices/{device}/firmware/platformio.ini', [AdminConfigController::class, 'downloadPlatformio'])->name('devices.firmware.platformio');
         Route::post('/devices/{device}/firmware/apply', [AdminConfigController::class, 'applyFirmware'])->name('devices.firmware.apply');
+        Route::post('/devices/{device}/firmware/build', [AdminConfigController::class, 'buildFirmware'])->name('devices.firmware.build');
+        Route::post('/devices/{device}/firmware/upload', [AdminConfigController::class, 'uploadFirmware'])->name('devices.firmware.upload');
+        Route::post('/devices/{device}/firmware/webflash/prepare', [AdminConfigController::class, 'prepareWebFlash'])->name('devices.firmware.webflash.prepare');
+        Route::get('/devices/{device}/firmware/webflash/{artifact}.bin', [AdminConfigController::class, 'downloadWebFlashArtifact'])
+            ->whereIn('artifact', ['bootloader', 'partitions', 'firmware'])
+            ->name('devices.firmware.webflash.artifact');
     });
 
 Route::view('/doc', 'doc')->name('doc');

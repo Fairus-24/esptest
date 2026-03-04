@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Device;
 use App\Models\Eksperimen;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\File;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
 use Laravel\Socialite\Facades\Socialite;
 use Mockery;
@@ -244,6 +246,119 @@ class AdminConfigPanelTest extends TestCase
         $this->assertStringContainsString('-DESP_HTTP_INTERVAL_MS=17000UL', $platformioContent);
         $this->assertStringContainsString('-DESP_MQTT_INTERVAL_MS=15000UL', $platformioContent);
         $this->assertStringContainsString('-DESP_DHT_MIN_READ_INTERVAL_MS=2500UL', $platformioContent);
+    }
+
+    public function test_admin_can_trigger_firmware_build_from_panel(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-BUILD',
+            'lokasi' => 'Build Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        Process::fake([
+            '*' => Process::result('BUILD OK', '', 0),
+        ]);
+
+        $this->post('/admin/config/devices/' . $device->id . '/firmware/build')
+            ->assertRedirect('/admin/config?device_id=' . $device->id)
+            ->assertSessionHas('admin_status')
+            ->assertSessionHas('firmware_cli_result');
+
+        Process::assertRan(function ($process) {
+            $command = is_array($process->command)
+                ? implode(' ', $process->command)
+                : (string) $process->command;
+
+            return str_contains($command, 'run')
+                && !str_contains($command, '-t upload');
+        });
+    }
+
+    public function test_admin_upload_firmware_failure_is_reported_in_session(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-UPLOAD',
+            'lokasi' => 'Upload Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        Process::fake([
+            '*' => Process::result('', 'UPLOAD FAILED', 1),
+        ]);
+
+        $this->post('/admin/config/devices/' . $device->id . '/firmware/upload')
+            ->assertRedirect('/admin/config?device_id=' . $device->id)
+            ->assertSessionHasErrors('firmware_cli')
+            ->assertSessionHas('firmware_cli_result');
+
+        Process::assertRan(function ($process) {
+            $command = is_array($process->command)
+                ? implode(' ', $process->command)
+                : (string) $process->command;
+
+            return str_contains($command, '-t upload');
+        });
+    }
+
+    public function test_admin_prepare_webflash_returns_artifacts_manifest(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-WEBFLASH',
+            'lokasi' => 'Remote Browser',
+        ]);
+
+        config(['admin.platformio_env' => 'webflash-test']);
+        $buildDir = base_path('ESP32_Firmware/.pio/build/webflash-test');
+        File::ensureDirectoryExists($buildDir);
+        file_put_contents($buildDir . '/bootloader.bin', str_repeat('A', 64));
+        file_put_contents($buildDir . '/partitions.bin', str_repeat('B', 64));
+        file_put_contents($buildDir . '/firmware.bin', str_repeat('C', 128));
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        Process::fake([
+            '*' => Process::result('WEBFLASH BUILD OK', '', 0),
+        ]);
+
+        $this->postJson('/admin/config/devices/' . $device->id . '/firmware/webflash/prepare')
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonStructure([
+                'ok',
+                'message',
+                'device_id',
+                'build' => ['ok', 'command', 'exit_code', 'output'],
+                'environment',
+                'images' => [
+                    ['name', 'address', 'size', 'url'],
+                ],
+            ]);
+    }
+
+    public function test_admin_webflash_artifact_download_returns_binary_file(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-ARTIFACT',
+            'lokasi' => 'Binary Download',
+        ]);
+
+        config(['admin.platformio_env' => 'webflash-download-test']);
+        $buildDir = base_path('ESP32_Firmware/.pio/build/webflash-download-test');
+        File::ensureDirectoryExists($buildDir);
+        file_put_contents($buildDir . '/firmware.bin', 'FIRMWARE-BINARY-DATA');
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $this->get('/admin/config/devices/' . $device->id . '/firmware/webflash/firmware.bin')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/octet-stream');
     }
 
     private function mockGoogleCallback(string $email): void

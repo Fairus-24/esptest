@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Admin Config - IoT Research</title>
     <style>
         :root {
@@ -234,6 +235,12 @@
             line-height: 1.4;
         }
 
+        .webflash-log {
+            min-height: 180px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
         details summary {
             cursor: pointer;
             font-weight: 700;
@@ -274,8 +281,7 @@
             $quickRuntimeItems = collect($quickRuntimeKeys)
                 ->map(fn (string $key) => $settings[$key] ?? null)
                 ->filter();
-
-            $grouped = collect($settings)->groupBy('group');
+            $firmwareCliResult = session('firmware_cli_result');
         @endphp
 
         <div class="topbar">
@@ -349,63 +355,7 @@
                     </form>
                 </div>
 
-                <div class="panel">
-                    <details>
-                        <summary>Advanced Runtime Overrides</summary>
-                        <form method="POST" action="{{ route('admin.config.runtime.save', [], false) }}" class="stack">
-                            @csrf
-                            @foreach ($grouped as $groupName => $items)
-                                <div class="stack">
-                                    <div class="note" style="font-weight:700;color:#9be8ff;">{{ $groupName }}</div>
-                                    <div class="row">
-                                        @foreach ($items as $item)
-                                            @php
-                                                $key = $item['key'];
-                                                $isBool = ($item['type'] ?? '') === 'boolean';
-                                                $isSecret = (bool) ($item['secret'] ?? false);
-                                                $inputValue = (string) ($item['input_value'] ?? '');
-                                            @endphp
-                                            <div class="field">
-                                                <label for="adv_{{ $key }}">
-                                                    {{ $item['label'] }}
-                                                    @if ($item['stored'])
-                                                        <span class="tag">override</span>
-                                                    @endif
-                                                </label>
-                                                @if ($isBool)
-                                                    <select id="adv_{{ $key }}" name="{{ $key }}">
-                                                        <option value="">Use default</option>
-                                                        <option value="1" @selected($inputValue === '1')>true</option>
-                                                        <option value="0" @selected($inputValue === '0')>false</option>
-                                                    </select>
-                                                @else
-                                                    <input
-                                                        id="adv_{{ $key }}"
-                                                        name="{{ $key }}"
-                                                        type="{{ $isSecret ? 'password' : 'text' }}"
-                                                        value="{{ $inputValue }}"
-                                                        placeholder="{{ $item['placeholder'] ?? '' }}"
-                                                        autocomplete="off"
-                                                    >
-                                                @endif
-                                                <small>{{ $item['help'] ?? '' }}</small>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                </div>
-                            @endforeach
-                            <div class="actions">
-                                <button class="btn primary" type="submit">Save Advanced Overrides</button>
-                            </div>
-                        </form>
-                    </details>
-                </div>
-
-                <div class="panel">
-                    <h2>Deploy Snippet</h2>
-                    <p class="sub">Apply this snippet into production `.env` if you want permanent file-based sync.</p>
-                    <textarea readonly>{{ $envSnippet }}</textarea>
-                </div>
+                {{-- Advanced Runtime Overrides and Deploy Snippet removed to keep admin focused on operational controls. --}}
             </div>
 
             <div class="stack">
@@ -710,7 +660,54 @@
                         @csrf
                         <button class="btn primary" type="submit">Apply to Workspace</button>
                     </form>
+                    <form method="POST" action="{{ route('admin.config.devices.firmware.build', $selectedDevice, false) }}">
+                        @csrf
+                        <button class="btn" type="submit">Build Firmware</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.config.devices.firmware.upload', $selectedDevice, false) }}">
+                        @csrf
+                        <button class="btn warn" type="submit">Build & Upload</button>
+                    </form>
                 </div>
+                <p class="note">Build/Upload will always regenerate latest firmware from selected profile, apply to workspace, then run PlatformIO command in <code>ESP32_Firmware</code>.</p>
+
+                @if (is_array($firmwareCliResult))
+                    <div class="field section-gap">
+                        <label>Last Firmware CLI Result</label>
+                        <small>
+                            Mode: <strong>{{ strtoupper((string) ($firmwareCliResult['mode'] ?? '-')) }}</strong> |
+                            Status: <strong>{{ !empty($firmwareCliResult['ok']) ? 'SUCCESS' : 'FAILED' }}</strong> |
+                            Exit: <strong>{{ (int) ($firmwareCliResult['exit_code'] ?? -1) }}</strong> |
+                            Timeout: <strong>{{ (int) ($firmwareCliResult['timeout_seconds'] ?? 0) }}s</strong>
+                        </small>
+                        <small>Command: <code>{{ (string) ($firmwareCliResult['command'] ?? '-') }}</code></small>
+                        <small>Workdir: <code>{{ (string) ($firmwareCliResult['workdir'] ?? '-') }}</code></small>
+                        @if (!empty($firmwareCliResult['backup_dir']))
+                            <small>Workspace backup: <code>{{ (string) $firmwareCliResult['backup_dir'] }}</code></small>
+                        @endif
+                        <textarea readonly>{{ (string) ($firmwareCliResult['output'] ?? '') }}</textarea>
+                    </div>
+                @endif
+
+                <div
+                    id="webflash-panel"
+                    class="field section-gap"
+                    data-prepare-url="{{ route('admin.config.devices.firmware.webflash.prepare', $selectedDevice, false) }}"
+                >
+                    <label>Web Flash (Remote Build + Client USB)</label>
+                    <small>
+                        Cocok untuk server remote tanpa USB. Build dilakukan di server, lalu flashing dilakukan di browser client yang terhubung langsung ke ESP32 via Web Serial.
+                    </small>
+                    <div class="actions section-gap">
+                        <button type="button" class="btn" id="webflash-prepare-btn">Prepare Web Flash Build</button>
+                        <button type="button" class="btn" id="webflash-connect-btn">Connect USB Device</button>
+                        <button type="button" class="btn primary" id="webflash-flash-btn">Flash From Browser</button>
+                        <button type="button" class="btn danger" id="webflash-disconnect-btn">Disconnect USB</button>
+                    </div>
+                    <div id="webflash-status" class="note section-gap">Status: idle</div>
+                    <textarea id="webflash-log" class="webflash-log" readonly></textarea>
+                </div>
+
                 <div class="row">
                     <div class="field">
                         <label>main.cpp</label>
@@ -728,5 +725,249 @@
             </div>
         @endif
     </div>
+
+    <script type="module">
+        (function () {
+            const panel = document.getElementById('webflash-panel');
+            if (!panel) {
+                return;
+            }
+
+            const prepareUrl = panel.getAttribute('data-prepare-url');
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+            const prepareButton = document.getElementById('webflash-prepare-btn');
+            const connectButton = document.getElementById('webflash-connect-btn');
+            const flashButton = document.getElementById('webflash-flash-btn');
+            const disconnectButton = document.getElementById('webflash-disconnect-btn');
+            const statusNode = document.getElementById('webflash-status');
+            const logNode = document.getElementById('webflash-log');
+
+            let manifest = null;
+            let transport = null;
+            let esploader = null;
+            let device = null;
+
+            const terminal = {
+                clean() {
+                    if (logNode) {
+                        logNode.value = '';
+                    }
+                },
+                write(data) {
+                    appendLog(typeof data === 'string' ? data : String(data), false);
+                },
+                writeLine(data) {
+                    appendLog(typeof data === 'string' ? data : String(data), true);
+                }
+            };
+
+            function setStatus(message, error = false) {
+                if (!statusNode) {
+                    return;
+                }
+                statusNode.textContent = 'Status: ' + message;
+                statusNode.style.color = error ? '#fecaca' : '#9bb2c6';
+            }
+
+            function appendLog(message, newline = true) {
+                if (!logNode) {
+                    return;
+                }
+                logNode.value += message + (newline ? '\n' : '');
+                logNode.scrollTop = logNode.scrollHeight;
+            }
+
+            function bytesToBinaryString(uint8Array) {
+                const chunkSize = 0x8000;
+                let output = '';
+
+                for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                    const chunk = uint8Array.subarray(i, i + chunkSize);
+                    output += String.fromCharCode(...chunk);
+                }
+
+                return output;
+            }
+
+            async function loadEspToolLib() {
+                return import('https://unpkg.com/esptool-js@0.5.7/lib/index.js');
+            }
+
+            async function ensureConnected() {
+                if (esploader && transport) {
+                    return true;
+                }
+
+                if (!('serial' in navigator)) {
+                    setStatus('Web Serial tidak didukung browser ini (gunakan Chrome/Edge).', true);
+                    appendLog('ERROR: Web Serial API is not available.');
+                    return false;
+                }
+
+                try {
+                    setStatus('Meminta akses USB serial...');
+                    const { ESPLoader, Transport } = await loadEspToolLib();
+
+                    if (!device) {
+                        device = await navigator.serial.requestPort({});
+                    }
+
+                    transport = new Transport(device, true);
+                    esploader = new ESPLoader({
+                        transport,
+                        baudrate: 115200,
+                        romBaudrate: 115200,
+                        terminal,
+                        debugLogging: false,
+                    });
+
+                    const chip = await esploader.main();
+                    setStatus('Terhubung ke ' + chip);
+                    appendLog('Connected chip: ' + chip);
+                    return true;
+                } catch (error) {
+                    setStatus('Gagal connect ke perangkat.', true);
+                    appendLog('ERROR: ' + (error?.message || String(error)));
+                    transport = null;
+                    esploader = null;
+                    return false;
+                }
+            }
+
+            async function disconnectDevice() {
+                try {
+                    if (transport) {
+                        await transport.disconnect();
+                    }
+                } catch (error) {
+                    appendLog('WARN: disconnect issue: ' + (error?.message || String(error)));
+                } finally {
+                    transport = null;
+                    esploader = null;
+                    device = null;
+                }
+            }
+
+            async function prepareArtifacts() {
+                if (!prepareUrl) {
+                    setStatus('Prepare URL tidak tersedia.', true);
+                    return;
+                }
+
+                setStatus('Menjalankan build webflash di server...');
+                appendLog('Preparing webflash artifacts from server...');
+
+                try {
+                    const response = await fetch(prepareUrl, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                    });
+
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) {
+                        manifest = null;
+                        setStatus('Prepare gagal.', true);
+                        appendLog('ERROR: ' + (data.message || 'Prepare failed.'));
+                        if (data.build && data.build.output) {
+                            appendLog(data.build.output);
+                        }
+                        return;
+                    }
+
+                    manifest = data;
+                    const totalBytes = (data.images || []).reduce((sum, item) => sum + (item.size || 0), 0);
+                    setStatus('Artifacts siap. Total ' + (data.images || []).length + ' file.');
+                    appendLog('Webflash artifacts ready. Env: ' + data.environment + ', bytes: ' + totalBytes);
+                } catch (error) {
+                    manifest = null;
+                    setStatus('Prepare gagal (network/server error).', true);
+                    appendLog('ERROR: ' + (error?.message || String(error)));
+                }
+            }
+
+            async function flashFromBrowser() {
+                if (!manifest || !Array.isArray(manifest.images) || manifest.images.length === 0) {
+                    setStatus('Artifacts belum siap. Klik Prepare dulu.', true);
+                    appendLog('ERROR: No manifest loaded.');
+                    return;
+                }
+
+                const connected = await ensureConnected();
+                if (!connected) {
+                    return;
+                }
+
+                try {
+                    setStatus('Mengunduh binary artifacts...');
+                    const fileArray = [];
+
+                    for (const image of manifest.images) {
+                        appendLog('Downloading ' + image.name + '...');
+                        const response = await fetch(image.url, {
+                            method: 'GET',
+                            credentials: 'same-origin',
+                        });
+                        if (!response.ok) {
+                            throw new Error('Failed to download ' + image.name + ' artifact.');
+                        }
+
+                        const buffer = await response.arrayBuffer();
+                        const binaryData = bytesToBinaryString(new Uint8Array(buffer));
+                        fileArray.push({
+                            address: Number(image.address),
+                            data: binaryData,
+                        });
+                    }
+
+                    setStatus('Flashing ke ESP32...');
+                    appendLog('Starting flash operation...');
+
+                    await esploader.writeFlash({
+                        fileArray,
+                        flashSize: 'keep',
+                        flashMode: 'keep',
+                        flashFreq: 'keep',
+                        eraseAll: false,
+                        compress: true,
+                        reportProgress: (fileIndex, written, total) => {
+                            const progress = total > 0 ? Math.floor((written / total) * 100) : 0;
+                            setStatus('Flashing file #' + (fileIndex + 1) + ': ' + progress + '%');
+                        },
+                    });
+                    await esploader.after();
+
+                    setStatus('Flash selesai.');
+                    appendLog('Flash completed successfully.');
+                } catch (error) {
+                    setStatus('Flash gagal.', true);
+                    appendLog('ERROR: ' + (error?.message || String(error)));
+                }
+            }
+
+            prepareButton?.addEventListener('click', async () => {
+                await prepareArtifacts();
+            });
+
+            connectButton?.addEventListener('click', async () => {
+                await ensureConnected();
+            });
+
+            flashButton?.addEventListener('click', async () => {
+                await flashFromBrowser();
+            });
+
+            disconnectButton?.addEventListener('click', async () => {
+                await disconnectDevice();
+                setStatus('USB disconnected.');
+                appendLog('Disconnected from device.');
+            });
+        })();
+    </script>
 </body>
 </html>

@@ -220,6 +220,9 @@ The project has been updated with the following behavior:
 161. `/doc` floating back-to-top control is now icon-only (arrow-up, no visible text label) and uses explicit smooth-scroll behavior via JavaScript (`window.scrollTo({ top: 0, behavior: 'smooth' })`).
 162. Admin Google login rejection message is now generic and no longer exposes allow-list email criteria on `/admin/login`; unauthorized accounts receive a non-sensitive access-denied notice.
 163. Admin firmware profile now supports advanced tuning that directly regenerates both `ESP32_Firmware/src/main.cpp` and `ESP32_Firmware/platformio.ini`: protocol intervals, HTTP timeout, MQTT packet size, debug level, monitor/upload serial ports, and monitor speed are configurable per device from GUI.
+164. Admin firmware console now supports direct PlatformIO actions from web UI: `Build Firmware` and `Build & Upload` run against `ESP32_Firmware` after auto-regenerating/applying the latest selected device profile, with command/exit/output logs shown in-page.
+165. Admin firmware console now supports **remote server build + client USB flash** (`Web Flash`) via browser Web Serial (`esptool-js`): server prepares artifacts (`bootloader.bin`, `partitions.bin`, `firmware.bin`) and connected client browser performs the actual USB flashing.
+166. Admin page layout is streamlined for operational use: verbose advanced-runtime and deploy-snippet panels were removed, while firmware build/flash actions and logs are now centralized in one focused firmware section.
 
 ## Tech Stack
 
@@ -1161,6 +1164,10 @@ Purpose: runtime configuration management + ESP32 firmware provisioning from GUI
 - `GET /admin/config/devices/{device}/firmware/main.cpp` -> download generated `main.cpp`.
 - `GET /admin/config/devices/{device}/firmware/platformio.ini` -> download generated `platformio.ini`.
 - `POST /admin/config/devices/{device}/firmware/apply` -> apply generated firmware files to workspace with backup.
+- `POST /admin/config/devices/{device}/firmware/build` -> regenerate + apply firmware, then run PlatformIO build (`run`).
+- `POST /admin/config/devices/{device}/firmware/upload` -> regenerate + apply firmware, then run PlatformIO upload (`run -t upload`).
+- `POST /admin/config/devices/{device}/firmware/webflash/prepare` -> regenerate + apply + build, then return webflash artifact manifest JSON.
+- `GET /admin/config/devices/{device}/firmware/webflash/{artifact}.bin` -> serve built artifact for browser flasher (`bootloader|partitions|firmware`).
 
 Security notes:
 
@@ -1171,6 +1178,16 @@ Security notes:
   - timing: `sensor_interval_ms`, `http_interval_ms`, `mqtt_interval_ms`, `dht_min_read_interval_ms`
   - transport/runtime: `http_read_timeout_ms`, `mqtt_max_packet_size`, `core_debug_level`
   - serial tooling: `monitor_speed`, optional `monitor_port`, optional `upload_port`
+- firmware build/upload runner from admin UI uses:
+  - `ADMIN_PLATFORMIO_COMMAND` (default `pio`)
+  - `ADMIN_PLATFORMIO_WORKDIR` (default `ESP32_Firmware`)
+  - `ADMIN_PLATFORMIO_ENV` (optional fixed PlatformIO environment name; if empty auto-detected from `platformio.ini`)
+  - `ADMIN_PLATFORMIO_TIMEOUT_SECONDS` (default `900`)
+  - `ADMIN_FIRMWARE_CLI_OUTPUT_LIMIT` (default `60000` chars)
+- browser-based Web Flash requires:
+  - Chrome / Edge with Web Serial support
+  - ESP32 connected via USB to the **client machine** opening the admin page
+  - does not require USB connection on remote Debian server
 
 ### Documentation Route (`/doc`)
 
