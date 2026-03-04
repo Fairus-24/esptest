@@ -69,7 +69,7 @@ AUTO_SYNC_COMPOSER_MEMORY_LIMIT="$(read_env_var AUTO_SYNC_COMPOSER_MEMORY_LIMIT 
 
 MODE="${1:-pull}"
 case "$MODE" in
-  pull|commit-push|full) ;;
+  pull|commit-push|full|always) ;;
   *)
     log "invalid mode: $MODE"
     exit 2
@@ -118,6 +118,28 @@ run_tests() {
     bash -lc "$AUTO_SYNC_TEST_CMD"
   fi
   log "tests passed"
+}
+
+build_commit_message() {
+  local changed_files file_count scope_summary sample_files
+  changed_files="$(git diff --cached --name-only)"
+  file_count="$(printf '%s\n' "$changed_files" | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
+  if [[ -z "$file_count" || "$file_count" == "0" ]]; then
+    printf '%s' "$AUTO_SYNC_COMMIT_PREFIX"
+    return 0
+  fi
+
+  scope_summary="$(printf '%s\n' "$changed_files" | sed '/^[[:space:]]*$/d' | awk -F'/' '{print $1}' | sort -u | head -n 4 | paste -sd, -)"
+  if [[ -z "$scope_summary" ]]; then
+    scope_summary="repo"
+  fi
+
+  sample_files="$(printf '%s\n' "$changed_files" | sed '/^[[:space:]]*$/d' | head -n 3 | tr '\n' ',' | sed 's/,$//')"
+  if [[ -z "$sample_files" ]]; then
+    sample_files="n/a"
+  fi
+
+  printf '%s | scope=%s | files=%s | sample=%s' "$AUTO_SYNC_COMMIT_PREFIX" "$scope_summary" "$file_count" "$sample_files"
 }
 
 post_pull_runtime_update() {
@@ -220,7 +242,7 @@ do_commit_push() {
   fi
 
   local commit_message
-  commit_message="${AUTO_SYNC_COMMIT_PREFIX} $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  commit_message="$(build_commit_message)"
   git commit -m "$commit_message"
   log "created commit: $commit_message"
 
@@ -239,7 +261,7 @@ log "start mode=$MODE branch=$AUTO_SYNC_BRANCH remote=$AUTO_SYNC_REMOTE"
 case "$MODE" in
   pull) do_pull ;;
   commit-push) do_commit_push ;;
-  full)
+  full|always)
     do_pull
     do_commit_push
     ;;

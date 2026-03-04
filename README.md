@@ -230,6 +230,7 @@ The project has been updated with the following behavior:
 171. ESP32 firmware config constants now follow compile-time macros (`ESP_HTTP_BASE_URL`, `ESP_HTTP_ENDPOINT`, `ESP_MQTT_BROKER`, `ESP_MQTT_PORT`, `ESP_DEVICE_ID`, interval macros), so profile/build-flag values are no longer silently overridden by stale hardcoded literals in `main.cpp`.
 172. ESP32 firmware now blocks loopback transport targets (`localhost`/`127.0.0.1`) for both HTTP and MQTT at runtime with explicit serial error messages, preventing silent no-data scenarios when device network and server host are different machines.
 173. Admin firmware profile MQTT behavior is now explicit and consistent: `mqtt_broker` is the primary server target for generated firmware, `mqtt_host` is legacy fallback only, and saving a changed broker auto-syncs legacy host when it was previously following broker value.
+174. Debian git runtime sync now supports `always` mode (alias `full`) and cron installer defaults to full sync every minute (`pull + auto-commit + auto-push`), with auto commit messages generated from actual changed file scopes.
 
 ## Tech Stack
 
@@ -803,13 +804,23 @@ chmod +x scripts/debian/*.sh
 bash scripts/debian/install_runtime_sync_cron.sh /var/www/esptest
 ```
 
-What this installs:
+Default install mode (`always`) behavior:
 
-- pull sync every 2 minutes (`git_runtime_sync.sh pull`)
-- auto test + auto commit/push every 10 minutes (`git_runtime_sync.sh commit-push`)
+- full sync every 1 minute (`git_runtime_sync.sh full`)
+  - auto pull remote updates
+  - auto test (when needed by flow)
+  - auto commit local source changes
+  - auto push to remote
+- auto commit message format follows changed files (scope + file count + sample path)
 - logs written to:
   - `storage/logs/git_runtime_sync.log`
   - `storage/logs/git_runtime_sync.cron.log`
+
+Optional legacy split mode:
+
+```bash
+bash scripts/debian/install_runtime_sync_cron.sh /var/www/esptest split
+```
 
 Before enabling `AUTO_SYNC_ENABLE_PUSH=true`, ensure non-interactive git auth is ready on server (SSH deploy key or HTTPS PAT credential helper).
 
@@ -1524,7 +1535,7 @@ GROUP BY protokol;
   - `tail -f storage/logs/git_runtime_sync.log`
   - `tail -f storage/logs/git_runtime_sync.cron.log`
 - Run manual smoke:
-  - `bash scripts/debian/git_runtime_sync.sh pull`
+  - `bash scripts/debian/git_runtime_sync.sh full`
 
 ### Auto commit exists but push does not happen
 
@@ -1535,7 +1546,7 @@ GROUP BY protokol;
 - Check whether tests failed before commit/push in `git_runtime_sync.log`.
 - If server branch is behind/diverged, run once manually:
   - `git pull --rebase origin main`
-  - then retry `bash scripts/debian/git_runtime_sync.sh commit-push`
+  - then retry `bash scripts/debian/git_runtime_sync.sh full`
 
 ### Humidity value not shown on dashboard
 
