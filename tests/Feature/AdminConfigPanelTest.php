@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Device;
+use App\Models\DeviceFirmwareProfile;
 use App\Models\Eksperimen;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Process;
@@ -87,6 +88,67 @@ class AdminConfigPanelTest extends TestCase
             'const int DEVICE_ID = ' . $device->id . ';',
             $response->streamedContent()
         );
+    }
+
+    public function test_admin_profile_extra_build_flags_cannot_override_selected_device_id(): void
+    {
+        Device::query()->create([
+            'nama_device' => 'ESP32-BASE',
+            'lokasi' => 'Lab 0',
+        ]);
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-TARGET',
+            'lokasi' => 'Lab 1',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $this->post('/admin/config/devices/' . $device->id . '/profile', [
+            'board' => 'esp32doit-devkit-v1',
+            'wifi_ssid' => 'LAB-WIFI',
+            'wifi_password' => 'password-lab',
+            'server_host' => '192.168.1.100',
+            'http_base_url' => 'https://iot.example.com',
+            'http_endpoint' => '/api/http-data',
+            'mqtt_broker' => 'mqtt.example.com',
+            'mqtt_host' => 'mqtt.example.com',
+            'mqtt_port' => 1883,
+            'mqtt_topic' => 'iot/esp32/suhu',
+            'mqtt_user' => 'esp32',
+            'mqtt_password' => 'esp32',
+            'http_tls_insecure' => '1',
+            'http_read_timeout_ms' => 5000,
+            'dht_pin' => 4,
+            'dht_model' => 'DHT11',
+            'sensor_interval_ms' => 5000,
+            'http_interval_ms' => 10000,
+            'mqtt_interval_ms' => 10000,
+            'dht_min_read_interval_ms' => 1500,
+            'core_debug_level' => 0,
+            'mqtt_max_packet_size' => 2048,
+            'monitor_speed' => 115200,
+            'monitor_port' => '',
+            'upload_port' => '',
+            'extra_build_flags' => "-DESP_DEVICE_ID=1\n-DESP_CUSTOM_SAMPLE=1",
+        ])->assertRedirect('/admin/config?device_id=' . $device->id)
+            ->assertSessionHas('admin_status');
+
+        $profile = DeviceFirmwareProfile::query()->where('device_id', $device->id)->firstOrFail();
+        $this->assertStringNotContainsString('ESP_DEVICE_ID', (string) $profile->extra_build_flags);
+        $this->assertStringContainsString('-DESP_CUSTOM_SAMPLE=1', (string) $profile->extra_build_flags);
+
+        $mainResponse = $this->get('/admin/config/devices/' . $device->id . '/firmware/main.cpp')->assertOk();
+        $this->assertStringContainsString(
+            'const int DEVICE_ID = ' . $device->id . ';',
+            $mainResponse->streamedContent()
+        );
+
+        $iniResponse = $this->get('/admin/config/devices/' . $device->id . '/firmware/platformio.ini')->assertOk();
+        $iniContent = $iniResponse->streamedContent();
+        $this->assertStringContainsString('-DESP_DEVICE_ID=' . $device->id, $iniContent);
+        $this->assertStringNotContainsString('-DESP_DEVICE_ID=1', $iniContent);
+        $this->assertStringContainsString('-DESP_CUSTOM_SAMPLE=1', $iniContent);
     }
 
     public function test_admin_can_update_and_delete_device_with_purge_option(): void

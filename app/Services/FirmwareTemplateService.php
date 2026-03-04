@@ -211,6 +211,7 @@ class FirmwareTemplateService
         $iniRendered = $this->upsertPlatformioPlainFlag($iniRendered, 'ESP_DHT_MIN_READ_INTERVAL_MS', $dhtMinReadInterval . 'UL');
 
         $extraFlags = trim((string) $profile->extra_build_flags);
+        $extraFlags = $this->stripManagedBuildFlagsFromExtra($extraFlags);
         if ($extraFlags !== '') {
             $extraLines = collect(preg_split('/\r\n|\r|\n/', $extraFlags) ?: [])
                 ->map(fn (string $line): string => trim($line))
@@ -390,5 +391,67 @@ class FirmwareTemplateService
             'AM2302' => 'DHT22',
             default => 'DHT11',
         };
+    }
+
+    private function stripManagedBuildFlagsFromExtra(string $extraFlags): string
+    {
+        if ($extraFlags === '') {
+            return '';
+        }
+
+        $reserved = [];
+        foreach ($this->reservedManagedBuildFlags() as $flag) {
+            $reserved[strtoupper($flag)] = true;
+        }
+
+        $filtered = [];
+        $lines = preg_split('/\r\n|\r|\n/', $extraFlags) ?: [];
+        foreach ($lines as $line) {
+            $trimmed = trim((string) $line);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            if (preg_match('/^-D([A-Za-z_][A-Za-z0-9_]*)(?:=.*)?$/', $trimmed, $matches) === 1) {
+                $macro = strtoupper((string) ($matches[1] ?? ''));
+                if ($macro !== '' && isset($reserved[$macro])) {
+                    continue;
+                }
+            }
+
+            $filtered[] = $trimmed;
+        }
+
+        return implode(PHP_EOL, $filtered);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function reservedManagedBuildFlags(): array
+    {
+        return [
+            'ESP_DEVICE_ID',
+            'ESP_DHT_PIN',
+            'ESP_WIFI_SSID',
+            'ESP_WIFI_PASSWORD',
+            'ESP_HTTP_INGEST_KEY',
+            'ESP_HTTP_BASE_URL',
+            'ESP_HTTP_ENDPOINT',
+            'ESP_MQTT_BROKER',
+            'ESP_MQTT_PORT',
+            'ESP_MQTT_TOPIC',
+            'ESP_MQTT_USER',
+            'ESP_MQTT_PASSWORD',
+            'ESP_HTTP_TLS_INSECURE',
+            'ESP_HTTP_READ_TIMEOUT_MS',
+            'ESP_SENSOR_INTERVAL_MS',
+            'ESP_HTTP_INTERVAL_MS',
+            'ESP_MQTT_INTERVAL_MS',
+            'ESP_DHT_MIN_READ_INTERVAL_MS',
+            'CORE_DEBUG_LEVEL',
+            'HTTP_CLIENT_TIMEOUT',
+            'MQTT_MAX_PACKET_SIZE',
+        ];
     }
 }

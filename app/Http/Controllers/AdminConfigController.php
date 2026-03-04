@@ -336,13 +336,21 @@ class AdminConfigController extends Controller
         $validated['upload_port'] = trim((string) ($validated['upload_port'] ?? ''));
         $validated['monitor_port'] = $validated['monitor_port'] !== '' ? $validated['monitor_port'] : null;
         $validated['upload_port'] = $validated['upload_port'] !== '' ? $validated['upload_port'] : null;
+        $extraFlagsRaw = (string) ($validated['extra_build_flags'] ?? '');
+        [$sanitizedExtraFlags, $droppedManagedFlags] = $this->sanitizeExtraBuildFlags($extraFlagsRaw);
+        $validated['extra_build_flags'] = $sanitizedExtraFlags !== '' ? $sanitizedExtraFlags : null;
 
         $profile->fill($validated);
         $profile->save();
 
+        $statusMessage = 'Profil firmware device berhasil diperbarui.';
+        if ($droppedManagedFlags !== []) {
+            $statusMessage .= ' Beberapa macro build dikelola otomatis dan diabaikan: ' . implode(', ', $droppedManagedFlags) . '.';
+        }
+
         return redirect()
             ->route('admin.config.index', ['device_id' => $device->id])
-            ->with('admin_status', 'Profil firmware device berhasil diperbarui.');
+            ->with('admin_status', $statusMessage);
     }
 
     public function downloadMain(Device $device): StreamedResponse
@@ -555,6 +563,74 @@ class AdminConfigController extends Controller
         return [
             'configured' => $clientId !== '' && $clientSecret !== '' && $redirectUri !== '' && $allowedEmail !== '',
             'allowed_email' => $allowedEmail,
+        ];
+    }
+
+    /**
+     * @return array{0: string, 1: list<string>}
+     */
+    private function sanitizeExtraBuildFlags(string $extraFlags): array
+    {
+        $reservedFlags = $this->reservedManagedBuildFlags();
+        $reservedMap = [];
+        foreach ($reservedFlags as $flag) {
+            $reservedMap[strtoupper($flag)] = true;
+        }
+
+        $sanitizedLines = [];
+        $droppedManagedFlags = [];
+        $lines = preg_split('/\r\n|\r|\n/', $extraFlags) ?: [];
+
+        foreach ($lines as $line) {
+            $trimmedLine = trim((string) $line);
+            if ($trimmedLine === '') {
+                continue;
+            }
+
+            if (preg_match('/^-D([A-Za-z_][A-Za-z0-9_]*)(?:=.*)?$/', $trimmedLine, $matches) === 1) {
+                $macroName = strtoupper((string) ($matches[1] ?? ''));
+                if ($macroName !== '' && isset($reservedMap[$macroName])) {
+                    $droppedManagedFlags[$macroName] = true;
+                    continue;
+                }
+            }
+
+            $sanitizedLines[] = $trimmedLine;
+        }
+
+        return [
+            implode(PHP_EOL, $sanitizedLines),
+            array_keys($droppedManagedFlags),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function reservedManagedBuildFlags(): array
+    {
+        return [
+            'ESP_DEVICE_ID',
+            'ESP_DHT_PIN',
+            'ESP_WIFI_SSID',
+            'ESP_WIFI_PASSWORD',
+            'ESP_HTTP_INGEST_KEY',
+            'ESP_HTTP_BASE_URL',
+            'ESP_HTTP_ENDPOINT',
+            'ESP_MQTT_BROKER',
+            'ESP_MQTT_PORT',
+            'ESP_MQTT_TOPIC',
+            'ESP_MQTT_USER',
+            'ESP_MQTT_PASSWORD',
+            'ESP_HTTP_TLS_INSECURE',
+            'ESP_HTTP_READ_TIMEOUT_MS',
+            'ESP_SENSOR_INTERVAL_MS',
+            'ESP_HTTP_INTERVAL_MS',
+            'ESP_MQTT_INTERVAL_MS',
+            'ESP_DHT_MIN_READ_INTERVAL_MS',
+            'CORE_DEBUG_LEVEL',
+            'HTTP_CLIENT_TIMEOUT',
+            'MQTT_MAX_PACKET_SIZE',
         ];
     }
 }

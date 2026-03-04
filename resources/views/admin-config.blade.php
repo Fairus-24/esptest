@@ -474,6 +474,7 @@
             <div class="panel section-gap">
                 <h2>Firmware Profile - Device #{{ $selectedDevice->id }} ({{ $selectedDevice->nama_device }})</h2>
                 <p class="sub">Use production-ready network targets here. Firmware generator will output consistent `main.cpp` and `platformio.ini` for this device.</p>
+                <p class="note">Active target is locked to <strong>Device ID {{ $selectedDevice->id }}</strong> from the current selection. Build, upload, and webflash always follow this selected device context.</p>
 
                 <form method="POST" action="{{ route('admin.config.devices.profile.save', $selectedDevice, false) }}" class="stack">
                     @csrf
@@ -642,6 +643,7 @@
                     <div class="field">
                         <label>Extra Build Flags (optional, one per line)</label>
                         <textarea name="extra_build_flags">{{ $selectedProfile->extra_build_flags }}</textarea>
+                        <small>Managed macros (including `ESP_DEVICE_ID`) are reserved by this panel and will be ignored if added here.</small>
                     </div>
 
                     <div class="actions">
@@ -653,6 +655,7 @@
             <div class="panel section-gap">
                 <h2>Generated Firmware Bundle</h2>
                 <p class="sub">Output below is generated from selected device profile + active runtime override.</p>
+                <p class="note">Generated firmware target: <strong>Device ID {{ $selectedDevice->id }}</strong>.</p>
                 <div class="actions" style="margin-bottom:10px;">
                     <a class="btn" href="{{ route('admin.config.devices.firmware.main', $selectedDevice, false) }}">Download main.cpp</a>
                     <a class="btn" href="{{ route('admin.config.devices.firmware.platformio', $selectedDevice, false) }}">Download platformio.ini</a>

@@ -223,6 +223,7 @@ The project has been updated with the following behavior:
 164. Admin firmware console now supports direct PlatformIO actions from web UI: `Build Firmware` and `Build & Upload` run against `ESP32_Firmware` after auto-regenerating/applying the latest selected device profile, with command/exit/output logs shown in-page.
 165. Admin firmware console now supports **remote server build + client USB flash** (`Web Flash`) via browser Web Serial (`esptool-js`): server prepares artifacts (`bootloader.bin`, `partitions.bin`, `firmware.bin`) and connected client browser performs the actual USB flashing.
 166. Admin page layout is streamlined for operational use: verbose advanced-runtime and deploy-snippet panels were removed, while firmware build/flash actions and logs are now centralized in one focused firmware section.
+167. Admin firmware profile now protects selected device context: managed build macros (including `ESP_DEVICE_ID`) are automatically stripped from `extra_build_flags`, so build/webflash output cannot silently override the selected device target.
 
 ## Tech Stack
 
@@ -1190,8 +1191,9 @@ Security notes:
   - PlatformIO subprocess now normalizes runtime `PATH` (and `SHELL=/bin/sh` on Unix) to prevent PM2/Laravel environment issues such as `sh: No such file or directory`
   - generated `platformio.ini` now enforces `lib_archive = false` to avoid archive-step shell failures seen on some server environments
   - generated `platformio.ini` also enforces `extra_scripts = pre:scripts/pio_env_fix.py` so PlatformIO/SCons receives safe PATH + shell settings even under restricted service runtimes
-  - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
-  - multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
+- firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
+- multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
+- `extra_build_flags` is now sanitized before save/render: reserved managed macros are ignored (`ESP_DEVICE_ID`, network/auth macros, interval macros, timeout/debug/packet-size macros), so selected device/profile values stay authoritative.
 - browser-based Web Flash requires:
   - Chrome / Edge with Web Serial support
   - ESP32 connected via USB to the **client machine** opening the admin page
