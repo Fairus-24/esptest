@@ -1186,6 +1186,7 @@ Security notes:
   - `ADMIN_FIRMWARE_CLI_OUTPUT_LIMIT` (default `60000` chars)
   - command lookup fallback: if primary command is missing (`exit code 127`), service retries common alternatives (`pio`, `platformio`, `python3 -m platformio`, `python -m platformio`) plus common absolute locations (for example `~/.local/bin/pio`, `~/.platformio/penv/bin/platformio` on Linux)
   - if all candidates fail, last CLI output includes checked command list and explicit guidance to set absolute `ADMIN_PLATFORMIO_COMMAND`
+  - PlatformIO subprocess now normalizes runtime `PATH` (and `SHELL=/bin/sh` on Unix) to prevent PM2/Laravel environment issues such as `sh: No such file or directory`
   - generated `platformio.ini` now enforces `lib_archive = false` to avoid archive-step shell failures seen on some server environments
 - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
   - multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
@@ -1795,6 +1796,20 @@ ADMIN_PLATFORMIO_COMMAND=/home/<server-user>/.local/bin/pio
 ```
 
 - Then reload Laravel runtime/process manager and clear cache:
+
+```bash
+php artisan optimize:clear
+pm2 reload ecosystem.config.cjs --update-env
+```
+
+### Build fails with `sh: No such file or directory` on compile targets
+
+- Symptom example:
+  - `*** [.pio/build/.../src/main.cpp.o] sh: No such file or directory`
+  - `*** [.pio/build/.../bootloader.bin] sh: No such file or directory`
+- Cause: runtime PATH used by Laravel/PM2 does not include shell/system binary directories (for example `/bin`).
+- Current firmware build runner now injects normalized PATH + `SHELL=/bin/sh` on Unix before running PlatformIO.
+- After update, reload runtime environment:
 
 ```bash
 php artisan optimize:clear

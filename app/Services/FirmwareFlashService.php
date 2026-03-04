@@ -69,6 +69,7 @@ class FirmwareFlashService
 
             try {
                 $result = Process::path($workdir)
+                    ->env($this->resolveProcessEnvironment())
                     ->timeout($timeoutSeconds)
                     ->run($command);
             } catch (Throwable $e) {
@@ -439,5 +440,59 @@ class FirmwareFlashService
         }
 
         return '"' . str_replace('"', '\"', $path) . '"';
+    }
+
+    /**
+     * Ensure PlatformIO subprocess has a complete executable lookup path.
+     *
+     * Some PM2/Laravel runtimes provide a very minimal PATH that misses `/bin`,
+     * which causes PlatformIO/SCons child commands to fail with:
+     * `sh: No such file or directory`.
+     *
+     * @return array<string, string>
+     */
+    private function resolveProcessEnvironment(): array
+    {
+        $pathSeparator = DIRECTORY_SEPARATOR === '\\' ? ';' : ':';
+        $path = trim((string) getenv('PATH'));
+        $pathItems = $path !== '' ? explode($pathSeparator, $path) : [];
+
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $systemRoot = trim((string) getenv('SystemRoot'));
+            if ($systemRoot !== '') {
+                $pathItems[] = $systemRoot;
+                $pathItems[] = $systemRoot . '\\System32';
+                $pathItems[] = $systemRoot . '\\System32\\WindowsPowerShell\\v1.0';
+            }
+        } else {
+            $pathItems = array_merge($pathItems, [
+                '/usr/local/sbin',
+                '/usr/local/bin',
+                '/usr/sbin',
+                '/usr/bin',
+                '/sbin',
+                '/bin',
+            ]);
+        }
+
+        $normalizedPath = implode($pathSeparator, array_values(array_unique(array_filter(array_map(
+            static fn (string $item): string => trim($item),
+            $pathItems
+        ), static fn (string $item): bool => $item !== ''))));
+
+        $env = [
+            'PATH' => $normalizedPath,
+        ];
+
+        if (DIRECTORY_SEPARATOR !== '\\' && is_file('/bin/sh')) {
+            $env['SHELL'] = '/bin/sh';
+        }
+
+        $home = trim((string) getenv(DIRECTORY_SEPARATOR === '\\' ? 'USERPROFILE' : 'HOME'));
+        if ($home !== '') {
+            $env[DIRECTORY_SEPARATOR === '\\' ? 'USERPROFILE' : 'HOME'] = $home;
+        }
+
+        return $env;
     }
 }
