@@ -154,7 +154,7 @@ class StatisticsService
             $isSignificant = abs($tValue) > $criticalValue;
         }
 
-        $pValueDisplay = $this->formatPValueDisplay($pValue);
+        $pValueDisplay = $this->formatPValueDisplay($pValue, $tValue, $df);
         $interpretation = $isSignificant
             ? "Ada perbedaan signifikan (p < {$alphaDisplay})"
             : "Tidak ada perbedaan signifikan (p >= {$alphaDisplay})";
@@ -256,13 +256,133 @@ class StatisticsService
     /**
      * Format p-value agar underflow tidak tampil sebagai "0.0" polos.
      */
-    private function formatPValueDisplay(float $pValue): string
+    private function formatPValueDisplay(float $pValue, float $tValue, int $df): string
     {
-        if ($pValue <= 0.0) {
-            return '< ' . $this->formatFloatForDisplay(PHP_FLOAT_MIN);
+        $maxLength = 15;
+
+        if ($pValue > 0.0) {
+            if ($pValue >= 0.0001) {
+                $plain = sprintf('%.13g', $pValue);
+                if (strlen($plain) <= $maxLength) {
+                    return $plain;
+                }
+
+                return substr($plain, 0, $maxLength);
+            }
+
+            $log10 = log($pValue) / log(10.0);
+            return $this->formatTinyDecimalFromLog10($log10, $maxLength);
         }
 
-        return $this->formatFloatForDisplay($pValue);
+        $estimatedLog10 = $this->estimateLog10PValue($tValue, $df);
+        if ($estimatedLog10 !== null) {
+            return $this->formatTinyDecimalFromLog10($estimatedLog10, $maxLength);
+        }
+
+        return '< ' . $this->formatFloatForDisplay(PHP_FLOAT_MIN);
+    }
+
+    /**
+     * Estimasi log10(p-value) tanpa underflow float.
+     */
+    private function estimateLog10PValue(float $tValue, int $df): ?float
+    {
+        $degreesOfFreedom = max(1, $df);
+        $absT = abs($tValue);
+        if ($absT == 0.0) {
+            return 0.0;
+        }
+
+        $x = $degreesOfFreedom / ($degreesOfFreedom + ($absT * $absT));
+        $a = $degreesOfFreedom / 2.0;
+        $b = 0.5;
+        $switchThreshold = ($a + 1.0) / ($a + $b + 2.0);
+
+        if ($x < $switchThreshold) {
+            $cf = $this->betaContinuedFraction($a, $b, $x);
+            if ($cf > 0.0) {
+                $lnBeta = $this->logGamma($a + $b) - $this->logGamma($a) - $this->logGamma($b);
+                $lnP = $lnBeta
+                    + ($a * log($x))
+                    + ($b * log(1.0 - $x))
+                    + log($cf)
+                    - log($a);
+
+                return $lnP / log(10.0);
+            }
+        }
+
+        if ($degreesOfFreedom > 30) {
+            return $this->estimateLog10NormalTail($absT);
+        }
+
+        return null;
+    }
+
+    /**
+     * Aproksimasi log10 two-tailed normal tail untuk z sangat besar.
+     */
+    private function estimateLog10NormalTail(float $z): ?float
+    {
+        if ($z <= 0.0) {
+            return 0.0;
+        }
+
+        $zSquared = $z * $z;
+        $series = 1.0
+            - (1.0 / $zSquared)
+            + (3.0 / ($zSquared * $zSquared))
+            - (15.0 / ($zSquared * $zSquared * $zSquared));
+
+        if ($series <= 0.0 || !is_finite($series)) {
+            $series = 1.0;
+        }
+
+        $lnQ = (-0.5 * $zSquared)
+            - log($z)
+            - (0.5 * log(2.0 * M_PI))
+            + log($series);
+        $lnP = log(2.0) + $lnQ;
+
+        return $lnP / log(10.0);
+    }
+
+    /**
+     * Format angka sangat kecil ke bentuk desimal ringkas max panjang tertentu.
+     * Contoh: 0.[1283]...3868
+     */
+    private function formatTinyDecimalFromLog10(float $log10Value, int $maxLength = 15): string
+    {
+        if (!is_finite($log10Value)) {
+            return '0.0';
+        }
+
+        if ($log10Value >= -4.0) {
+            $value = pow(10.0, $log10Value);
+            return sprintf('%.13g', $value);
+        }
+
+        $exp10 = (int) floor($log10Value);
+        $zeroCount = max(0, -$exp10 - 1);
+        $mantissa = pow(10.0, $log10Value - $exp10);
+        $mantissaDigits = preg_replace('/[^0-9]/', '', sprintf('%.8f', $mantissa));
+        $significant = substr((string) $mantissaDigits, 0, 4);
+        if ($significant === '') {
+            $significant = '0000';
+        }
+
+        if ($zeroCount <= 6) {
+            $base = '0.' . str_repeat('0', $zeroCount) . '...';
+        } else {
+            $base = "0.[{$zeroCount}]...";
+        }
+
+        $available = $maxLength - strlen($base);
+        if ($available <= 0) {
+            return substr($base, 0, $maxLength);
+        }
+
+        return $base . substr($significant, 0, $available);
     }
 
     /**
