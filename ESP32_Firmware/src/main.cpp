@@ -57,7 +57,11 @@ const char* WIFI_PASSWORD = "gratiskok";
 #endif
 const char* HTTP_SERVER = ESP_HTTP_BASE_URL;
 const char* HTTP_ENDPOINT = "/api/http-data";
+<<<<<<< Updated upstream
 const char* MQTT_SERVER = "202.154.58.51";
+=======
+const char* MQTT_SERVER = "127.0.0.1";
+>>>>>>> Stashed changes
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";
