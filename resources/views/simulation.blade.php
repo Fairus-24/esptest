@@ -121,6 +121,13 @@
             color: #0f172a;
         }
 
+        .field input:disabled,
+        .field select:disabled {
+            background: #e2e8f0;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+
         .check-wrap {
             display: inline-flex;
             align-items: center;
@@ -129,6 +136,10 @@
             font-size: 0.88rem;
             font-weight: 600;
             color: #1f2937;
+        }
+
+        .check-wrap input:disabled {
+            cursor: not-allowed;
         }
 
         .actions {
@@ -250,15 +261,116 @@
             border: 1px solid rgba(15, 23, 42, 0.16);
             border-radius: 14px;
             overflow: hidden;
-            background: #e2e8f0;
+            background: linear-gradient(145deg, #e2e8f0 0%, #cbd5e1 100%);
+            display: flex;
+            justify-content: center;
+            padding: 12px;
         }
 
         .frame-wrap iframe {
-            width: 100%;
+            width: min(100%, 100%);
             border: 0;
             height: 78vh;
             min-height: 580px;
             background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 18px 35px rgba(2, 6, 23, 0.16);
+            transition: width 180ms ease, min-height 180ms ease, height 180ms ease;
+        }
+
+        .frame-wrap[data-viewport="desktop"] iframe {
+            width: 100%;
+            min-height: 580px;
+            height: 78vh;
+            max-height: 1000px;
+        }
+
+        .frame-wrap[data-viewport="tablet"] iframe {
+            width: min(900px, 100%);
+            min-height: 760px;
+            height: 1040px;
+            max-height: none;
+        }
+
+        .frame-wrap[data-viewport="mobile"] iframe {
+            width: min(430px, 100%);
+            min-height: 680px;
+            height: 860px;
+            max-height: none;
+        }
+
+        .surface-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .surface-head h2 {
+            margin: 0 0 6px;
+            font-size: 1.06rem;
+            font-family: 'Space Grotesk', 'Manrope', sans-serif;
+        }
+
+        .surface-head p {
+            margin: 0;
+            color: #475569;
+            font-size: 0.9rem;
+        }
+
+        .frame-tools {
+            display: grid;
+            gap: 6px;
+            justify-items: end;
+        }
+
+        .viewport-label {
+            font-size: 0.76rem;
+            color: #334155;
+            font-weight: 700;
+        }
+
+        .viewport-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            border-radius: 999px;
+            padding: 4px;
+            background: #e2e8f0;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+        }
+
+        .viewport-btn {
+            border: none;
+            border-radius: 999px;
+            min-width: 38px;
+            min-height: 34px;
+            padding: 7px 10px;
+            background: transparent;
+            color: #334155;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .viewport-btn:hover {
+            background: rgba(148, 163, 184, 0.32);
+        }
+
+        .viewport-btn.is-active {
+            background: #1f4fd7;
+            color: #fff;
+            box-shadow: 0 7px 16px rgba(31, 79, 215, 0.3);
+        }
+
+        .viewport-btn:focus-visible {
+            outline: 2px solid #1f4fd7;
+            outline-offset: 1px;
         }
 
         @media (max-width: 1120px) {
@@ -279,6 +391,14 @@
             .stats {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
+
+            .surface-head {
+                align-items: stretch;
+            }
+
+            .frame-tools {
+                justify-items: start;
+            }
         }
 
         @media (max-width: 520px) {
@@ -296,6 +416,29 @@
 
             .btn {
                 justify-content: center;
+            }
+
+            .viewport-switch {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .viewport-btn {
+                flex: 1 1 0;
+            }
+
+            .frame-wrap {
+                padding: 8px;
+            }
+
+            .frame-wrap[data-viewport="tablet"] iframe {
+                min-height: 600px;
+                height: 800px;
+            }
+
+            .frame-wrap[data-viewport="mobile"] iframe {
+                min-height: 560px;
+                height: 740px;
             }
         }
     </style>
@@ -354,6 +497,7 @@
             <div class="actions">
                 <button class="btn primary" id="toggleSimulationBtn"><i class="fas fa-play"></i> Start Simulasi</button>
                 <button class="btn warning" id="tickSimulationBtn"><i class="fas fa-hand-pointer"></i> Tick Manual</button>
+                <button class="btn dark" id="syncConfigBtn"><i class="fas fa-rotate"></i> Sinkronkan Input</button>
                 <button class="btn danger" id="resetSimulationBtn"><i class="fas fa-trash"></i> Reset Data Simulasi</button>
             </div>
 
@@ -380,11 +524,29 @@
         </section>
 
         <section class="surface">
-            <h2 style="margin:0 0 6px;font-size:1.06rem;font-family:'Space Grotesk','Manrope',sans-serif;">Live Dashboard Simulasi</h2>
-            <p style="margin:0;color:#475569;font-size:0.9rem;">
-                Frame di bawah ini membaca sumber telemetry simulasi (`source=simulation`), sehingga tidak bercampur dengan dashboard data real produksi.
-            </p>
-            <div class="frame-wrap">
+            <div class="surface-head">
+                <div>
+                    <h2>Live Dashboard Simulasi</h2>
+                    <p>
+                        Frame di bawah ini membaca sumber telemetry simulasi (`source=simulation`), sehingga tidak bercampur dengan dashboard data real produksi.
+                    </p>
+                </div>
+                <div class="frame-tools">
+                    <div class="viewport-label">Mode tampilan: <span id="dashboardViewportLabel">Desktop</span></div>
+                    <div class="viewport-switch" role="group" aria-label="Pilih mode tampilan dashboard simulasi">
+                        <button type="button" class="viewport-btn" data-dashboard-viewport="desktop" title="Desktop">
+                            <i class="fas fa-desktop"></i>
+                        </button>
+                        <button type="button" class="viewport-btn" data-dashboard-viewport="tablet" title="Tablet">
+                            <i class="fas fa-tablet-alt"></i>
+                        </button>
+                        <button type="button" class="viewport-btn" data-dashboard-viewport="mobile" title="Mobile">
+                            <i class="fas fa-mobile-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="frame-wrap" id="simulationDashboardFrameWrap" data-viewport="desktop">
                 <iframe src="{{ $simulationDashboardPath }}" title="Dashboard MQTT vs HTTP (Simulation Source)"></iframe>
             </div>
         </section>
@@ -402,11 +564,25 @@
             let tickTimer = null;
             let tickIntervalMs = 0;
             let lastKnownStatus = null;
+            let configDirty = false;
+            let hydratingConfig = false;
             const actionButtonIds = [
                 'toggleSimulationBtn',
                 'tickSimulationBtn',
+                'syncConfigBtn',
                 'resetSimulationBtn',
             ];
+            const configInputIds = [
+                'intervalSeconds',
+                'httpFailRate',
+                'mqttFailRate',
+                'networkProfile',
+                'resetBeforeStart',
+            ];
+            const frameWrap = document.getElementById('simulationDashboardFrameWrap');
+            const viewportButtons = Array.from(document.querySelectorAll('[data-dashboard-viewport]'));
+            const viewportLabel = document.getElementById('dashboardViewportLabel');
+            const viewportStorageKey = 'simulation_dashboard_viewport';
 
             function appendLog(message) {
                 const now = new Date();
@@ -428,6 +604,26 @@
                     if (!button) return;
                     button.disabled = disabled;
                 });
+            }
+
+            function setConfigInputsDisabled(disabled) {
+                configInputIds.forEach((id) => {
+                    const input = document.getElementById(id);
+                    if (!input) return;
+                    input.disabled = disabled;
+                });
+            }
+
+            function markConfigDirty() {
+                if (hydratingConfig) {
+                    return;
+                }
+
+                configDirty = true;
+            }
+
+            function clearConfigDirty() {
+                configDirty = false;
             }
 
             async function requestJson(path, method = 'GET', body = null) {
@@ -453,6 +649,24 @@
                 }
 
                 return payload;
+            }
+
+            function normalizeIntervalSeconds(rawValue, fallback = 5) {
+                const parsed = Number(rawValue);
+                if (!Number.isFinite(parsed)) {
+                    return fallback;
+                }
+
+                return Math.max(1, Math.min(30, Math.round(parsed)));
+            }
+
+            function normalizeRate(rawValue, fallback = 0) {
+                const parsed = Number(rawValue);
+                if (!Number.isFinite(parsed)) {
+                    return fallback;
+                }
+
+                return Math.max(0, Math.min(1, parsed));
             }
 
             function normalizeProfile(profile) {
@@ -537,8 +751,14 @@
                 button.style.display = (hasData && storageReady) ? '' : 'none';
             }
 
-            function hydrateInputsFromStatus(status) {
+            function hydrateInputsFromStatus(status, options = {}) {
                 if (!status || typeof status !== 'object') return;
+                const force = options.force === true;
+                if (configDirty && !force) {
+                    return;
+                }
+
+                hydratingConfig = true;
 
                 if (Number.isFinite(Number(status.interval_seconds))) {
                     document.getElementById('intervalSeconds').value = String(status.interval_seconds);
@@ -551,10 +771,74 @@
                 }
 
                 document.getElementById('networkProfile').value = normalizeProfile(status.network_profile);
+                hydratingConfig = false;
+                if (force) {
+                    clearConfigDirty();
+                }
             }
 
-            function updateView(status) {
+            function normalizeViewport(viewport) {
+                const value = String(viewport || '').toLowerCase();
+                if (value === 'desktop' || value === 'tablet' || value === 'mobile') {
+                    return value;
+                }
+
+                return 'desktop';
+            }
+
+            function viewportText(viewport) {
+                if (viewport === 'tablet') return 'Tablet';
+                if (viewport === 'mobile') return 'Mobile';
+                return 'Desktop';
+            }
+
+            function applyDashboardViewport(viewport, persist = true) {
+                if (!frameWrap) return;
+                const normalized = normalizeViewport(viewport);
+                frameWrap.dataset.viewport = normalized;
+                viewportButtons.forEach((button) => {
+                    const active = button.dataset.dashboardViewport === normalized;
+                    button.classList.toggle('is-active', active);
+                    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
+
+                if (viewportLabel) {
+                    viewportLabel.textContent = viewportText(normalized);
+                }
+
+                if (persist) {
+                    try {
+                        window.localStorage.setItem(viewportStorageKey, normalized);
+                    } catch (error) {
+                        // Ignore localStorage failures (private mode / strict browser policy).
+                    }
+                }
+            }
+
+            function restoreDashboardViewport() {
+                let stored = 'desktop';
+                try {
+                    stored = window.localStorage.getItem(viewportStorageKey) || 'desktop';
+                } catch (error) {
+                    stored = 'desktop';
+                }
+
+                applyDashboardViewport(stored, false);
+            }
+
+            function syncInputWithServerStatus() {
+                if (!lastKnownStatus) {
+                    return;
+                }
+
+                hydrateInputsFromStatus(lastKnownStatus, { force: true });
+                appendLog('Input konfigurasi disinkronkan dari status server.');
+                setStatus('Input konfigurasi berhasil disinkronkan.', 'ok');
+            }
+
+            function updateView(status, options = {}) {
                 if (!status || typeof status !== 'object') return;
+                const forceHydrate = options.forceHydrate === true;
                 lastKnownStatus = status;
                 const storageReady = status.storage_ready !== false;
                 const totalRows = Number(status.total_rows || 0);
@@ -576,9 +860,10 @@
                 document.getElementById('metaNetworkHealth').textContent = Number(status.network_health || 0).toFixed(2);
                 syncToggleButton(status.running);
                 syncResetButtonVisibility(totalRows, storageReady);
+                setConfigInputsDisabled(status.running || !storageReady);
 
                 if (!status.running) {
-                    hydrateInputsFromStatus(status);
+                    hydrateInputsFromStatus(status, { force: forceHydrate });
                 }
 
                 if (!storageReady) {
@@ -608,17 +893,24 @@
             async function refreshStatus() {
                 try {
                     const payload = await requestJson('/status');
-                    updateView(payload.data || {});
+                    updateView(payload.data || {}, { forceHydrate: false });
                 } catch (error) {
                     setStatus(`Gagal membaca status simulasi: ${error.message}`, 'error');
                 }
             }
 
             function parseConfig() {
+                const intervalSeconds = normalizeIntervalSeconds(document.getElementById('intervalSeconds').value, 5);
+                const httpFailRate = normalizeRate(document.getElementById('httpFailRate').value, 0);
+                const mqttFailRate = normalizeRate(document.getElementById('mqttFailRate').value, 0);
+                document.getElementById('intervalSeconds').value = String(intervalSeconds);
+                document.getElementById('httpFailRate').value = httpFailRate.toFixed(2);
+                document.getElementById('mqttFailRate').value = mqttFailRate.toFixed(2);
+
                 return {
-                    interval_seconds: Number(document.getElementById('intervalSeconds').value || 5),
-                    http_fail_rate: Number(document.getElementById('httpFailRate').value || 0),
-                    mqtt_fail_rate: Number(document.getElementById('mqttFailRate').value || 0),
+                    interval_seconds: intervalSeconds,
+                    http_fail_rate: httpFailRate,
+                    mqtt_fail_rate: mqttFailRate,
                     network_profile: normalizeProfile(document.getElementById('networkProfile').value),
                     reset_before_start: document.getElementById('resetBeforeStart').checked,
                 };
@@ -628,7 +920,8 @@
                 try {
                     const payload = await requestJson('/start', 'POST', parseConfig());
                     const status = payload.data || {};
-                    updateView(status);
+                    updateView(status, { forceHydrate: true });
+                    clearConfigDirty();
                     appendLog(payload.message || 'Simulasi dimulai.');
                     setStatus('Simulasi berhasil dimulai.', 'ok');
                     appendLog(`Profil ${formatProfileLabel(status.network_profile, status.network_profile_active)} | interval ${status.interval_seconds || '-'} detik.`);
@@ -640,7 +933,7 @@
             async function stopSimulation() {
                 try {
                     const payload = await requestJson('/stop', 'POST', {});
-                    updateView(payload.data || {});
+                    updateView(payload.data || {}, { forceHydrate: true });
                     appendLog(payload.message || 'Simulasi dihentikan.');
                     setStatus('Simulasi dihentikan.', null);
                     stopTickLoop();
@@ -663,7 +956,7 @@
 
                 try {
                     const payload = await requestJson('/reset', 'POST', {});
-                    updateView(payload.data || {});
+                    updateView(payload.data || {}, { forceHydrate: true });
                     appendLog(payload.message || 'Data simulasi direset.');
                     setStatus('Data simulasi berhasil direset.', 'ok');
                 } catch (error) {
@@ -676,7 +969,7 @@
                     const payload = await requestJson('/tick', 'POST', { run_once_if_stopped: true });
                     const data = payload.data || {};
                     const status = data.status || {};
-                    updateView(status);
+                    updateView(status, { forceHydrate: true });
                     if (data.ran) {
                         appendLog(data.manual_once ? 'Tick manual berhasil (run-once saat status STOPPED).' : 'Tick simulasi berhasil.');
                     } else {
@@ -734,17 +1027,30 @@
                 tickIntervalMs = 0;
             }
 
+            configInputIds.forEach((id) => {
+                const input = document.getElementById(id);
+                if (!input) return;
+                input.addEventListener('input', markConfigDirty);
+                input.addEventListener('change', markConfigDirty);
+            });
+            viewportButtons.forEach((button) => {
+                button.addEventListener('click', function () {
+                    applyDashboardViewport(button.dataset.dashboardViewport || 'desktop', true);
+                });
+            });
             document.getElementById('toggleSimulationBtn').addEventListener('click', toggleSimulation);
             document.getElementById('resetSimulationBtn').addEventListener('click', resetSimulation);
             document.getElementById('tickSimulationBtn').addEventListener('click', manualTick);
+            document.getElementById('syncConfigBtn').addEventListener('click', syncInputWithServerStatus);
             document.getElementById('intervalSeconds').addEventListener('change', function () {
                 if (lastKnownStatus?.running) {
                     ensureTickLoop(this.value);
                 }
             });
 
-            hydrateInputsFromStatus(initialStatus);
-            updateView(initialStatus);
+            hydrateInputsFromStatus(initialStatus, { force: true });
+            updateView(initialStatus, { forceHydrate: true });
+            restoreDashboardViewport();
             ensureStatusLoop();
             refreshStatus();
             appendLog('Halaman simulasi siap.');

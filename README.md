@@ -237,6 +237,7 @@ The project has been updated with the following behavior:
 178. Firmware template conflict safety was restored by removing accidental Git merge markers from `ESP32_Firmware/platformio.ini` and `ESP32_Firmware/src/main.cpp`; MQTT target constant now follows build macro (`ESP_MQTT_BROKER`) to avoid stale hardcoded broker host after profile/runtime updates.
 179. Admin firmware profile save flow now blocks invalid ESP32 network targets (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, and placeholder macro host), preventing successful flash with guaranteed no-data runtime. Serial Monitor runtime loop was also hardened to survive stream-close/reconnect cycles without instantly stopping.
 180. T-test output now keeps raw numeric values (mean/variance/std/t/p without `round()`), critical value is computed dynamically from `df` + `alpha` (not fixed hardcoded), and p-value display is compressed to max 15 characters in decimal-style compact form (example: `0.[1283]...3868`) so extreme small values no longer appear as static `0.0`.
+181. Simulation page form state is now robust against realtime polling: while simulator is `STOPPED`, edited interval/fail-rate/profile inputs no longer jump back to stale server values, `Sinkronkan Input` can restore the latest saved server config on demand, and embedded simulation dashboard now supports icon-based viewport switching (`Desktop` / `Tablet` / `Mobile`) with remembered preference in browser storage.
 
 ## Tech Stack
 
@@ -705,10 +706,13 @@ Simulation quick start:
 
 1. Open `http://127.0.0.1/esptest/public/simulation`
 2. Set `interval`, fail-rate (`HTTP`/`MQTT`), and `Network Profile` (`stable`/`normal`/`stress`/`auto_shuffle`).
-3. Click toggle button `Start Simulasi` (the same button becomes `Stop Simulasi` while running).
-4. Observe live behavior in embedded simulation dashboard frame (`/?source=simulation`) and verify `Network` meta (`profile/mode/health`) on simulation page.
-5. `Reset Data Simulasi` button only appears when simulation table currently has rows.
-6. Real dashboard (`/`) remains isolated and continues reading only real telemetry table (`eksperimens`).
+3. While simulator is still `STOPPED`, edited inputs remain on the latest user draft and are no longer overwritten by the 3-second status refresh loop.
+4. Use `Sinkronkan Input` if you want to discard draft edits and reload the latest config currently held by the simulator status.
+5. Click toggle button `Start Simulasi` (the same button becomes `Stop Simulasi` while running).
+6. Observe live behavior in embedded simulation dashboard frame (`/?source=simulation`) and verify `Network` meta (`profile/mode/health`) on simulation page.
+7. Use the viewport icon switcher above the frame to preview the simulation dashboard in `Desktop`, `Tablet`, or `Mobile` width; the selected mode is remembered in browser `localStorage`.
+8. `Reset Data Simulasi` button only appears when simulation table currently has rows.
+9. Real dashboard (`/`) remains isolated and continues reading only real telemetry table (`eksperimens`).
 
 ## Production Deployment (Debian + Nginx + PM2 + Subdomain)
 
@@ -2071,7 +2075,7 @@ For research and educational use.
 
 ---
 
-Last updated: 2026-03-01
+Last updated: 2026-03-06
 
 ## UI Footer Redesign (2026)
 

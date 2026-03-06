@@ -18,7 +18,12 @@ class SimulationFlowTest extends TestCase
         $this->get('/simulation')
             ->assertOk()
             ->assertSee('Network Profile')
-            ->assertSee('Start Simulasi');
+            ->assertSee('Start Simulasi')
+            ->assertSee('Sinkronkan Input')
+            ->assertSee('Mode tampilan:')
+            ->assertSee('data-dashboard-viewport="desktop"', false)
+            ->assertSee('data-dashboard-viewport="tablet"', false)
+            ->assertSee('data-dashboard-viewport="mobile"', false);
     }
 
     public function test_simulation_status_does_not_recreate_simulator_device_when_not_running(): void
