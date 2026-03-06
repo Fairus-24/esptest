@@ -1,8 +1,9 @@
 <?php
 
 return [
-    // Jumlah maksimum sampel terbaru per protokol untuk statistik dashboard + t-test.
-    'analysis_window' => (int) env('DASHBOARD_ANALYSIS_WINDOW', 1200),
+    // Window sampel terbaru per protokol untuk statistik dashboard + t-test.
+    // Set 0 untuk tanpa batas (pakai seluruh data).
+    'analysis_window' => (int) env('DASHBOARD_ANALYSIS_WINDOW', 0),
     // Batas data chart per protokol. 0 = tanpa batas (pakai seluruh data real/simulation).
     'chart_window' => (int) env('DASHBOARD_CHART_WINDOW', 0),
 

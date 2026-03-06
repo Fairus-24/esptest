@@ -2668,6 +2668,27 @@
             $formatStatCount = static fn ($value): string => $formatCompactCount($value, 99999);
             $formatQualityCount = static fn ($value): string => $formatCompactCount($value, 999);
             $formatChartTotalCount = static fn ($value): string => $formatCompactCount($value, 9999);
+            $formatTTestNumber = static function ($value): string {
+                if ($value === null || $value === '') {
+                    return '-';
+                }
+
+                if (is_int($value)) {
+                    return (string) $value;
+                }
+
+                if (!is_numeric($value)) {
+                    return (string) $value;
+                }
+
+                $numeric = (float) $value;
+                if (!is_finite($numeric)) {
+                    return (string) $value;
+                }
+
+                $encoded = json_encode($numeric, JSON_PRESERVE_ZERO_FRACTION);
+                return is_string($encoded) ? $encoded : (string) $value;
+            };
         @endphp
         <!-- Statistics Cards -->
         <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Real-Time Metrics</h2>
@@ -3079,10 +3100,10 @@
                                     <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran data latency terhadap rata-rata.</p>
                                     <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku; menunjukkan tingkat variasi data.</p>
                                 </div>
-                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['mqtt']['total_data'] ?? 0) }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['mean'] }} ms</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['std_dev'] }} ms</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_latency']['data1']['variance'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['ttest_latency']['data1']['n'] ?? 0) }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['data1']['mean'] ?? null) }} ms</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['data1']['std_dev'] ?? null) }} ms</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['data1']['variance'] ?? null) }}</span></div>
                             </div>
                             <div class="ttest-card http-card">
                                 <div class="ttest-card-header">
@@ -3095,10 +3116,10 @@
                                     <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran data latency terhadap rata-rata.</p>
                                     <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku; menunjukkan tingkat variasi data.</p>
                                 </div>
-                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['http']['total_data'] ?? 0) }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['mean'] }} ms</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['std_dev'] }} ms</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_latency']['data2']['variance'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['ttest_latency']['data2']['n'] ?? 0) }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['data2']['mean'] ?? null) }} ms</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['data2']['std_dev'] ?? null) }} ms</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['data2']['variance'] ?? null) }}</span></div>
                             </div>
                             <div class="ttest-card result-card">
                                 <div class="ttest-card-header">
@@ -3111,10 +3132,10 @@
                                     <p class="ttest-help-item"><span class="ttest-help-label">Critical Value:</span> Nilai batas keputusan uji t pada tingkat signifikansi tertentu.</p>
                                     <p class="ttest-help-item"><span class="ttest-help-label">p-value:</span> Probabilitas hasil terjadi jika H0 benar; makin kecil makin signifikan.</p>
                                 </div>
-                                <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $summary['ttest_latency']['t_value'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ $summary['ttest_latency']['df'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $summary['ttest_latency']['critical_value'] }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $summary['ttest_latency']['p_value'] }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['t_value'] ?? null) }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ (int) ($summary['ttest_latency']['df'] ?? 0) }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $formatTTestNumber($summary['ttest_latency']['critical_value'] ?? null) }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['p_value'] ?? null) }}</span></div>
                                 <span class="significance-badge @if($summary['ttest_latency']['is_significant']) significance-yes @else significance-no @endif">
                                     @if($summary['ttest_latency']['is_significant'])
                                         <i class="fas fa-check-circle"></i> Signifikan
@@ -3140,10 +3161,10 @@
                                         <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran konsumsi daya terhadap rata-rata.</p>
                                         <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku untuk melihat variasi daya.</p>
                                     </div>
-                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['mqtt']['total_data'] ?? 0) }}</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['mean'] }} mW</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['std_dev'] }} mW</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_daya']['data1']['variance'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['ttest_daya']['data1']['n'] ?? 0) }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['data1']['mean'] ?? null) }} mW</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['data1']['std_dev'] ?? null) }} mW</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['data1']['variance'] ?? null) }}</span></div>
                                 </div>
                                 <div class="ttest-card http-card">
                                     <div class="ttest-card-header">
@@ -3156,10 +3177,10 @@
                                         <p class="ttest-help-item"><span class="ttest-help-label">Std Deviation (σ):</span> Besar sebaran konsumsi daya terhadap rata-rata.</p>
                                         <p class="ttest-help-item"><span class="ttest-help-label">Variance (σ²):</span> Kuadrat dari simpangan baku untuk melihat variasi daya.</p>
                                     </div>
-                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['http']['total_data'] ?? 0) }}</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['mean'] }} mW</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['std_dev'] }} mW</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $summary['ttest_daya']['data2']['variance'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Sample Size (N)</span><span class="ttest-value">{{ (int) ($summary['ttest_daya']['data2']['n'] ?? 0) }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Mean (μ)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['data2']['mean'] ?? null) }} mW</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Std Deviation (σ)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['data2']['std_dev'] ?? null) }} mW</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Variance (σ²)</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['data2']['variance'] ?? null) }}</span></div>
                                 </div>
                                 <div class="ttest-card result-card">
                                     <div class="ttest-card-header">
@@ -3172,10 +3193,10 @@
                                         <p class="ttest-help-item"><span class="ttest-help-label">Critical Value:</span> Nilai batas keputusan uji t pada tingkat signifikansi tertentu.</p>
                                         <p class="ttest-help-item"><span class="ttest-help-label">p-value:</span> Probabilitas hasil terjadi jika H0 benar; makin kecil makin signifikan.</p>
                                     </div>
-                                    <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $summary['ttest_daya']['t_value'] }}</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ $summary['ttest_daya']['df'] }}</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $summary['ttest_daya']['critical_value'] }}</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $summary['ttest_daya']['p_value'] }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['t_value'] ?? null) }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ (int) ($summary['ttest_daya']['df'] ?? 0) }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $formatTTestNumber($summary['ttest_daya']['critical_value'] ?? null) }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['p_value'] ?? null) }}</span></div>
                                     <span class="significance-badge @if($summary['ttest_daya']['is_significant']) significance-yes @else significance-no @endif">
                                         @if($summary['ttest_daya']['is_significant'])
                                             <i class="fas fa-check-circle"></i> Signifikan

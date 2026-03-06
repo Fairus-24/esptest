@@ -117,7 +117,7 @@ The project has been updated with the following behavior:
 58. API + reset endpoints now use named rate limiting (`throttle:http-data`, `throttle:reset-data`) to reduce abuse/accidental spam.
 59. HTTP and MQTT ingest are now idempotent per (`device_id`, `protokol`, `packet_seq`) via `updateOrCreate`, and database enforces unique index for this key.
 60. `sensor_age_ms`, `sensor_read_seq`, and `send_tick_ms` are now required on both HTTP and MQTT ingestion paths for strict payload completeness parity.
-61. Dashboard/statistical queries now use configurable rolling window (`DASHBOARD_ANALYSIS_WINDOW`) to avoid loading the entire table on every refresh.
+61. Dashboard/statistical queries now use configurable analysis window (`DASHBOARD_ANALYSIS_WINDOW`), with `0` meaning unlimited/full dataset.
 62. Web-based process auto-start (Laravel HTTP server, Mosquitto, MQTT worker) now follows auto-start config flags regardless of `APP_ENV`, so production-mode deployments can still auto-recover services when enabled.
 63. PHPUnit test runtime is now isolated from production URL/cache path side effects (`APP_URL=http://localhost` + dedicated testing cache paths), so feature tests no longer fail with false `404`.
 64. ESP32 sensor driver was migrated from `Adafruit DHT` to `DHTesp` to prevent `Guru Meditation Error: Interrupt wdt timeout on CPU1` triggered by blocking pulse loops in `DHT::expectPulse()`.
@@ -196,7 +196,7 @@ The project has been updated with the following behavior:
 137. Firmware generator now injects `ESP_HTTP_ENDPOINT` build flag from device profile, so generated firmware endpoint stays consistent with runtime API path.
 138. ESP32 HTTP sender now has endpoint fallback logic: when configured endpoint returns `404`, firmware retries once on the alternate path (`/api/http-data` <-> `/esptest/public/api/http-data`) before marking failure.
 139. Comparative Analysis toolbar now formats `Total data point` in compact `K` only when value is greater than `9,999` (for both latency and power charts), while `Default(min)` and `View saat ini` remain raw counts.
-140. Statistical Analysis `Sample Size (N)` now displays real total dataset counts per protocol (MQTT/HTTP) without compact `K` notation.
+140. Statistical Analysis `Sample Size (N)` now displays the exact sample size used by each T-test group (`ttest.data1.n` / `ttest.data2.n`), not total table row counts.
 141. NTP sync state in firmware is now validated against real Unix epoch (no false `1970` success), and firmware auto-retries NTP sync every 30 seconds until valid to reduce startup telemetry gaps that can trigger temporary dashboard `Disconnected/OFF`.
 142. ESP32 firmware now auto-seeds `httpPacketSeq` and `mqttPacketSeq` from valid Unix epoch (`>= 2022-01-01`) so MQTT/HTTP counters no longer freeze after reboot due repeated low `packet_seq` values being upserted.
 143. Simulation page/service is now fail-safe: if simulation storage is not ready (e.g. missing `simulated_eksperimens` table on production), `/simulation` no longer throws HTTP 500; UI shows explicit storage warning, auto-disables simulation controls, and simulation status APIs return structured fallback payload.
@@ -236,6 +236,7 @@ The project has been updated with the following behavior:
 177. Admin Web Serial Monitor reliability was improved: baud selector is now a global-standard dropdown (from `1200` to `2000000` with common ESP rates), serial stream parsing now normalizes both `CRLF` and `CR`, partial-line tail is flushed safely, monitor open applies stable 8N1 defaults, and stream-close now enters reconnect retry loop instead of instantly stopping.
 178. Firmware template conflict safety was restored by removing accidental Git merge markers from `ESP32_Firmware/platformio.ini` and `ESP32_Firmware/src/main.cpp`; MQTT target constant now follows build macro (`ESP_MQTT_BROKER`) to avoid stale hardcoded broker host after profile/runtime updates.
 179. Admin firmware profile save flow now blocks invalid ESP32 network targets (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, and placeholder macro host), preventing successful flash with guaranteed no-data runtime. Serial Monitor runtime loop was also hardened to survive stream-close/reconnect cycles without instantly stopping.
+180. T-test output now keeps raw numeric values (mean/variance/std/t/p without `round()`), p-value is computed continuously from Student's t distribution (no coarse buckets), and dashboard cards render those raw values directly.
 
 ## Tech Stack
 
@@ -391,7 +392,7 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | `DB_DATABASE` | Yes | `esptest` | From database created in step 4 |
 | `DB_USERNAME` | Yes | `root` | Your MySQL user |
 | `DB_PASSWORD` | Depends | `` | Your MySQL password |
-| `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `1200` | Rolling window size for statistics/t-test/reliability calculations |
+| `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `0` | Analysis window size for statistics/t-test (`0` = unlimited/full dataset, `>0` = latest N rows per protocol) |
 | `DASHBOARD_CHART_WINDOW` | Optional | `0` | Chart data window per protocol (`0` = unlimited/full dataset, `>0` = latest N rows per protocol) |
 | `DASHBOARD_PROTOCOL_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for MQTT/HTTP `Connected` badge on header + realtime monitor |
 | `DASHBOARD_ESP32_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for ESP32 `ON/OFF` badge |
@@ -541,7 +542,7 @@ HTTP_INGEST_KEY=replace-with-strong-secret
 HTTP_ALLOW_INGEST_WITHOUT_KEY=false
 HTTP_INGEST_RATE_LIMIT_PER_MINUTE=240
 
-DASHBOARD_ANALYSIS_WINDOW=1200
+DASHBOARD_ANALYSIS_WINDOW=0
 DASHBOARD_CHART_WINDOW=0
 DASHBOARD_PROTOCOL_FRESHNESS_SECONDS=30
 DASHBOARD_ESP32_FRESHNESS_SECONDS=30

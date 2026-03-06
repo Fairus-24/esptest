@@ -165,81 +165,159 @@ class StatisticsService
             'valid' => true,
             'data1' => [
                 'n' => $n1,
-                'mean' => round($mean1, 4),
-                'variance' => round($var1, 4),
-                'std_dev' => round($stdDev1, 4),
+                'mean' => $mean1,
+                'variance' => $var1,
+                'std_dev' => $stdDev1,
             ],
             'data2' => [
                 'n' => $n2,
-                'mean' => round($mean2, 4),
-                'variance' => round($var2, 4),
-                'std_dev' => round($stdDev2, 4),
+                'mean' => $mean2,
+                'variance' => $var2,
+                'std_dev' => $stdDev2,
             ],
-            't_value' => round($tValue, 4),
+            't_value' => $tValue,
             'df' => $df,
             'critical_value' => $criticalValue,
             'is_significant' => $isSignificant,
-            'p_value' => round($pValue, 4),
+            'p_value' => $pValue,
             'interpretation' => $interpretation,
             'note' => $note,
         ];
     }
+
     /**
-     * Approximate p-value dari t-value dan df
-     * Menggunakan approximation yang sederhana
+     * Hitung p-value two-tailed dari t-value dan df.
+     *
+     * Implementasi memakai regularized incomplete beta function
+     * untuk menghindari pembulatan kasar/bucketed approximation.
      */
     private function calculatePValue(float $tValue, int $df): float
     {
-        // Untuk df besar (>30), gunakan normal distribution
-        if ($df > 30) {
-            return 2 * (1 - $this->normalCDF(abs($tValue)));
+        $degreesOfFreedom = max(1, $df);
+        $absT = abs($tValue);
+        if ($absT == 0.0) {
+            return 1.0;
         }
 
-        // Untuk df kecil, gunakan Student t-distribution approximation
-        // Ini adalah approximation sederhana, bukan perhitungan exact
-        $absT = abs($tValue);
-        
-        // Sangat kasar approximation
-        if ($absT < 0.5) return 0.5;
-        if ($absT < 1.0) return 0.25;
-        if ($absT < 1.96) return 0.10;
-        if ($absT < 2.576) return 0.01;
-        return 0.001;
+        $x = $degreesOfFreedom / ($degreesOfFreedom + ($absT * $absT));
+        $pValue = $this->regularizedIncompleteBeta($x, $degreesOfFreedom / 2.0, 0.5);
+
+        return max(0.0, min(1.0, $pValue));
     }
 
     /**
-     * Normal CDF approximation
+     * Regularized incomplete beta I_x(a, b).
      */
-    // Approximate error function (erf) for normalCDF
-    private function erf($x)
+    private function regularizedIncompleteBeta(float $x, float $a, float $b): float
     {
-        // Abramowitz and Stegun formula 7.1.26
-        $sign = ($x < 0) ? -1 : 1;
-        $x = abs($x);
-        $a1 =  0.254829592;
-        $a2 = -0.284496736;
-        $a3 =  1.421413741;
-        $a4 = -1.453152027;
-        $a5 =  1.061405429;
-        $p  =  0.3275911;
-        $t = 1.0 / (1.0 + $p * $x);
-        $y = 1.0 - (
-            (
-                (
-                    (
-                        (
-                            $a5 * $t + $a4
-                        ) * $t + $a3
-                    ) * $t + $a2
-                ) * $t + $a1
-            ) * $t * exp(-$x * $x)
-        );
-        return $sign * $y;
+        if ($x <= 0.0) {
+            return 0.0;
+        }
+        if ($x >= 1.0) {
+            return 1.0;
+        }
+
+        $lnBeta = $this->logGamma($a + $b) - $this->logGamma($a) - $this->logGamma($b);
+        $front = exp($lnBeta + ($a * log($x)) + ($b * log(1.0 - $x)));
+        $switchThreshold = ($a + 1.0) / ($a + $b + 2.0);
+
+        if ($x < $switchThreshold) {
+            return $front * $this->betaContinuedFraction($a, $b, $x) / $a;
+        }
+
+        return 1.0 - ($front * $this->betaContinuedFraction($b, $a, 1.0 - $x) / $b);
     }
 
-    private function normalCDF(float $z): float
+    /**
+     * Continued fraction helper untuk incomplete beta.
+     */
+    private function betaContinuedFraction(float $a, float $b, float $x): float
     {
-        return (1 + $this->erf($z / sqrt(2))) / 2;
+        $maxIterations = 200;
+        $epsilon = 3.0e-14;
+        $fpMin = 1.0e-300;
+
+        $qab = $a + $b;
+        $qap = $a + 1.0;
+        $qam = $a - 1.0;
+
+        $c = 1.0;
+        $d = 1.0 - (($qab * $x) / $qap);
+        if (abs($d) < $fpMin) {
+            $d = $fpMin;
+        }
+        $d = 1.0 / $d;
+        $h = $d;
+
+        for ($m = 1; $m <= $maxIterations; $m++) {
+            $m2 = 2 * $m;
+            $aa = ($m * ($b - $m) * $x) / (($qam + $m2) * ($a + $m2));
+            $d = 1.0 + ($aa * $d);
+            if (abs($d) < $fpMin) {
+                $d = $fpMin;
+            }
+            $c = 1.0 + ($aa / $c);
+            if (abs($c) < $fpMin) {
+                $c = $fpMin;
+            }
+            $d = 1.0 / $d;
+            $h *= $d * $c;
+
+            $aa = -(($a + $m) * ($qab + $m) * $x) / (($a + $m2) * ($qap + $m2));
+            $d = 1.0 + ($aa * $d);
+            if (abs($d) < $fpMin) {
+                $d = $fpMin;
+            }
+            $c = 1.0 + ($aa / $c);
+            if (abs($c) < $fpMin) {
+                $c = $fpMin;
+            }
+            $d = 1.0 / $d;
+            $delta = $d * $c;
+            $h *= $delta;
+
+            if (abs($delta - 1.0) < $epsilon) {
+                break;
+            }
+        }
+
+        return $h;
+    }
+
+    /**
+     * Log-gamma via Lanczos approximation.
+     * Menghindari ketergantungan ekstensi php tertentu (lgamma).
+     */
+    private function logGamma(float $value): float
+    {
+        $coefficients = [
+            676.5203681218851,
+            -1259.1392167224028,
+            771.3234287776531,
+            -176.6150291621406,
+            12.507343278686905,
+            -0.13857109526572012,
+            0.000009984369578019572,
+            0.00000015056327351493116,
+        ];
+
+        if ($value < 0.5) {
+            return log(M_PI) - log(sin(M_PI * $value)) - $this->logGamma(1.0 - $value);
+        }
+
+        $adjusted = $value - 1.0;
+        $series = 0.9999999999998099;
+
+        foreach ($coefficients as $index => $coefficient) {
+            $series += $coefficient / ($adjusted + $index + 1.0);
+        }
+
+        $t = $adjusted + count($coefficients) - 0.5;
+
+        return (0.5 * log(2.0 * M_PI))
+            + (($adjusted + 0.5) * log($t))
+            - $t
+            + log($series);
     }
 
     /**
@@ -368,12 +446,21 @@ class StatisticsService
 
     private function getProtocolData(string $protocol, int $limit): Collection
     {
-        return $this->telemetryQuery()
-            ->where('protokol', strtoupper($protocol))
-            ->orderByDesc('id')
-            ->limit($limit)
+        $query = $this->telemetryQuery()
+            ->where('protokol', strtoupper($protocol));
+
+        if ($limit > 0) {
+            return $query
+                ->orderByDesc('id')
+                ->limit($limit)
+                ->get()
+                ->sortBy('id')
+                ->values();
+        }
+
+        return $query
+            ->orderBy('id')
             ->get()
-            ->sortBy('id')
             ->values();
     }
 
@@ -386,7 +473,7 @@ class StatisticsService
 
     private function analysisWindowSize(): int
     {
-        return max(50, (int) config('dashboard.analysis_window', 1200));
+        return max(0, (int) config('dashboard.analysis_window', 0));
     }
 
     private function calculateRequiredFieldCompleteness(Collection $data): float
