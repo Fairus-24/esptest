@@ -395,6 +395,151 @@
             outline-offset: 1px;
         }
 
+        .calculator-toolbar {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .calculator-groups {
+            margin-top: 14px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .calculator-group {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98));
+            padding: 14px;
+        }
+
+        .calculator-group h3 {
+            margin: 0 0 4px;
+            font-size: 1rem;
+            font-family: 'Space Grotesk', 'Manrope', sans-serif;
+            color: #0f172a;
+        }
+
+        .calculator-group p {
+            margin: 0;
+            color: #475569;
+            font-size: 0.86rem;
+            line-height: 1.55;
+        }
+
+        .calculator-grid {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 12px;
+        }
+
+        .calculator-card {
+            border-radius: 14px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            background: #ffffff;
+            padding: 13px;
+            box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+            border-left-width: 4px;
+        }
+
+        .calculator-card.tone-ok {
+            border-left-color: #0e8c63;
+        }
+
+        .calculator-card.tone-warn {
+            border-left-color: #f59e0b;
+        }
+
+        .calculator-card.tone-muted {
+            border-left-color: #94a3b8;
+        }
+
+        .calculator-card.tone-info {
+            border-left-color: #1f4fd7;
+        }
+
+        .calculator-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .calculator-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.45px;
+            text-transform: uppercase;
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        .calculator-result {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #0f172a;
+            text-align: right;
+        }
+
+        .calculator-card h4 {
+            margin: 10px 0 6px;
+            font-size: 0.98rem;
+            color: #0f172a;
+        }
+
+        .calculator-formula {
+            margin: 0;
+            font-size: 0.82rem;
+            color: #475569;
+            line-height: 1.55;
+        }
+
+        .calculator-inputs {
+            margin-top: 12px;
+            display: grid;
+            gap: 7px;
+        }
+
+        .calculator-input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 0.81rem;
+            padding-top: 7px;
+            border-top: 1px dashed rgba(148, 163, 184, 0.45);
+        }
+
+        .calculator-input-row span {
+            color: #475569;
+        }
+
+        .calculator-input-row strong {
+            color: #0f172a;
+            text-align: right;
+            font-weight: 800;
+        }
+
+        .calculator-empty {
+            margin-top: 10px;
+            border-radius: 12px;
+            border: 1px dashed rgba(148, 163, 184, 0.6);
+            padding: 14px;
+            color: #64748b;
+            font-size: 0.9rem;
+            text-align: center;
+            background: rgba(248, 250, 252, 0.75);
+        }
+
         @media (max-width: 1120px) {
             .toolbar {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -424,6 +569,10 @@
 
             .frame-tools {
                 justify-items: start;
+            }
+
+            .calculator-toolbar {
+                justify-content: flex-start;
             }
         }
 
@@ -457,6 +606,16 @@
                 padding: 8px;
             }
 
+            .calculator-card-top,
+            .calculator-input-row {
+                flex-direction: column;
+            }
+
+            .calculator-result,
+            .calculator-input-row strong {
+                text-align: left;
+            }
+
         }
     </style>
 </head>
@@ -466,6 +625,7 @@
         $dashboardPath = $basePath !== '' ? $basePath . '/' : '/';
         $simulationDashboardPath = $dashboardPath . '?source=simulation&embedded=1';
         $simulationApiBase = ($basePath !== '' ? $basePath : '') . '/simulation';
+        $dashboardCalculatorPath = ($basePath !== '' ? $basePath : '') . '/dashboard/calculator?source=real';
     @endphp
     <div class="wrap">
         <div class="page-nav">
@@ -540,6 +700,30 @@
             <div class="log-box" id="simulationLog"></div>
         </section>
 
+        <section class="surface">
+            <div class="surface-head">
+                <div>
+                    <h2>Kalkulator Dashboard Real</h2>
+                    <p>
+                        Panel ini menghitung ulang metrik dashboard real dari tabel produksi (`eksperimens`), sehingga Anda bisa melihat rumus, input, dan hasil tanpa keluar dari halaman simulasi.
+                    </p>
+                </div>
+                <div class="calculator-toolbar">
+                    <button class="btn dark" id="refreshRealCalculatorBtn"><i class="fas fa-calculator"></i> Refresh Kalkulator</button>
+                </div>
+            </div>
+            <div class="status-row" id="realCalculatorStatusRow">Memuat kalkulator dashboard real...</div>
+            <div class="meta">
+                <span><strong>Source:</strong> <span id="realCalculatorSource">-</span></span>
+                <span><strong>Update:</strong> <span id="realCalculatorStamp">-</span></span>
+                <span><strong>Freshness:</strong> <span id="realCalculatorFreshness">-</span></span>
+                <span><strong>Analysis Window:</strong> <span id="realCalculatorWindow">-</span></span>
+            </div>
+            <div class="calculator-groups" id="realCalculatorGroups">
+                <div class="calculator-empty">Menunggu data kalkulator dashboard real...</div>
+            </div>
+        </section>
+
         <section class="surface surface-dashboard">
             <div class="surface-head">
                 <div>
@@ -575,11 +759,15 @@
         (function () {
             const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             const apiBase = @json($simulationApiBase);
+            const dashboardCalculatorUrl = @json($dashboardCalculatorPath);
             const initialStatus = @json($simulationStatus ?? []);
             const logBox = document.getElementById('simulationLog');
             const statusRow = document.getElementById('simulationStatusRow');
+            const calculatorStatusRow = document.getElementById('realCalculatorStatusRow');
             const refreshIntervalMs = 3000;
+            const calculatorRefreshIntervalMs = 5000;
             let statusTimer = null;
+            let realCalculatorTimer = null;
             let tickTimer = null;
             let tickIntervalMs = 0;
             let lastKnownStatus = null;
@@ -621,6 +809,14 @@
                 statusRow.classList.remove('ok', 'error');
                 if (type === 'ok') statusRow.classList.add('ok');
                 if (type === 'error') statusRow.classList.add('error');
+            }
+
+            function setCalculatorStatus(message, type) {
+                if (!calculatorStatusRow) return;
+                calculatorStatusRow.textContent = message;
+                calculatorStatusRow.classList.remove('ok', 'error');
+                if (type === 'ok') calculatorStatusRow.classList.add('ok');
+                if (type === 'error') calculatorStatusRow.classList.add('error');
             }
 
             function setSimulationControlsDisabled(disabled) {
@@ -667,6 +863,24 @@
                 }
 
                 const response = await fetch(`${apiBase}${path}`, options);
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const message = payload.message || `HTTP ${response.status}`;
+                    throw new Error(message);
+                }
+
+                return payload;
+            }
+
+            async function requestExternalJson(url) {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
                 const payload = await response.json().catch(() => ({}));
                 if (!response.ok) {
                     const message = payload.message || `HTTP ${response.status}`;
@@ -887,6 +1101,93 @@
                 setStatus('Input konfigurasi berhasil disinkronkan.', 'ok');
             }
 
+            function escapeHtml(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function renderCalculatorGroups(payload) {
+                const groupsWrap = document.getElementById('realCalculatorGroups');
+                if (!groupsWrap) return;
+
+                const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+                if (groups.length === 0) {
+                    groupsWrap.innerHTML = '<div class="calculator-empty">Belum ada data kalkulator yang bisa ditampilkan.</div>';
+                    return;
+                }
+
+                groupsWrap.innerHTML = groups.map((group) => {
+                    const cards = Array.isArray(group.cards) ? group.cards : [];
+                    const cardsHtml = cards.length > 0
+                        ? cards.map((card) => {
+                            const inputs = Array.isArray(card.inputs) ? card.inputs : [];
+                            return `
+                                <article class="calculator-card tone-${escapeHtml(card.tone || 'info')}">
+                                    <div class="calculator-card-top">
+                                        <span class="calculator-chip">${escapeHtml(card.chip || 'CALC')}</span>
+                                        <div class="calculator-result">${escapeHtml(card.result || '-')}</div>
+                                    </div>
+                                    <h4>${escapeHtml(card.label || '-')}</h4>
+                                    <p class="calculator-formula">${escapeHtml(card.formula || '-')}</p>
+                                    <div class="calculator-inputs">
+                                        ${inputs.map((input) => `
+                                            <div class="calculator-input-row">
+                                                <span>${escapeHtml(input.label || '-')}</span>
+                                                <strong>${escapeHtml(input.value || '-')}</strong>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </article>
+                            `;
+                        }).join('')
+                        : '<div class="calculator-empty">Belum ada card kalkulator untuk grup ini.</div>';
+
+                    return `
+                        <section class="calculator-group">
+                            <h3>${escapeHtml(group.title || 'Kalkulator')}</h3>
+                            <p>${escapeHtml(group.description || '')}</p>
+                            <div class="calculator-grid">
+                                ${cardsHtml}
+                            </div>
+                        </section>
+                    `;
+                }).join('');
+            }
+
+            function renderRealCalculator(payload) {
+                document.getElementById('realCalculatorSource').textContent = payload?.source_label || '-';
+                document.getElementById('realCalculatorStamp').textContent = payload?.generated_at_wib || '-';
+                document.getElementById('realCalculatorFreshness').textContent = Number.isFinite(Number(payload?.protocol_freshness_seconds))
+                    ? `${Number(payload.protocol_freshness_seconds)} detik`
+                    : '-';
+                document.getElementById('realCalculatorWindow').textContent = Number(payload?.analysis_window || 0) > 0
+                    ? `${Number(payload.analysis_window)} data terakhir`
+                    : 'unlimited';
+                renderCalculatorGroups(payload);
+                setCalculatorStatus(
+                    payload?.status_message || 'Kalkulator dashboard real berhasil diperbarui.',
+                    payload?.database_ready === false ? 'error' : 'ok'
+                );
+            }
+
+            async function refreshRealCalculator() {
+                try {
+                    const payload = await requestExternalJson(dashboardCalculatorUrl);
+                    renderRealCalculator(payload.data || {});
+                } catch (error) {
+                    setCalculatorStatus(`Gagal memuat kalkulator dashboard real: ${error.message}`, 'error');
+                }
+            }
+
+            function ensureRealCalculatorLoop() {
+                if (realCalculatorTimer) return;
+                realCalculatorTimer = setInterval(refreshRealCalculator, calculatorRefreshIntervalMs);
+            }
+
             function updateView(status, options = {}) {
                 if (!status || typeof status !== 'object') return;
                 const forceHydrate = options.forceHydrate === true;
@@ -1101,6 +1402,7 @@
             document.getElementById('resetSimulationBtn').addEventListener('click', resetSimulation);
             document.getElementById('tickSimulationBtn').addEventListener('click', manualTick);
             document.getElementById('syncConfigBtn').addEventListener('click', syncInputWithServerStatus);
+            document.getElementById('refreshRealCalculatorBtn').addEventListener('click', refreshRealCalculator);
             document.getElementById('intervalSeconds').addEventListener('change', function () {
                 if (lastKnownStatus?.running) {
                     ensureTickLoop(this.value);
@@ -1111,7 +1413,9 @@
             updateView(initialStatus, { forceHydrate: true });
             restoreDashboardViewport();
             ensureStatusLoop();
+            ensureRealCalculatorLoop();
             refreshStatus();
+            refreshRealCalculator();
             appendLog('Halaman simulasi siap.');
         }());
     </script>

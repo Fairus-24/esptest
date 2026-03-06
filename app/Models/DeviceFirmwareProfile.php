@@ -35,6 +35,8 @@ class DeviceFirmwareProfile extends Model
         'monitor_port',
         'upload_port',
         'extra_build_flags',
+        'custom_main_cpp',
+        'custom_platformio_ini',
     ];
 
     protected $casts = [

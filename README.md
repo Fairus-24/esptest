@@ -240,6 +240,8 @@ The project has been updated with the following behavior:
 181. Simulation page form state is now robust against realtime polling: while simulator is `STOPPED`, edited interval/fail-rate/profile inputs no longer jump back to stale server values, `Sinkronkan Input` can restore the latest saved server config on demand, and embedded simulation dashboard now supports icon-based viewport switching (`Desktop` / `Tablet` / `Mobile`) with remembered preference in browser storage.
 182. Embedded simulation dashboard viewport modes now use fixed virtual sizes per mode (`Desktop`, `Tablet`, `Mobile`) instead of following the real client screen width; the selected mode defines the iframe layout breakpoint, while the page only scales that viewport visually to fit the available space.
 183. Dashboard header temperature/humidity cards now use latest fresh telemetry per protocol (not historical averages); when MQTT/HTTP data becomes stale or stops arriving, the affected header values automatically fall back to `0.00`, including per-protocol detail lines in the header.
+184. Simulation page now includes `Kalkulator Dashboard Real`: a live calculator panel that re-computes key real-dashboard values (header realtime sensors, total data, average latency/power, reliability, and T-test summaries) from real telemetry, showing formula + input + result without leaving `/simulation`.
+185. Admin firmware bundle now renders from canonical template files in `resources/firmware-templates/*` instead of mutable workspace sources, and the admin panel adds per-device full-file editors for `main.cpp` and `platformio.ini` (with confirmation, VS Code-like editor page, immediate workspace sync on save, and device-specific override persistence so new/cloned devices still default to generated standard unless they save their own override).
 
 ## Tech Stack
 
@@ -714,7 +716,8 @@ Simulation quick start:
 6. Observe live behavior in embedded simulation dashboard frame (`/?source=simulation`) and verify `Network` meta (`profile/mode/health`) on simulation page.
 7. Use the viewport icon switcher above the frame to preview the simulation dashboard in `Desktop`, `Tablet`, or `Mobile` width; each mode now uses its own fixed virtual viewport and is only scaled visually when the real screen is smaller, while the selected mode is remembered in browser `localStorage`.
 8. `Reset Data Simulasi` button only appears when simulation table currently has rows.
-9. Real dashboard (`/`) remains isolated and continues reading only real telemetry table (`eksperimens`).
+9. `Kalkulator Dashboard Real` on the same page continuously recalculates the main real-dashboard metrics from table `eksperimens` and shows formula, inputs, and current result.
+10. Real dashboard (`/`) remains isolated and continues reading only real telemetry table (`eksperimens`).
 
 ## Production Deployment (Debian + Nginx + PM2 + Subdomain)
 
@@ -1241,6 +1244,8 @@ Purpose: runtime configuration management + ESP32 firmware provisioning from GUI
 - `PATCH /admin/config/devices/{device}` -> update selected device metadata (name/location).
 - `DELETE /admin/config/devices/{device}` -> delete selected device (supports optional experiment purge confirmation).
 - `POST /admin/config/devices/{device}/profile` -> save firmware profile for selected device.
+- `GET /admin/config/devices/{device}/firmware/editor/{target}` -> open full-file editor for `main.cpp` (`main-cpp`) or `platformio.ini` (`platformio-ini`).
+- `POST /admin/config/devices/{device}/firmware/editor/{target}` -> save per-device full-file override and immediately sync workspace firmware files.
 - `GET /admin/config/devices/{device}/firmware/main.cpp` -> download generated `main.cpp`.
 - `GET /admin/config/devices/{device}/firmware/platformio.ini` -> download generated `platformio.ini`.
 - `POST /admin/config/devices/{device}/firmware/apply` -> apply generated firmware files to workspace with backup.
@@ -1272,6 +1277,9 @@ Security notes:
 - firmware generator enforces a clean `lib_deps` block (Adafruit DHT + Adafruit Unified Sensor + PubSubClient + ArduinoJson) and removes unused `DHT sensor library for ESPx` automatically on each render/apply
 - multiline `lib_deps` rewrite now replaces the full block atomically, preventing duplicated/concatenated dependency lines that can trigger `422` webflash prepare failures
 - `extra_build_flags` is now sanitized before save/render: reserved managed macros are ignored (`ESP_DEVICE_ID`, network/auth macros, interval macros, timeout/debug/packet-size macros), so selected device/profile values stay authoritative.
+- generator source-of-truth is now `resources/firmware-templates/main.cpp.stub` and `resources/firmware-templates/platformio.ini.stub`; `ESP32_Firmware/*` remains the mutable workspace output only
+- admin firmware previews now include a pencil action that opens a dedicated full-file editor page; save stores custom content only for the selected device profile and immediately syncs the shared workspace to that device bundle
+- saving the exact generated standard content clears the corresponding custom override, so the device falls back to profile-driven generation again
 - MQTT target resolution for generated firmware is now deterministic: `mqtt_broker` -> `mqtt_host` -> `server_host`; admin save flow auto-syncs `mqtt_host` when it still mirrors prior broker value and broker is changed.
 - firmware action buttons are state-aware:
   - `Save Firmware Profile` is disabled until profile form changes (dirty state)
@@ -1462,10 +1470,13 @@ Used for runtime GUI overrides from Admin Config panel (no direct `.env` edit re
 - `http_tls_insecure`
 - `dht_pin`, `dht_model`
 - `extra_build_flags` (nullable)
+- `custom_main_cpp` (nullable long text, per-device full-file override)
+- `custom_platformio_ini` (nullable long text, per-device full-file override)
 - timestamps
 
 Used by firmware generator to render per-device `main.cpp` and `platformio.ini`.
 MQTT mapping rule in generator: `mqtt_broker` is primary output target, `mqtt_host` is legacy fallback.
+If both custom override columns are `NULL`, device output comes from the canonical template + saved profile values; overrides do not auto-propagate to other devices.
 
 ## Quick Verification Checklist
 

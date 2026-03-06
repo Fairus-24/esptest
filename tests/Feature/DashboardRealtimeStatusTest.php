@@ -126,6 +126,40 @@ class DashboardRealtimeStatusTest extends TestCase
             ->assertSee('HTTP: 0.00%');
     }
 
+    public function test_dashboard_calculator_endpoint_returns_zero_header_cards_when_data_is_stale(): void
+    {
+        $device = $this->createDevice('ESP32-REAL');
+        $staleTimestamp = now()->subSeconds(95);
+
+        $this->insertTelemetry($device, 'MQTT', $staleTimestamp, 4701);
+        $this->insertTelemetry($device, 'HTTP', $staleTimestamp, 4702);
+
+        $this->get('/dashboard/calculator?source=real')
+            ->assertOk()
+            ->assertJsonPath('data.source_label', 'REAL')
+            ->assertJsonPath('data.database_ready', true)
+            ->assertJsonPath('data.groups.0.cards.0.result', '0.00 C')
+            ->assertJsonPath('data.groups.0.cards.0.inputs.0.value', '0.00 C')
+            ->assertJsonPath('data.groups.0.cards.0.inputs.1.value', '0.00 C')
+            ->assertJsonPath('data.groups.0.cards.1.result', '0.00 %');
+    }
+
+    public function test_dashboard_calculator_endpoint_uses_same_freshness_logic_as_header_cards(): void
+    {
+        $device = $this->createDevice('ESP32-REAL');
+
+        $this->insertTelemetry($device, 'MQTT', now()->subSeconds(4), 4801);
+        $this->insertTelemetry($device, 'HTTP', now()->subSeconds(95), 4802);
+
+        $this->get('/dashboard/calculator?source=real')
+            ->assertOk()
+            ->assertJsonPath('data.groups.0.cards.0.result', '28.80 C')
+            ->assertJsonPath('data.groups.0.cards.0.inputs.0.value', '28.80 C')
+            ->assertJsonPath('data.groups.0.cards.0.inputs.1.value', '0.00 C')
+            ->assertJsonPath('data.groups.0.cards.1.result', '60.70 %')
+            ->assertJsonPath('data.groups.1.cards.0.result', '1 data');
+    }
+
     public function test_dashboard_marks_filtered_when_only_simulator_data_exists_and_simulation_is_stopped(): void
     {
         $simDevice = $this->createDevice('SIMULATOR-APP');

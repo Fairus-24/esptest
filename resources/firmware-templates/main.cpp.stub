@@ -20,7 +20,7 @@ const char* WIFI_SSID = "Free";
 const char* WIFI_PASSWORD = "gratiskok";
 
 // Server Settings
-#define SERVER_HOST "localhost"  // Generator replaces this per selected device.
+#define SERVER_HOST "firmware-host.local"  // Generator replaces this per selected device.
 #ifndef ESP_HTTP_BASE_URL
 #define ESP_HTTP_BASE_URL "http://" SERVER_HOST
 #endif
@@ -57,7 +57,7 @@ const char* WIFI_PASSWORD = "gratiskok";
 #endif
 const char* HTTP_SERVER = ESP_HTTP_BASE_URL;
 const char* HTTP_ENDPOINT = "/api/http-data";
-const char* MQTT_SERVER = "192.168.0.104";
+const char* MQTT_SERVER = "firmware-host.local";
 const int MQTT_PORT = 1883;
 const char* MQTT_TOPIC = "iot/esp32/suhu";
 const char* MQTT_USER = "esp32";

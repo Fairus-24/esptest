@@ -122,8 +122,44 @@ class FirmwareTemplateService
      */
     public function render(Device $device, DeviceFirmwareProfile $profile, array $runtimeState): array
     {
-        $mainTemplate = file_get_contents(base_path('ESP32_Firmware/src/main.cpp')) ?: '';
-        $iniTemplate = file_get_contents(base_path('ESP32_Firmware/platformio.ini')) ?: '';
+        $rendered = $this->renderStandard($device, $profile, $runtimeState);
+        $activeOverrides = [];
+
+        $customMain = $this->resolveCustomSource($profile->custom_main_cpp ?? null);
+        if ($customMain !== null) {
+            $rendered['main_cpp'] = $customMain;
+            $activeOverrides[] = 'main.cpp';
+        }
+
+        $customPlatformio = $this->resolveCustomSource($profile->custom_platformio_ini ?? null);
+        if ($customPlatformio !== null) {
+            $rendered['platformio_ini'] = $customPlatformio;
+            $activeOverrides[] = 'platformio.ini';
+        }
+
+        if ($activeOverrides !== []) {
+            $rendered['instructions'] .= PHP_EOL
+                . '5) Custom per-device source override active: ' . implode(', ', $activeOverrides)
+                . '. Device lain tetap memakai generated standard template.';
+        }
+
+        return $rendered;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $runtimeState
+     * @return array<string, string>
+     */
+    public function renderStandard(Device $device, DeviceFirmwareProfile $profile, array $runtimeState): array
+    {
+        $mainTemplate = $this->readTemplateFile(
+            resource_path('firmware-templates/main.cpp.stub'),
+            base_path('ESP32_Firmware/src/main.cpp')
+        );
+        $iniTemplate = $this->readTemplateFile(
+            resource_path('firmware-templates/platformio.ini.stub'),
+            base_path('ESP32_Firmware/platformio.ini')
+        );
 
         $wifiSsid = (string) $profile->wifi_ssid;
         $wifiPassword = (string) $profile->wifi_password;
@@ -452,6 +488,27 @@ class FirmwareTemplateService
         return implode(PHP_EOL, $filtered);
     }
 
+    private function resolveCustomSource(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $normalized = $this->normalizeLineEndings($value);
+        if (trim($normalized) === '') {
+            return null;
+        }
+
+        return $normalized;
+    }
+
+    private function readTemplateFile(string $preferredPath, string $fallbackPath): string
+    {
+        $path = is_file($preferredPath) ? $preferredPath : $fallbackPath;
+
+        return (string) (file_get_contents($path) ?: '');
+    }
+
     /**
      * @return list<string>
      */
@@ -484,7 +541,7 @@ class FirmwareTemplateService
 
     private function normalizeLineEndings(string $value): string
     {
-        return str_replace("\r\n", "\n", $value);
+        return str_replace(["\r\n", "\r"], "\n", $value);
     }
 
     private function isUnsafeFirmwareTargetHost(string $host): bool

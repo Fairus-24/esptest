@@ -90,6 +90,109 @@ class AdminConfigPanelTest extends TestCase
         );
     }
 
+    public function test_admin_can_open_editor_and_save_custom_main_cpp_for_selected_device(): void
+    {
+        $device = Device::query()->create([
+            'nama_device' => 'ESP32-EDITOR',
+            'lokasi' => 'Editor Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $backup = $this->backupWorkspaceFirmwareFiles();
+
+        try {
+            $this->get('/admin/config/devices/' . $device->id . '/firmware/editor/main-cpp')
+                ->assertOk()
+                ->assertSee('main.cpp')
+                ->assertSee('Device ID ' . $device->id);
+
+            $customMain = implode("\n", [
+                '#include <Arduino.h>',
+                '',
+                'const int DEVICE_ID = ' . $device->id . ';',
+                '',
+                'void setup() {}',
+                'void loop() {}',
+            ]) . "\n";
+
+            $this->post('/admin/config/devices/' . $device->id . '/firmware/editor/main-cpp', [
+                'content' => $customMain,
+            ])->assertRedirect('/admin/config/devices/' . $device->id . '/firmware/editor/main-cpp')
+                ->assertSessionHas('admin_status');
+
+            $profile = DeviceFirmwareProfile::query()->where('device_id', $device->id)->firstOrFail();
+            $this->assertSame(
+                $this->normalizeFirmwareText($customMain),
+                $this->normalizeFirmwareText((string) $profile->custom_main_cpp)
+            );
+
+            $downloadedMain = $this->get('/admin/config/devices/' . $device->id . '/firmware/main.cpp')
+                ->assertOk()
+                ->streamedContent();
+
+            $this->assertSame(
+                $this->normalizeFirmwareText($customMain),
+                $this->normalizeFirmwareText($downloadedMain)
+            );
+
+            $this->assertSame(
+                $this->normalizeFirmwareText($customMain),
+                $this->normalizeFirmwareText((string) File::get(base_path('ESP32_Firmware/src/main.cpp')))
+            );
+        } finally {
+            $this->restoreWorkspaceFirmwareFiles($backup);
+        }
+    }
+
+    public function test_cloned_device_profile_keeps_standard_sources_when_source_device_has_custom_override(): void
+    {
+        $sourceDevice = Device::query()->create([
+            'nama_device' => 'ESP32-SOURCE-EDITOR',
+            'lokasi' => 'Source Lab',
+        ]);
+
+        $this->mockGoogleCallback('mufaza2408@gmail.com');
+        $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
+
+        $backup = $this->backupWorkspaceFirmwareFiles();
+
+        try {
+            $customMain = implode("\n", [
+                '// custom only for source device',
+                'const int DEVICE_ID = 99;',
+            ]) . "\n";
+
+            $this->post('/admin/config/devices/' . $sourceDevice->id . '/firmware/editor/main-cpp', [
+                'content' => $customMain,
+            ])->assertRedirect('/admin/config/devices/' . $sourceDevice->id . '/firmware/editor/main-cpp');
+
+            $this->post('/admin/config/devices', [
+                'nama_device' => 'ESP32-CLONED-STANDARD',
+                'lokasi' => 'Clone Lab',
+                'clone_profile_from_device_id' => $sourceDevice->id,
+            ])->assertRedirect();
+
+            $clonedDevice = Device::query()
+                ->where('nama_device', 'ESP32-CLONED-STANDARD')
+                ->firstOrFail();
+
+            $clonedProfile = DeviceFirmwareProfile::query()->where('device_id', $clonedDevice->id)->firstOrFail();
+            $this->assertNull($clonedProfile->custom_main_cpp);
+            $this->assertNull($clonedProfile->custom_platformio_ini);
+
+            $clonedMain = $this->get('/admin/config/devices/' . $clonedDevice->id . '/firmware/main.cpp')
+                ->assertOk()
+                ->streamedContent();
+
+            $this->assertStringNotContainsString('// custom only for source device', $clonedMain);
+            $this->assertStringContainsString('const int DEVICE_ID = ' . $clonedDevice->id . ';', $clonedMain);
+        } finally {
+            $this->restoreWorkspaceFirmwareFiles($backup);
+        }
+    }
+
     public function test_admin_firmware_action_buttons_are_disabled_when_workspace_is_in_sync(): void
     {
         $device = Device::query()->create([
@@ -628,7 +731,7 @@ class AdminConfigPanelTest extends TestCase
             ]);
     }
 
-    public function test_admin_prepare_webflash_reports_git_conflict_marker_in_project_files(): void
+    public function test_admin_prepare_webflash_reports_git_conflict_marker_in_custom_override_output(): void
     {
         $device = Device::query()->create([
             'nama_device' => 'ESP32-WEBFLASH-CONFLICT',
@@ -638,19 +741,21 @@ class AdminConfigPanelTest extends TestCase
         $this->mockGoogleCallback('mufaza2408@gmail.com');
         $this->get('/admin/login/api/auth/google/callback')->assertRedirect('/admin/config');
 
-        $iniPath = base_path('ESP32_Firmware/platformio.ini');
-        $iniBackup = File::exists($iniPath) ? (string) File::get($iniPath) : null;
+        $backup = $this->backupWorkspaceFirmwareFiles();
 
         try {
-            File::put($iniPath, implode("\n", [
-                '[env:esp32doit-devkit-v1]',
-                'platform = espressif32',
-                '<<<<<<< Updated upstream',
-                'board = esp32doit-devkit-v1',
-                '=======',
-                'board = esp32-s3-devkitc-1',
-                '>>>>>>> Stashed changes',
-            ]) . "\n");
+            $this->post('/admin/config/devices/' . $device->id . '/firmware/editor/platformio-ini', [
+                'content' => implode("\n", [
+                    '[env:esp32doit-devkit-v1]',
+                    'platform = espressif32',
+                    'board = esp32doit-devkit-v1',
+                    '<<<<<<< custom override',
+                    'upload_speed = 921600',
+                    '=======',
+                    'upload_speed = 460800',
+                    '>>>>>>> incoming change',
+                ]) . "\n",
+            ])->assertRedirect('/admin/config/devices/' . $device->id . '/firmware/editor/platformio-ini');
 
             Process::fake();
 
@@ -672,9 +777,7 @@ class AdminConfigPanelTest extends TestCase
 
             Process::assertNothingRan();
         } finally {
-            if ($iniBackup !== null) {
-                File::put($iniPath, $iniBackup);
-            }
+            $this->restoreWorkspaceFirmwareFiles($backup);
         }
     }
 
@@ -696,6 +799,42 @@ class AdminConfigPanelTest extends TestCase
         $this->get('/admin/config/devices/' . $device->id . '/firmware/webflash/firmware.bin')
             ->assertOk()
             ->assertHeader('content-type', 'application/octet-stream');
+    }
+
+    /**
+     * @return array{main: ?string, ini: ?string}
+     */
+    private function backupWorkspaceFirmwareFiles(): array
+    {
+        $mainPath = base_path('ESP32_Firmware/src/main.cpp');
+        $iniPath = base_path('ESP32_Firmware/platformio.ini');
+
+        return [
+            'main' => File::exists($mainPath) ? (string) File::get($mainPath) : null,
+            'ini' => File::exists($iniPath) ? (string) File::get($iniPath) : null,
+        ];
+    }
+
+    /**
+     * @param array{main: ?string, ini: ?string} $backup
+     */
+    private function restoreWorkspaceFirmwareFiles(array $backup): void
+    {
+        $mainPath = base_path('ESP32_Firmware/src/main.cpp');
+        $iniPath = base_path('ESP32_Firmware/platformio.ini');
+
+        if ($backup['main'] !== null) {
+            File::put($mainPath, $backup['main']);
+        }
+
+        if ($backup['ini'] !== null) {
+            File::put($iniPath, $backup['ini']);
+        }
+    }
+
+    private function normalizeFirmwareText(string $value): string
+    {
+        return rtrim(str_replace(["\r\n", "\r"], "\n", $value), "\n");
     }
 
     private function mockGoogleCallback(string $email): void

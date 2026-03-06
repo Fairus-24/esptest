@@ -13,6 +13,16 @@ class SimulationFlowTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $statePath = storage_path('app/simulation_state.json');
+        if (is_file($statePath)) {
+            @unlink($statePath);
+        }
+    }
+
     public function test_simulation_page_renders_controls(): void
     {
         $this->get('/simulation')
@@ -20,6 +30,8 @@ class SimulationFlowTest extends TestCase
             ->assertSee('Network Profile')
             ->assertSee('Start Simulasi')
             ->assertSee('Sinkronkan Input')
+            ->assertSee('Kalkulator Dashboard Real')
+            ->assertSee('Refresh Kalkulator')
             ->assertSee('Mode tampilan:')
             ->assertSee('data-dashboard-viewport="desktop"', false)
             ->assertSee('data-dashboard-viewport="tablet"', false)

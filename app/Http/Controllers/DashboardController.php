@@ -7,6 +7,7 @@ use App\Models\Eksperimen;
 use App\Models\SimulatedEksperimen;
 use App\Models\Device;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -567,6 +568,21 @@ class DashboardController extends Controller
         ));
     }
 
+    public function calculator(Request $request): JsonResponse
+    {
+        $this->configureTelemetrySource((string) $request->query('source', 'real'));
+        $this->statisticsService->setTelemetrySource($this->telemetrySource);
+
+        return response()
+            ->json([
+                'success' => true,
+                'data' => $this->buildDashboardCalculatorPayload(),
+            ])
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', 'Fri, 01 Jan 1990 00:00:00 GMT');
+    }
+
     private function getChartProtocolData(string $protocol, int $chartWindowSize): \Illuminate\Support\Collection
     {
         $query = $this->telemetryQuery()
@@ -590,6 +606,403 @@ class DashboardController extends Controller
     private function resolveChartWindowSize(): int
     {
         return max(0, (int) config('dashboard.chart_window', 0));
+    }
+
+    private function buildDashboardCalculatorPayload(): array
+    {
+        $generatedAt = now();
+        $analysisWindow = max(0, (int) config('dashboard.analysis_window', 0));
+
+        if (!$this->isDatabaseReachable()) {
+            $fallback = $this->buildDashboardFallbackPayload(
+                'Database MySQL tidak terhubung. Kalkulator dashboard real memakai mode aman dengan hasil 0.'
+            );
+
+            return [
+                'database_ready' => false,
+                'source' => $this->telemetrySource,
+                'source_label' => strtoupper($this->telemetrySource),
+                'generated_at_wib' => $this->formatTimestampToWib($generatedAt),
+                'status_message' => 'Database tidak terhubung. Nilai kalkulator ditampilkan sebagai 0 sampai telemetry real tersedia kembali.',
+                'protocol_freshness_seconds' => (int) ($fallback['connectionConfig']['protocol_freshness_seconds'] ?? 30),
+                'analysis_window' => $analysisWindow,
+                'groups' => $this->buildDashboardCalculatorGroups(
+                    $fallback['summary'],
+                    $fallback['reliability'],
+                    $fallback['mqttConnectionStatus'],
+                    $fallback['httpConnectionStatus'],
+                    $fallback['avgSuhu'] ?? 0.0,
+                    $fallback['avgKelembapan'] ?? 0.0,
+                    $fallback['mqttAvgSuhu'] ?? 0.0,
+                    $fallback['mqttAvgKelembapan'] ?? 0.0,
+                    $fallback['httpAvgSuhu'] ?? 0.0,
+                    $fallback['httpAvgKelembapan'] ?? 0.0,
+                    $fallback['headerSuhuDelta'] ?? null,
+                    $fallback['headerKelembapanDelta'] ?? null,
+                    0.0,
+                    0.0,
+                    0,
+                    0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    $analysisWindow
+                ),
+            ];
+        }
+
+        $mqttData = $this->statisticsService->getMqttData();
+        $httpData = $this->statisticsService->getHttpData();
+        $summary = $this->statisticsService->getSummary($mqttData, $httpData);
+        $reliability = $this->statisticsService->getReliability();
+        $protocolTotals = $this->resolveProtocolTotals();
+        $summary['mqtt']['total_data'] = $protocolTotals['MQTT'];
+        $summary['http']['total_data'] = $protocolTotals['HTTP'];
+
+        $now = now();
+        $connectionConfig = $this->resolveConnectionConfig();
+        $simulationRunning = $this->isSimulationRunningFromStateFile();
+        $excludeSimulatorStatusSource = $this->telemetrySource === 'real'
+            && $connectionConfig['ignore_simulator_when_stopped']
+            && !$simulationRunning;
+        $excludedDeviceIds = $this->resolveExcludedDeviceIdsForStatus($excludeSimulatorStatusSource, $now);
+
+        $latestMqttResolution = $this->resolveLatestProtocolRowForStatus('MQTT', $excludedDeviceIds);
+        $latestHttpResolution = $this->resolveLatestProtocolRowForStatus('HTTP', $excludedDeviceIds);
+        $latestMqtt = $latestMqttResolution['row'] ?? null;
+        $latestHttp = $latestHttpResolution['row'] ?? null;
+
+        $mqttConnectionStatus = $this->buildProtocolConnectionStatus(
+            'MQTT',
+            $latestMqtt,
+            $now,
+            $connectionConfig['protocol_freshness_seconds'],
+            $latestMqttResolution
+        );
+        $httpConnectionStatus = $this->buildProtocolConnectionStatus(
+            'HTTP',
+            $latestHttp,
+            $now,
+            $connectionConfig['protocol_freshness_seconds'],
+            $latestHttpResolution
+        );
+
+        $mqttHeaderSuhu = $this->resolveFreshProtocolMetricValue($latestMqtt, $mqttConnectionStatus, 'suhu');
+        $mqttHeaderKelembapan = $this->resolveFreshProtocolMetricValue($latestMqtt, $mqttConnectionStatus, 'kelembapan');
+        $httpHeaderSuhu = $this->resolveFreshProtocolMetricValue($latestHttp, $httpConnectionStatus, 'suhu');
+        $httpHeaderKelembapan = $this->resolveFreshProtocolMetricValue($latestHttp, $httpConnectionStatus, 'kelembapan');
+
+        $avgSuhu = $this->calculateFreshCombinedMetric([$mqttHeaderSuhu, $httpHeaderSuhu]);
+        $avgKelembapan = $this->calculateFreshCombinedMetric([$mqttHeaderKelembapan, $httpHeaderKelembapan]);
+        $headerSuhuDelta = ($mqttHeaderSuhu !== null && $httpHeaderSuhu !== null)
+            ? $mqttHeaderSuhu - $httpHeaderSuhu
+            : null;
+        $headerKelembapanDelta = ($mqttHeaderKelembapan !== null && $httpHeaderKelembapan !== null)
+            ? $mqttHeaderKelembapan - $httpHeaderKelembapan
+            : null;
+
+        $mqttLatencyScope = $mqttData->whereNotNull('latency_ms');
+        $httpLatencyScope = $httpData->whereNotNull('latency_ms');
+        $mqttPowerScope = $mqttData->whereNotNull('daya_mw');
+        $httpPowerScope = $httpData->whereNotNull('daya_mw');
+
+        return [
+            'database_ready' => true,
+            'source' => $this->telemetrySource,
+            'source_label' => strtoupper($this->telemetrySource),
+            'generated_at_wib' => $this->formatTimestampToWib($generatedAt),
+            'status_message' => 'Kalkulator ini mengikuti data real dashboard terbaru dan refresh otomatis.',
+            'protocol_freshness_seconds' => (int) ($connectionConfig['protocol_freshness_seconds'] ?? 30),
+            'analysis_window' => $analysisWindow,
+            'groups' => $this->buildDashboardCalculatorGroups(
+                $summary,
+                $reliability,
+                $mqttConnectionStatus,
+                $httpConnectionStatus,
+                $avgSuhu,
+                $avgKelembapan,
+                $mqttHeaderSuhu ?? 0.0,
+                $mqttHeaderKelembapan ?? 0.0,
+                $httpHeaderSuhu ?? 0.0,
+                $httpHeaderKelembapan ?? 0.0,
+                $headerSuhuDelta,
+                $headerKelembapanDelta,
+                (float) $mqttLatencyScope->sum('latency_ms'),
+                (float) $httpLatencyScope->sum('latency_ms'),
+                (int) $mqttLatencyScope->count(),
+                (int) $httpLatencyScope->count(),
+                (float) $mqttPowerScope->sum('daya_mw'),
+                (float) $httpPowerScope->sum('daya_mw'),
+                (float) $mqttPowerScope->count(),
+                (float) $httpPowerScope->count(),
+                $analysisWindow
+            ),
+        ];
+    }
+
+    private function buildDashboardCalculatorGroups(
+        array $summary,
+        array $reliability,
+        array $mqttConnectionStatus,
+        array $httpConnectionStatus,
+        float $avgSuhu,
+        float $avgKelembapan,
+        float $mqttSuhu,
+        float $mqttKelembapan,
+        float $httpSuhu,
+        float $httpKelembapan,
+        ?float $headerSuhuDelta,
+        ?float $headerKelembapanDelta,
+        float $mqttLatencySum,
+        float $httpLatencySum,
+        int $mqttLatencyN,
+        int $httpLatencyN,
+        float $mqttPowerSum,
+        float $httpPowerSum,
+        float $mqttPowerN,
+        float $httpPowerN,
+        int $analysisWindow
+    ): array {
+        $freshCountSuhu = (int) (($mqttConnectionStatus['connected'] ?? false) ? 1 : 0) + (int) (($httpConnectionStatus['connected'] ?? false) ? 1 : 0);
+        $freshCountHumidity = $freshCountSuhu;
+        $mqttReliabilityHasSequence = ((int) ($reliability['mqtt_expected_packets'] ?? 0) > 0) || ((int) ($reliability['mqtt_received_packets'] ?? 0) > 0);
+        $httpReliabilityHasSequence = ((int) ($reliability['http_expected_packets'] ?? 0) > 0) || ((int) ($reliability['http_received_packets'] ?? 0) > 0);
+
+        return [
+            [
+                'title' => 'Header Realtime',
+                'description' => 'Perhitungan card suhu dan kelembapan di header dashboard real. Nilai stale otomatis dianggap 0.',
+                'cards' => [
+                    [
+                        'tone' => $this->resolveHeaderCardTone($freshCountSuhu),
+                        'chip' => 'HEADER',
+                        'label' => 'Suhu Realtime',
+                        'result' => $this->formatCalculatorNumber($avgSuhu) . ' C',
+                        'formula' => 'Hasil = average(nilai fresh MQTT/HTTP saja)',
+                        'inputs' => [
+                            ['label' => 'MQTT fresh', 'value' => $this->formatCalculatorNumber($mqttSuhu) . ' C'],
+                            ['label' => 'HTTP fresh', 'value' => $this->formatCalculatorNumber($httpSuhu) . ' C'],
+                            ['label' => 'Protokol fresh', 'value' => (string) $freshCountSuhu],
+                            ['label' => 'Delta MQTT-HTTP', 'value' => $headerSuhuDelta !== null ? $this->formatSignedCalculatorNumber($headerSuhuDelta) . ' C' : '-'],
+                        ],
+                    ],
+                    [
+                        'tone' => $this->resolveHeaderCardTone($freshCountHumidity),
+                        'chip' => 'HEADER',
+                        'label' => 'Kelembapan Realtime',
+                        'result' => $this->formatCalculatorNumber($avgKelembapan) . ' %',
+                        'formula' => 'Hasil = average(nilai fresh MQTT/HTTP saja)',
+                        'inputs' => [
+                            ['label' => 'MQTT fresh', 'value' => $this->formatCalculatorNumber($mqttKelembapan) . ' %'],
+                            ['label' => 'HTTP fresh', 'value' => $this->formatCalculatorNumber($httpKelembapan) . ' %'],
+                            ['label' => 'Protokol fresh', 'value' => (string) $freshCountHumidity],
+                            ['label' => 'Delta MQTT-HTTP', 'value' => $headerKelembapanDelta !== null ? $this->formatSignedCalculatorNumber($headerKelembapanDelta) . ' %' : '-'],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'title' => 'Realtime Metrics',
+                'description' => 'Perhitungan card utama dashboard real. `Total Data` memakai total tabel aktual, sedangkan rata-rata mengikuti scope analisis dashboard.',
+                'cards' => [
+                    [
+                        'tone' => $this->resolveConnectionTone($mqttConnectionStatus),
+                        'chip' => 'MQTT',
+                        'label' => 'Total Data',
+                        'result' => (string) ((int) ($summary['mqtt']['total_data'] ?? 0)) . ' data',
+                        'formula' => 'COUNT(baris real dengan protokol MQTT)',
+                        'inputs' => [
+                            ['label' => 'Rows MQTT real', 'value' => (string) ((int) ($summary['mqtt']['total_data'] ?? 0))],
+                            ['label' => 'Status koneksi', 'value' => (string) ($mqttConnectionStatus['label'] ?? 'Unknown')],
+                        ],
+                    ],
+                    [
+                        'tone' => $this->resolveConnectionTone($mqttConnectionStatus),
+                        'chip' => 'MQTT',
+                        'label' => 'Avg Latency',
+                        'result' => $this->formatCalculatorNumber((float) ($summary['mqtt']['avg_latency_ms'] ?? 0)) . ' ms',
+                        'formula' => 'SUM(latency_ms valid) / N latency MQTT',
+                        'inputs' => [
+                            ['label' => 'SUM latency', 'value' => $this->formatCalculatorNumber($mqttLatencySum, 4) . ' ms'],
+                            ['label' => 'N latency', 'value' => (string) $mqttLatencyN],
+                            ['label' => 'Window analisis', 'value' => $analysisWindow > 0 ? (string) $analysisWindow . ' data terakhir' : 'unlimited'],
+                        ],
+                    ],
+                    [
+                        'tone' => $this->resolveConnectionTone($mqttConnectionStatus),
+                        'chip' => 'MQTT',
+                        'label' => 'Avg Power',
+                        'result' => $this->formatCalculatorNumber((float) ($summary['mqtt']['avg_daya_mw'] ?? 0)) . ' mW',
+                        'formula' => 'SUM(daya_mw valid) / N daya MQTT',
+                        'inputs' => [
+                            ['label' => 'SUM daya', 'value' => $this->formatCalculatorNumber($mqttPowerSum, 4) . ' mW'],
+                            ['label' => 'N daya', 'value' => (string) ((int) $mqttPowerN)],
+                            ['label' => 'Window analisis', 'value' => $analysisWindow > 0 ? (string) $analysisWindow . ' data terakhir' : 'unlimited'],
+                        ],
+                    ],
+                    [
+                        'tone' => $this->resolveConnectionTone($mqttConnectionStatus),
+                        'chip' => 'MQTT',
+                        'label' => 'Reliability',
+                        'result' => $this->formatCalculatorNumber((float) ($reliability['mqtt_reliability'] ?? 0)) . ' %',
+                        'formula' => $mqttReliabilityHasSequence
+                            ? '(0.55 x sequence) + (0.25 x completeness) + (0.20 x transmission)'
+                            : '(0.60 x completeness) + (0.40 x transmission)',
+                        'inputs' => [
+                            ['label' => 'Sequence score', 'value' => $this->formatCalculatorNumber((float) ($reliability['mqtt_sequence_reliability'] ?? 0)) . ' %'],
+                            ['label' => 'Completeness', 'value' => $this->formatCalculatorNumber((float) ($reliability['mqtt_data_completeness'] ?? 0)) . ' %'],
+                            ['label' => 'Transmission', 'value' => $this->formatCalculatorNumber((float) ($reliability['mqtt_transmission_health'] ?? 0)) . ' %'],
+                            ['label' => 'Window reliability', 'value' => (string) ((int) ($reliability['mqtt_window_size'] ?? 0)) . ' data'],
+                        ],
+                    ],
+                    [
+                        'tone' => $this->resolveConnectionTone($httpConnectionStatus),
+                        'chip' => 'HTTP',
+                        'label' => 'Total Data',
+                        'result' => (string) ((int) ($summary['http']['total_data'] ?? 0)) . ' data',
+                        'formula' => 'COUNT(baris real dengan protokol HTTP)',
+                        'inputs' => [
+                            ['label' => 'Rows HTTP real', 'value' => (string) ((int) ($summary['http']['total_data'] ?? 0))],
+                            ['label' => 'Status koneksi', 'value' => (string) ($httpConnectionStatus['label'] ?? 'Unknown')],
+                        ],
+                    ],
+                    [
+                        'tone' => $this->resolveConnectionTone($httpConnectionStatus),
+                        'chip' => 'HTTP',
+                        'label' => 'Avg Latency',
+                        'result' => $this->formatCalculatorNumber((float) ($summary['http']['avg_latency_ms'] ?? 0)) . ' ms',
+                        'formula' => 'SUM(latency_ms valid) / N latency HTTP',
+                        'inputs' => [
+                            ['label' => 'SUM latency', 'value' => $this->formatCalculatorNumber($httpLatencySum, 4) . ' ms'],
+                            ['label' => 'N latency', 'value' => (string) $httpLatencyN],
+                            ['label' => 'Window analisis', 'value' => $analysisWindow > 0 ? (string) $analysisWindow . ' data terakhir' : 'unlimited'],
+                        ],
+                    ],
+                    [
+                        'tone' => $this->resolveConnectionTone($httpConnectionStatus),
+                        'chip' => 'HTTP',
+                        'label' => 'Avg Power',
+                        'result' => $this->formatCalculatorNumber((float) ($summary['http']['avg_daya_mw'] ?? 0)) . ' mW',
+                        'formula' => 'SUM(daya_mw valid) / N daya HTTP',
+                        'inputs' => [
+                            ['label' => 'SUM daya', 'value' => $this->formatCalculatorNumber($httpPowerSum, 4) . ' mW'],
+                            ['label' => 'N daya', 'value' => (string) ((int) $httpPowerN)],
+                            ['label' => 'Window analisis', 'value' => $analysisWindow > 0 ? (string) $analysisWindow . ' data terakhir' : 'unlimited'],
+                        ],
+                    ],
+                    [
+                        'tone' => $this->resolveConnectionTone($httpConnectionStatus),
+                        'chip' => 'HTTP',
+                        'label' => 'Reliability',
+                        'result' => $this->formatCalculatorNumber((float) ($reliability['http_reliability'] ?? 0)) . ' %',
+                        'formula' => $httpReliabilityHasSequence
+                            ? '(0.55 x sequence) + (0.25 x completeness) + (0.20 x transmission)'
+                            : '(0.60 x completeness) + (0.40 x transmission)',
+                        'inputs' => [
+                            ['label' => 'Sequence score', 'value' => $this->formatCalculatorNumber((float) ($reliability['http_sequence_reliability'] ?? 0)) . ' %'],
+                            ['label' => 'Completeness', 'value' => $this->formatCalculatorNumber((float) ($reliability['http_data_completeness'] ?? 0)) . ' %'],
+                            ['label' => 'Transmission', 'value' => $this->formatCalculatorNumber((float) ($reliability['http_transmission_health'] ?? 0)) . ' %'],
+                            ['label' => 'Window reliability', 'value' => (string) ((int) ($reliability['http_window_size'] ?? 0)) . ' data'],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'title' => 'T-Test Dashboard Real',
+                'description' => 'Ringkasan perhitungan statistik yang dipakai card T-Test di dashboard real.',
+                'cards' => [
+                    $this->buildCalculatorTTestCard('LATENCY', 'Latency T-Test', $summary['ttest_latency'] ?? []),
+                    $this->buildCalculatorTTestCard('POWER', 'Power T-Test', $summary['ttest_daya'] ?? []),
+                ],
+            ],
+        ];
+    }
+
+    private function buildCalculatorTTestCard(string $chip, string $label, array $ttest): array
+    {
+        $valid = (bool) ($ttest['valid'] ?? false);
+        $tone = $valid ? ((bool) ($ttest['is_significant'] ?? false) ? 'ok' : 'warn') : 'muted';
+
+        return [
+            'tone' => $tone,
+            'chip' => $chip,
+            'label' => $label,
+            'result' => $valid
+                ? (((bool) ($ttest['is_significant'] ?? false)) ? 'SIGNIFIKAN' : 'TIDAK SIGNIFIKAN')
+                : 'Belum cukup data',
+            'formula' => 'Welch independent sample t-test antara MQTT dan HTTP',
+            'inputs' => [
+                ['label' => 'MQTT N', 'value' => (string) ((int) ($ttest['data1']['n'] ?? 0))],
+                ['label' => 'MQTT mean', 'value' => $this->formatCalculatorFlexible($ttest['data1']['mean'] ?? null)],
+                ['label' => 'MQTT variance', 'value' => $this->formatCalculatorFlexible($ttest['data1']['variance'] ?? null)],
+                ['label' => 'HTTP N', 'value' => (string) ((int) ($ttest['data2']['n'] ?? 0))],
+                ['label' => 'HTTP mean', 'value' => $this->formatCalculatorFlexible($ttest['data2']['mean'] ?? null)],
+                ['label' => 'HTTP variance', 'value' => $this->formatCalculatorFlexible($ttest['data2']['variance'] ?? null)],
+                ['label' => 't-value', 'value' => $this->formatCalculatorFlexible($ttest['t_value'] ?? null)],
+                ['label' => 'df', 'value' => (string) ((int) ($ttest['df'] ?? 0))],
+                ['label' => 'critical', 'value' => '±' . $this->formatCalculatorFlexible($ttest['critical_value'] ?? null)],
+                ['label' => 'p-value', 'value' => $this->formatCalculatorFlexible($ttest['p_value_display'] ?? ($ttest['p_value'] ?? null))],
+            ],
+        ];
+    }
+
+    private function resolveConnectionTone(array $status): string
+    {
+        $state = (string) ($status['state'] ?? '');
+        if ($state === 'connected') {
+            return 'ok';
+        }
+        if ($state === 'filtered' || $state === 'stale') {
+            return 'warn';
+        }
+
+        return 'muted';
+    }
+
+    private function resolveHeaderCardTone(int $freshCount): string
+    {
+        if ($freshCount >= 2) {
+            return 'ok';
+        }
+        if ($freshCount === 1) {
+            return 'warn';
+        }
+
+        return 'muted';
+    }
+
+    private function formatCalculatorNumber(float $value, int $decimals = 2): string
+    {
+        return number_format($value, $decimals, '.', '');
+    }
+
+    private function formatCalculatorSignedNumber(float $value, int $decimals = 2): string
+    {
+        return sprintf('%+.' . $decimals . 'f', $value);
+    }
+
+    private function formatCalculatorFlexible(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '-';
+        }
+
+        if (is_int($value)) {
+            return (string) $value;
+        }
+
+        if (is_numeric($value)) {
+            $numeric = (float) $value;
+            if (!is_finite($numeric)) {
+                return (string) $value;
+            }
+
+            $encoded = json_encode($numeric, JSON_PRESERVE_ZERO_FRACTION);
+            return is_string($encoded) ? $encoded : (string) $value;
+        }
+
+        return (string) $value;
     }
 
     private function configureTelemetrySource(string $source): void

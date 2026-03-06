@@ -39,6 +39,12 @@ Route::prefix('/admin/config')
         Route::patch('/devices/{device}', [AdminConfigController::class, 'updateDevice'])->name('devices.update');
         Route::delete('/devices/{device}', [AdminConfigController::class, 'destroyDevice'])->name('devices.destroy');
         Route::post('/devices/{device}/profile', [AdminConfigController::class, 'saveDeviceProfile'])->name('devices.profile.save');
+        Route::get('/devices/{device}/firmware/editor/{target}', [AdminConfigController::class, 'editFirmwareSource'])
+            ->whereIn('target', ['main-cpp', 'platformio-ini'])
+            ->name('devices.firmware.editor');
+        Route::post('/devices/{device}/firmware/editor/{target}', [AdminConfigController::class, 'saveFirmwareSource'])
+            ->whereIn('target', ['main-cpp', 'platformio-ini'])
+            ->name('devices.firmware.editor.save');
         Route::get('/devices/{device}/firmware/main.cpp', [AdminConfigController::class, 'downloadMain'])->name('devices.firmware.main');
         Route::get('/devices/{device}/firmware/platformio.ini', [AdminConfigController::class, 'downloadPlatformio'])->name('devices.firmware.platformio');
         Route::post('/devices/{device}/firmware/apply', [AdminConfigController::class, 'applyFirmware'])->name('devices.firmware.apply');
@@ -51,4 +57,5 @@ Route::prefix('/admin/config')
     });
 
 Route::view('/doc', 'doc')->name('doc');
+Route::get('/dashboard/calculator', [DashboardController::class, 'calculator'])->name('dashboard.calculator');
 Route::get('/', [DashboardController::class, 'index'])->name('dashboard');

@@ -395,6 +395,96 @@ class AdminConfigController extends Controller
         }, $filename, ['Content-Type' => 'text/plain; charset=UTF-8']);
     }
 
+    public function editFirmwareSource(Device $device, string $target)
+    {
+        $targetMeta = $this->resolveFirmwareEditorTarget($target);
+        $settings = $this->adminEnvironmentService->getFormState();
+        $profile = $this->firmwareTemplateService->ensureProfile($device);
+        $standardBundle = $this->firmwareTemplateService->renderStandard($device, $profile, $settings);
+        $bundle = $this->firmwareTemplateService->render($device, $profile, $settings);
+        $profileColumn = (string) $targetMeta['profile_column'];
+        $bundleKey = (string) $targetMeta['bundle_key'];
+
+        return view('admin-firmware-editor', [
+            'device' => $device,
+            'profile' => $profile,
+            'targetMeta' => $targetMeta,
+            'content' => old('content', (string) ($bundle[$bundleKey] ?? '')),
+            'standardContent' => (string) ($standardBundle[$bundleKey] ?? ''),
+            'isCustomOverride' => $this->hasFirmwareSourceOverride($profile->{$profileColumn} ?? null),
+            'workspacePaths' => [
+                'main_cpp' => base_path('ESP32_Firmware/src/main.cpp'),
+                'platformio_ini' => base_path('ESP32_Firmware/platformio.ini'),
+            ],
+        ]);
+    }
+
+    public function saveFirmwareSource(Request $request, Device $device, string $target): RedirectResponse
+    {
+        $targetMeta = $this->resolveFirmwareEditorTarget($target);
+        $validated = $request->validate([
+            'content' => ['required', 'string', 'max:500000'],
+        ]);
+
+        $settings = $this->adminEnvironmentService->getFormState();
+        $profile = $this->firmwareTemplateService->ensureProfile($device);
+        $standardBundle = $this->firmwareTemplateService->renderStandard($device, $profile, $settings);
+        $bundleKey = (string) $targetMeta['bundle_key'];
+        $profileColumn = (string) $targetMeta['profile_column'];
+        $fileLabel = (string) $targetMeta['file_label'];
+        $normalizedContent = $this->normalizeFirmwareSourceContent((string) $validated['content']);
+
+        if (trim($normalizedContent) === '') {
+            return redirect()
+                ->route('admin.config.devices.firmware.editor', [
+                    'device' => $device->id,
+                    'target' => $target,
+                ])
+                ->withInput()
+                ->withErrors([
+                    'content' => $fileLabel . ' tidak boleh kosong.',
+                ]);
+        }
+
+        $standardContent = $this->normalizeFirmwareSourceContent((string) ($standardBundle[$bundleKey] ?? ''));
+        $isGeneratedStandard = $normalizedContent === $standardContent;
+
+        $profile->{$profileColumn} = $isGeneratedStandard ? null : $normalizedContent;
+        $profile->save();
+
+        $statusMessage = $isGeneratedStandard
+            ? 'Generated standard ' . $fileLabel . ' dipulihkan untuk device ini.'
+            : 'Custom ' . $fileLabel . ' berhasil disimpan untuk device ini.';
+
+        try {
+            $bundle = $this->firmwareTemplateService->render($device, $profile, $settings);
+            $applyResult = $this->firmwareTemplateService->applyToWorkspace($device, $bundle);
+
+            return redirect()
+                ->route('admin.config.devices.firmware.editor', [
+                    'device' => $device->id,
+                    'target' => $target,
+                ])
+                ->with('admin_status', $statusMessage . ' Workspace sinkron. Backup: ' . $applyResult['backup_dir']);
+        } catch (Throwable $e) {
+            Log::error('Firmware source editor failed to synchronize workspace.', [
+                'device_id' => $device->id,
+                'target' => $target,
+                'error' => $e->getMessage(),
+            ]);
+
+            return redirect()
+                ->route('admin.config.devices.firmware.editor', [
+                    'device' => $device->id,
+                    'target' => $target,
+                ])
+                ->with('admin_status', $statusMessage)
+                ->withErrors([
+                    'firmware_editor' => 'Source override tersimpan, tetapi sinkronisasi ke workspace gagal. Jalankan Apply to Workspace dari panel admin setelah mengecek permission file.',
+                ]);
+        }
+    }
+
     public function applyFirmware(Device $device): RedirectResponse
     {
         $bundle = $this->prepareFirmwareBundle($device);
@@ -505,6 +595,49 @@ class AdminConfigController extends Controller
         $profile = $this->firmwareTemplateService->ensureProfile($device);
 
         return $this->firmwareTemplateService->render($device, $profile, $settings);
+    }
+
+    /**
+     * @return array{
+     *   target: string,
+     *   bundle_key: string,
+     *   profile_column: string,
+     *   file_label: string,
+     *   language: string,
+     *   description: string
+     * }
+     */
+    private function resolveFirmwareEditorTarget(string $target): array
+    {
+        return match ($target) {
+            'main-cpp' => [
+                'target' => 'main-cpp',
+                'bundle_key' => 'main_cpp',
+                'profile_column' => 'custom_main_cpp',
+                'file_label' => 'main.cpp',
+                'language' => 'cpp',
+                'description' => 'Full Arduino source for the selected device firmware.',
+            ],
+            'platformio-ini' => [
+                'target' => 'platformio-ini',
+                'bundle_key' => 'platformio_ini',
+                'profile_column' => 'custom_platformio_ini',
+                'file_label' => 'platformio.ini',
+                'language' => 'ini',
+                'description' => 'Full PlatformIO project configuration for the selected device.',
+            ],
+            default => abort(404),
+        };
+    }
+
+    private function hasFirmwareSourceOverride(mixed $value): bool
+    {
+        return is_string($value) && trim($this->normalizeFirmwareSourceContent($value)) !== '';
+    }
+
+    private function normalizeFirmwareSourceContent(string $content): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $content);
     }
 
     private function runFirmwareCliCommand(Device $device, string $mode): RedirectResponse

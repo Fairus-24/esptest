@@ -210,6 +210,11 @@
             margin-left: 6px;
         }
 
+        .tag.warn {
+            border-color: rgba(245, 158, 11, .45);
+            color: #fcd34d;
+        }
+
         .table {
             width: 100%;
             border-collapse: collapse;
@@ -241,6 +246,55 @@
             line-height: 1.4;
         }
 
+        .code-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .code-preview-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .code-preview-header label {
+            margin-bottom: 0;
+            display: inline-flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border: 1px solid rgba(61, 212, 255, .45);
+            border-radius: 9px;
+            background: rgba(61, 212, 255, .09);
+            color: #9be8ff;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .icon-btn:hover {
+            background: rgba(61, 212, 255, .15);
+        }
+
+        .icon-btn svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        .code-preview-textarea {
+            min-height: 290px;
+        }
+
         .webflash-log {
             min-height: 180px;
             white-space: pre-wrap;
@@ -270,7 +324,8 @@
             }
 
             .row,
-            .row-3 {
+            .row-3,
+            .code-preview-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -774,6 +829,7 @@
                     </form>
                 </div>
                 <p class="note">Build/Upload will always regenerate latest firmware from selected profile, apply to workspace, then run PlatformIO command in <code>ESP32_Firmware</code>. Manual edits directly in generated workspace files will be overwritten by this flow.</p>
+                <p class="note">Use the pencil icon to edit the full file in a dedicated editor. Saved source edits only override the selected device, while device lain tetap memakai generated standard template.</p>
 
                 @if (is_array($firmwareCliResult))
                     <div class="field section-gap">
@@ -826,14 +882,58 @@
                     <textarea id="serial-monitor-log" class="serial-monitor-log" readonly></textarea>
                 </div>
 
-                <div class="row">
+                @php
+                    $mainOverrideActive = filled($selectedProfile->custom_main_cpp ?? null);
+                    $platformioOverrideActive = filled($selectedProfile->custom_platformio_ini ?? null);
+                @endphp
+                <div class="code-preview-grid">
                     <div class="field">
-                        <label>main.cpp</label>
-                        <textarea readonly>{{ $renderedFirmware['main_cpp'] }}</textarea>
+                        <div class="code-preview-header">
+                            <label>
+                                main.cpp
+                                <span class="tag {{ $mainOverrideActive ? 'warn' : '' }}">
+                                    {{ $mainOverrideActive ? 'Custom Override' : 'Generated Standard' }}
+                                </span>
+                            </label>
+                            <button
+                                type="button"
+                                class="icon-btn firmware-edit-btn"
+                                title="Edit full main.cpp"
+                                aria-label="Edit full main.cpp"
+                                data-file-label="main.cpp"
+                                data-edit-url="{{ route('admin.config.devices.firmware.editor', ['device' => $selectedDevice, 'target' => 'main-cpp'], false) }}"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                    <path d="m12 6 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <textarea readonly class="code-preview-textarea">{{ $renderedFirmware['main_cpp'] }}</textarea>
                     </div>
                     <div class="field">
-                        <label>platformio.ini</label>
-                        <textarea readonly>{{ $renderedFirmware['platformio_ini'] }}</textarea>
+                        <div class="code-preview-header">
+                            <label>
+                                platformio.ini
+                                <span class="tag {{ $platformioOverrideActive ? 'warn' : '' }}">
+                                    {{ $platformioOverrideActive ? 'Custom Override' : 'Generated Standard' }}
+                                </span>
+                            </label>
+                            <button
+                                type="button"
+                                class="icon-btn firmware-edit-btn"
+                                title="Edit full platformio.ini"
+                                aria-label="Edit full platformio.ini"
+                                data-file-label="platformio.ini"
+                                data-edit-url="{{ route('admin.config.devices.firmware.editor', ['device' => $selectedDevice, 'target' => 'platformio-ini'], false) }}"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                    <path d="m12 6 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <textarea readonly class="code-preview-textarea">{{ $renderedFirmware['platformio_ini'] }}</textarea>
                     </div>
                 </div>
                 <div class="field section-gap">
@@ -846,6 +946,24 @@
 
     <script>
         (function () {
+            document.querySelectorAll('.firmware-edit-btn').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const editUrl = button.getAttribute('data-edit-url') || '';
+                    const fileLabel = button.getAttribute('data-file-label') || 'firmware file';
+                    if (!editUrl) {
+                        return;
+                    }
+
+                    const confirmed = window.confirm(
+                        'Edit full ' + fileLabel + ' untuk device terpilih? Save dari editor akan override generated standard hanya untuk device ini.'
+                    );
+
+                    if (confirmed) {
+                        window.location.href = editUrl;
+                    }
+                });
+            });
+
             const quickForm = document.getElementById('quick-runtime-form');
             const quickSaveButton = document.getElementById('quick-runtime-save-btn');
             if (quickForm && quickSaveButton) {
