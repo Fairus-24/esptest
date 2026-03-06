@@ -236,7 +236,7 @@ The project has been updated with the following behavior:
 177. Admin Web Serial Monitor reliability was improved: baud selector is now a global-standard dropdown (from `1200` to `2000000` with common ESP rates), serial stream parsing now normalizes both `CRLF` and `CR`, partial-line tail is flushed safely, monitor open applies stable 8N1 defaults, and stream-close now enters reconnect retry loop instead of instantly stopping.
 178. Firmware template conflict safety was restored by removing accidental Git merge markers from `ESP32_Firmware/platformio.ini` and `ESP32_Firmware/src/main.cpp`; MQTT target constant now follows build macro (`ESP_MQTT_BROKER`) to avoid stale hardcoded broker host after profile/runtime updates.
 179. Admin firmware profile save flow now blocks invalid ESP32 network targets (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, and placeholder macro host), preventing successful flash with guaranteed no-data runtime. Serial Monitor runtime loop was also hardened to survive stream-close/reconnect cycles without instantly stopping.
-180. T-test output now keeps raw numeric values (mean/variance/std/t/p without `round()`), p-value is computed continuously from Student's t distribution (no coarse buckets), and dashboard cards render those raw values directly.
+180. T-test output now keeps raw numeric values (mean/variance/std/t/p without `round()`), critical value is computed dynamically from `df` + `alpha` (not fixed hardcoded), and p-value underflow is displayed as lower bound (`p < ...`) instead of static `0.0`.
 
 ## Tech Stack
 
@@ -393,6 +393,7 @@ php artisan tinker --execute "App\\Models\\Eksperimen::query()->delete();"
 | `DB_USERNAME` | Yes | `root` | Your MySQL user |
 | `DB_PASSWORD` | Depends | `` | Your MySQL password |
 | `DASHBOARD_ANALYSIS_WINDOW` | Recommended | `0` | Analysis window size for statistics/t-test (`0` = unlimited/full dataset, `>0` = latest N rows per protocol) |
+| `DASHBOARD_TTEST_ALPHA` | Recommended | `0.05` | Two-tailed alpha used by t-test critical value/significance decision |
 | `DASHBOARD_CHART_WINDOW` | Optional | `0` | Chart data window per protocol (`0` = unlimited/full dataset, `>0` = latest N rows per protocol) |
 | `DASHBOARD_PROTOCOL_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for MQTT/HTTP `Connected` badge on header + realtime monitor |
 | `DASHBOARD_ESP32_FRESHNESS_SECONDS` | Recommended | `30` | Freshness threshold for ESP32 `ON/OFF` badge |
@@ -543,6 +544,7 @@ HTTP_ALLOW_INGEST_WITHOUT_KEY=false
 HTTP_INGEST_RATE_LIMIT_PER_MINUTE=240
 
 DASHBOARD_ANALYSIS_WINDOW=0
+DASHBOARD_TTEST_ALPHA=0.05
 DASHBOARD_CHART_WINDOW=0
 DASHBOARD_PROTOCOL_FRESHNESS_SECONDS=30
 DASHBOARD_ESP32_FRESHNESS_SECONDS=30

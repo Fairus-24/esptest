@@ -3135,7 +3135,7 @@
                                 <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['t_value'] ?? null) }}</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ (int) ($summary['ttest_latency']['df'] ?? 0) }}</span></div>
                                 <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $formatTTestNumber($summary['ttest_latency']['critical_value'] ?? null) }}</span></div>
-                                <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['p_value'] ?? null) }}</span></div>
+                                <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_latency']['p_value_display'] ?? ($summary['ttest_latency']['p_value'] ?? null)) }}</span></div>
                                 <span class="significance-badge @if($summary['ttest_latency']['is_significant']) significance-yes @else significance-no @endif">
                                     @if($summary['ttest_latency']['is_significant'])
                                         <i class="fas fa-check-circle"></i> Signifikan
@@ -3196,7 +3196,7 @@
                                     <div class="ttest-row"><span class="ttest-label">t-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['t_value'] ?? null) }}</span></div>
                                     <div class="ttest-row"><span class="ttest-label">Degrees of Freedom</span><span class="ttest-value">{{ (int) ($summary['ttest_daya']['df'] ?? 0) }}</span></div>
                                     <div class="ttest-row"><span class="ttest-label">Critical Value</span><span class="ttest-value">±{{ $formatTTestNumber($summary['ttest_daya']['critical_value'] ?? null) }}</span></div>
-                                    <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['p_value'] ?? null) }}</span></div>
+                                    <div class="ttest-row"><span class="ttest-label">p-value</span><span class="ttest-value">{{ $formatTTestNumber($summary['ttest_daya']['p_value_display'] ?? ($summary['ttest_daya']['p_value'] ?? null)) }}</span></div>
                                     <span class="significance-badge @if($summary['ttest_daya']['is_significant']) significance-yes @else significance-no @endif">
                                         @if($summary['ttest_daya']['is_significant'])
                                             <i class="fas fa-check-circle"></i> Signifikan

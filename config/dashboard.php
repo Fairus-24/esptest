@@ -7,6 +7,12 @@ return [
     // Batas data chart per protokol. 0 = tanpa batas (pakai seluruh data real/simulation).
     'chart_window' => (int) env('DASHBOARD_CHART_WINDOW', 0),
 
+    // Parameter statistical test (independent sample t-test).
+    'ttest' => [
+        // Two-tailed alpha (contoh umum: 0.05).
+        'alpha' => (float) env('DASHBOARD_TTEST_ALPHA', 0.05),
+    ],
+
     // Freshness status koneksi realtime untuk badge header + realtime link monitor.
     'connection' => [
         'protocol_freshness_seconds' => (int) env('DASHBOARD_PROTOCOL_FRESHNESS_SECONDS', 30),

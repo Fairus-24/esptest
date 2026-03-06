@@ -84,8 +84,7 @@ class StatisticsService
      * H0: mean1 = mean2 (tidak ada perbedaan)
      * H1: mean1 ≠ mean2 (ada perbedaan)
      * 
-     * Alpha (α) = 0.05 (two-tailed)
-     * Critical value = ±1.96
+     * Alpha default = 0.05 (two-tailed), bisa diatur dari config.
      */
     public function tTest(Collection $data1, Collection $data2, string $column)
     {
@@ -127,7 +126,9 @@ class StatisticsService
         }
         $standardError = sqrt(max(0, $pooledVariance) * $standardErrorDenom);
 
-        $criticalValue = 1.96;
+        $alpha = $this->resolveTTestAlpha();
+        $criticalValue = $this->calculateCriticalValue($df, $alpha);
+        $alphaDisplay = $this->formatFloatForDisplay($alpha);
         $note = null;
 
         if ($standardError == 0.0) {
@@ -153,9 +154,10 @@ class StatisticsService
             $isSignificant = abs($tValue) > $criticalValue;
         }
 
+        $pValueDisplay = $this->formatPValueDisplay($pValue);
         $interpretation = $isSignificant
-            ? 'Ada perbedaan signifikan (p < 0.05)'
-            : 'Tidak ada perbedaan signifikan (p >= 0.05)';
+            ? "Ada perbedaan signifikan (p < {$alphaDisplay})"
+            : "Tidak ada perbedaan signifikan (p >= {$alphaDisplay})";
 
         if ($note !== null) {
             $interpretation .= ' | ' . $note;
@@ -177,9 +179,11 @@ class StatisticsService
             ],
             't_value' => $tValue,
             'df' => $df,
+            'alpha' => $alpha,
             'critical_value' => $criticalValue,
             'is_significant' => $isSignificant,
             'p_value' => $pValue,
+            'p_value_display' => $pValueDisplay,
             'interpretation' => $interpretation,
             'note' => $note,
         ];
@@ -203,6 +207,72 @@ class StatisticsService
         $pValue = $this->regularizedIncompleteBeta($x, $degreesOfFreedom / 2.0, 0.5);
 
         return max(0.0, min(1.0, $pValue));
+    }
+
+    /**
+     * Nilai alpha untuk two-tailed t-test.
+     */
+    private function resolveTTestAlpha(): float
+    {
+        $alpha = (float) config('dashboard.ttest.alpha', 0.05);
+        if (!is_finite($alpha)) {
+            return 0.05;
+        }
+
+        return min(0.5, max(0.000001, $alpha));
+    }
+
+    /**
+     * Hitung t-critical two-tailed berdasarkan alpha + df.
+     * Menggunakan bisection di atas fungsi p-value.
+     */
+    private function calculateCriticalValue(int $df, float $alpha): float
+    {
+        $degreesOfFreedom = max(1, $df);
+        $targetPValue = min(0.5, max(0.000001, $alpha));
+        $low = 0.0;
+        $high = 8.0;
+
+        for ($i = 0; $i < 24; $i++) {
+            if ($this->calculatePValue($high, $degreesOfFreedom) <= $targetPValue) {
+                break;
+            }
+            $high *= 2.0;
+        }
+
+        for ($i = 0; $i < 80; $i++) {
+            $mid = ($low + $high) / 2.0;
+            $midPValue = $this->calculatePValue($mid, $degreesOfFreedom);
+            if ($midPValue > $targetPValue) {
+                $low = $mid;
+            } else {
+                $high = $mid;
+            }
+        }
+
+        return ($low + $high) / 2.0;
+    }
+
+    /**
+     * Format p-value agar underflow tidak tampil sebagai "0.0" polos.
+     */
+    private function formatPValueDisplay(float $pValue): string
+    {
+        if ($pValue <= 0.0) {
+            return '< ' . $this->formatFloatForDisplay(PHP_FLOAT_MIN);
+        }
+
+        return $this->formatFloatForDisplay($pValue);
+    }
+
+    /**
+     * Format float untuk display tanpa pembulatan paksa.
+     */
+    private function formatFloatForDisplay(float $value): string
+    {
+        $encoded = json_encode($value, JSON_PRESERVE_ZERO_FRACTION);
+
+        return is_string($encoded) ? $encoded : (string) $value;
     }
 
     /**
