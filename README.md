@@ -238,6 +238,8 @@ The project has been updated with the following behavior:
 179. Admin firmware profile save flow now blocks invalid ESP32 network targets (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, and placeholder macro host), preventing successful flash with guaranteed no-data runtime. Serial Monitor runtime loop was also hardened to survive stream-close/reconnect cycles without instantly stopping.
 180. T-test output now keeps raw numeric values (mean/variance/std/t/p without `round()`), critical value is computed dynamically from `df` + `alpha` (not fixed hardcoded), and p-value display is compressed to max 15 characters in decimal-style compact form (example: `0.[1283]...3868`) so extreme small values no longer appear as static `0.0`.
 181. Simulation page form state is now robust against realtime polling: while simulator is `STOPPED`, edited interval/fail-rate/profile inputs no longer jump back to stale server values, `Sinkronkan Input` can restore the latest saved server config on demand, and embedded simulation dashboard now supports icon-based viewport switching (`Desktop` / `Tablet` / `Mobile`) with remembered preference in browser storage.
+182. Embedded simulation dashboard viewport modes now use fixed virtual sizes per mode (`Desktop`, `Tablet`, `Mobile`) instead of following the real client screen width; the selected mode defines the iframe layout breakpoint, while the page only scales that viewport visually to fit the available space.
+183. Dashboard header temperature/humidity cards now use latest fresh telemetry per protocol (not historical averages); when MQTT/HTTP data becomes stale or stops arriving, the affected header values automatically fall back to `0.00`, including per-protocol detail lines in the header.
 
 ## Tech Stack
 
@@ -710,7 +712,7 @@ Simulation quick start:
 4. Use `Sinkronkan Input` if you want to discard draft edits and reload the latest config currently held by the simulator status.
 5. Click toggle button `Start Simulasi` (the same button becomes `Stop Simulasi` while running).
 6. Observe live behavior in embedded simulation dashboard frame (`/?source=simulation`) and verify `Network` meta (`profile/mode/health`) on simulation page.
-7. Use the viewport icon switcher above the frame to preview the simulation dashboard in `Desktop`, `Tablet`, or `Mobile` width; the selected mode is remembered in browser `localStorage`.
+7. Use the viewport icon switcher above the frame to preview the simulation dashboard in `Desktop`, `Tablet`, or `Mobile` width; each mode now uses its own fixed virtual viewport and is only scaled visually when the real screen is smaller, while the selected mode is remembered in browser `localStorage`.
 8. `Reset Data Simulasi` button only appears when simulation table currently has rows.
 9. Real dashboard (`/`) remains isolated and continues reading only real telemetry table (`eksperimens`).
 

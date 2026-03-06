@@ -154,19 +154,25 @@ class DashboardController extends Controller
         $httpConnected = (bool) ($httpConnectionStatus['connected'] ?? false);
         $esp32Connected = (bool) ($esp32ConnectionStatus['connected'] ?? false);
 
-        // Statistik suhu & kelembapan
-        $mqttAvgSuhu = $mqttData->whereNotNull('suhu')->avg('suhu');
-        $mqttAvgKelembapan = $mqttData->whereNotNull('kelembapan')->avg('kelembapan');
-        $httpAvgSuhu = $httpData->whereNotNull('suhu')->avg('suhu');
-        $httpAvgKelembapan = $httpData->whereNotNull('kelembapan')->avg('kelembapan');
+        // Header suhu & kelembapan harus mengikuti telemetry fresh, bukan histori lama.
+        $mqttHeaderSuhu = $this->resolveFreshProtocolMetricValue($latestMqtt, $mqttConnectionStatus, 'suhu');
+        $mqttHeaderKelembapan = $this->resolveFreshProtocolMetricValue($latestMqtt, $mqttConnectionStatus, 'kelembapan');
+        $httpHeaderSuhu = $this->resolveFreshProtocolMetricValue($latestHttp, $httpConnectionStatus, 'suhu');
+        $httpHeaderKelembapan = $this->resolveFreshProtocolMetricValue($latestHttp, $httpConnectionStatus, 'kelembapan');
 
-        $avgSuhu = collect([$mqttAvgSuhu, $httpAvgSuhu])
-            ->filter(static fn($value) => $value !== null)
-            ->avg() ?? 0;
+        $mqttAvgSuhu = $mqttHeaderSuhu ?? 0.0;
+        $mqttAvgKelembapan = $mqttHeaderKelembapan ?? 0.0;
+        $httpAvgSuhu = $httpHeaderSuhu ?? 0.0;
+        $httpAvgKelembapan = $httpHeaderKelembapan ?? 0.0;
 
-        $avgKelembapan = collect([$mqttAvgKelembapan, $httpAvgKelembapan])
-            ->filter(static fn($value) => $value !== null)
-            ->avg() ?? 0;
+        $avgSuhu = $this->calculateFreshCombinedMetric([$mqttHeaderSuhu, $httpHeaderSuhu]);
+        $avgKelembapan = $this->calculateFreshCombinedMetric([$mqttHeaderKelembapan, $httpHeaderKelembapan]);
+        $headerSuhuDelta = ($mqttHeaderSuhu !== null && $httpHeaderSuhu !== null)
+            ? $mqttHeaderSuhu - $httpHeaderSuhu
+            : null;
+        $headerKelembapanDelta = ($mqttHeaderKelembapan !== null && $httpHeaderKelembapan !== null)
+            ? $mqttHeaderKelembapan - $httpHeaderKelembapan
+            : null;
 
         $displayTimezone = 'Asia/Jakarta'; // Surabaya timezone (WIB)
 
@@ -555,7 +561,7 @@ class DashboardController extends Controller
         return $this->renderDashboardPage(compact(
             'summary', 'reliability', 'latencyChartData', 'powerChartData', 'mqttTotal', 'httpTotal',
             'mqttConnected', 'httpConnected', 'esp32Connected', 'mqttAvgSuhu', 'mqttAvgKelembapan', 'httpAvgSuhu', 'httpAvgKelembapan',
-            'avgSuhu', 'avgKelembapan', 'fieldCompleteness', 'dataWarnings', 'protocolDiagnostics',
+            'avgSuhu', 'avgKelembapan', 'headerSuhuDelta', 'headerKelembapanDelta', 'fieldCompleteness', 'dataWarnings', 'protocolDiagnostics',
             'mqttConnectionStatus', 'httpConnectionStatus', 'esp32ConnectionStatus', 'connectionConfig', 'simulationRunning', 'excludeSimulatorStatusSource',
             'telemetrySource'
         ));
@@ -1162,6 +1168,36 @@ class DashboardController extends Controller
         ];
     }
 
+    private function resolveFreshProtocolMetricValue(
+        ?\Illuminate\Database\Eloquent\Model $latestRow,
+        array $connectionStatus,
+        string $field
+    ): ?float {
+        if ($latestRow === null || !($connectionStatus['connected'] ?? false)) {
+            return null;
+        }
+
+        $value = $latestRow->{$field} ?? null;
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        return (float) $value;
+    }
+
+    /**
+     * @param array<int, float|null> $values
+     */
+    private function calculateFreshCombinedMetric(array $values): float
+    {
+        $validValues = array_values(array_filter($values, static fn ($value) => $value !== null));
+        if ($validValues === []) {
+            return 0.0;
+        }
+
+        return (float) (array_sum($validValues) / count($validValues));
+    }
+
     private function buildEsp32ConnectionStatus(
         ?\Illuminate\Database\Eloquent\Model $latestIncomingRow,
         CarbonInterface $now,
@@ -1563,6 +1599,8 @@ class DashboardController extends Controller
             'httpAvgKelembapan' => 0.0,
             'avgSuhu' => 0.0,
             'avgKelembapan' => 0.0,
+            'headerSuhuDelta' => null,
+            'headerKelembapanDelta' => null,
             'fieldCompleteness' => [
                 'MQTT' => ['total' => 0, 'fields' => []],
                 'HTTP' => ['total' => 0, 'fields' => []],

@@ -2602,18 +2602,18 @@
                 <div class="header-metric-card suhu-card">
                     <button type="button" class="card-help-btn header-metric-help" data-help-target="helpHeaderSuhu" aria-controls="helpHeaderSuhu" aria-expanded="false" title="Lihat penjelasan card suhu">?</button>
                     <div class="metric-icon"><i class="fas fa-thermometer-half"></i></div>
-                    <div class="metric-label">Rata-rata Suhu</div>
+                    <div class="metric-label">Suhu Realtime</div>
                     <div id="helpHeaderSuhu" class="card-help-panel header-metric-help-panel" hidden>
-                        <p class="card-help-item"><span class="card-help-label">Rata-rata Suhu:</span> Nilai rata-rata suhu gabungan dari data MQTT dan HTTP terbaru.</p>
-                        <p class="card-help-item"><span class="card-help-label">MQTT / HTTP:</span> Menampilkan rata-rata suhu masing-masing protokol untuk perbandingan langsung.</p>
-                        <p class="card-help-item"><span class="card-help-label">Delta (MQTT-HTTP):</span> Selisih rata-rata suhu antara dua protokol pada sampel terbaru.</p>
+                        <p class="card-help-item"><span class="card-help-label">Suhu Realtime:</span> Nilai suhu terbaru yang masih fresh dari MQTT dan HTTP.</p>
+                        <p class="card-help-item"><span class="card-help-label">MQTT / HTTP:</span> Menampilkan suhu terakhir per protokol; jika protokol stale/tidak ada data baru, nilainya otomatis kembali ke `0.00`.</p>
+                        <p class="card-help-item"><span class="card-help-label">Delta (MQTT-HTTP):</span> Selisih suhu hanya ditampilkan saat kedua protokol sama-sama masih fresh.</p>
                     </div>
                     <div class="metric-value" id="avgSuhuValue">{{ number_format((float) ($avgSuhu ?? 0), 2) }}<span class="metric-unit">C</span></div>
                     <div class="metric-detail" id="avgSuhuDetail">
                         MQTT: {{ number_format((float) ($mqttAvgSuhu ?? 0), 2) }} C<br>
                         HTTP: {{ number_format((float) ($httpAvgSuhu ?? 0), 2) }} C
-                        @if(($protocolDiagnostics['pair_available'] ?? false) && isset($protocolDiagnostics['delta']))
-                            <br>Delta (MQTT-HTTP): {{ sprintf('%+.2f', (float) ($protocolDiagnostics['delta']['suhu'] ?? 0)) }} C
+                        @if($headerSuhuDelta !== null)
+                            <br>Delta (MQTT-HTTP): {{ sprintf('%+.2f', (float) $headerSuhuDelta) }} C
                         @endif
                     </div>
                 </div>
@@ -2639,18 +2639,18 @@
                 <div class="header-metric-card kelembapan-card">
                     <button type="button" class="card-help-btn header-metric-help" data-help-target="helpHeaderHumidity" aria-controls="helpHeaderHumidity" aria-expanded="false" title="Lihat penjelasan card kelembapan">?</button>
                     <div class="metric-icon"><i class="fas fa-tint"></i></div>
-                    <div class="metric-label">Rata-rata Kelembapan</div>
+                    <div class="metric-label">Kelembapan Realtime</div>
                     <div id="helpHeaderHumidity" class="card-help-panel header-metric-help-panel" hidden>
-                        <p class="card-help-item"><span class="card-help-label">Rata-rata Kelembapan:</span> Nilai rata-rata kelembapan gabungan dari data MQTT dan HTTP terbaru.</p>
-                        <p class="card-help-item"><span class="card-help-label">MQTT / HTTP:</span> Menampilkan rata-rata kelembapan per protokol untuk melihat perbedaan pembacaan.</p>
-                        <p class="card-help-item"><span class="card-help-label">Delta (MQTT-HTTP):</span> Selisih kelembapan terbaru antar protokol.</p>
+                        <p class="card-help-item"><span class="card-help-label">Kelembapan Realtime:</span> Nilai kelembapan terbaru yang masih fresh dari MQTT dan HTTP.</p>
+                        <p class="card-help-item"><span class="card-help-label">MQTT / HTTP:</span> Menampilkan kelembapan terakhir per protokol; jika protokol stale/tidak ada data baru, nilainya otomatis kembali ke `0.00`.</p>
+                        <p class="card-help-item"><span class="card-help-label">Delta (MQTT-HTTP):</span> Selisih kelembapan hanya ditampilkan saat kedua protokol sama-sama masih fresh.</p>
                     </div>
                     <div class="metric-value" id="avgKelembapanValue">{{ number_format((float) ($avgKelembapan ?? 0), 2) }}<span class="metric-unit">%</span></div>
                     <div class="metric-detail" id="avgKelembapanDetail">
                         MQTT: {{ number_format((float) ($mqttAvgKelembapan ?? 0), 2) }}%<br>
                         HTTP: {{ number_format((float) ($httpAvgKelembapan ?? 0), 2) }}%
-                        @if(($protocolDiagnostics['pair_available'] ?? false) && isset($protocolDiagnostics['delta']))
-                            <br>Delta (MQTT-HTTP): {{ sprintf('%+.2f', (float) ($protocolDiagnostics['delta']['kelembapan'] ?? 0)) }}%
+                        @if($headerKelembapanDelta !== null)
+                            <br>Delta (MQTT-HTTP): {{ sprintf('%+.2f', (float) $headerKelembapanDelta) }}%
                         @endif
                     </div>
                 </div>

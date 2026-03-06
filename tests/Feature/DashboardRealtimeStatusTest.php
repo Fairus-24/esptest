@@ -89,6 +89,43 @@ class DashboardRealtimeStatusTest extends TestCase
             ->assertSee('HTTP Connected');
     }
 
+    public function test_dashboard_header_sensor_metrics_reset_to_zero_when_protocol_data_is_stale(): void
+    {
+        $device = $this->createDevice('ESP32-REAL');
+        $staleTimestamp = now()->subSeconds(95);
+
+        $this->insertTelemetry($device, 'MQTT', $staleTimestamp, 4501);
+        $this->insertTelemetry($device, 'HTTP', $staleTimestamp, 4502);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('id="avgSuhuValue">0.00<span class="metric-unit">C</span>', false)
+            ->assertSee('id="avgKelembapanValue">0.00<span class="metric-unit">%</span>', false)
+            ->assertSee('MQTT: 0.00 C')
+            ->assertSee('HTTP: 0.00 C')
+            ->assertSee('MQTT: 0.00%')
+            ->assertSee('HTTP: 0.00%');
+    }
+
+    public function test_dashboard_header_sensor_metrics_only_use_protocol_values_that_are_still_fresh(): void
+    {
+        $device = $this->createDevice('ESP32-REAL');
+
+        $this->insertTelemetry($device, 'MQTT', now()->subSeconds(4), 4601);
+        $this->insertTelemetry($device, 'HTTP', now()->subSeconds(95), 4602);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('MQTT Connected')
+            ->assertSee('HTTP Disconnected')
+            ->assertSee('id="avgSuhuValue">28.80<span class="metric-unit">C</span>', false)
+            ->assertSee('id="avgKelembapanValue">60.70<span class="metric-unit">%</span>', false)
+            ->assertSee('MQTT: 28.80 C')
+            ->assertSee('HTTP: 0.00 C')
+            ->assertSee('MQTT: 60.70%')
+            ->assertSee('HTTP: 0.00%');
+    }
+
     public function test_dashboard_marks_filtered_when_only_simulator_data_exists_and_simulation_is_stopped(): void
     {
         $simDevice = $this->createDevice('SIMULATOR-APP');

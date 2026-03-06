@@ -91,6 +91,13 @@
             padding: 16px;
         }
 
+        .surface.surface-dashboard {
+            width: min(1680px, calc(100vw - 32px));
+            max-width: none;
+            justify-self: center;
+            min-width: 0;
+        }
+
         .toolbar {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -257,6 +264,11 @@
         }
 
         .frame-wrap {
+            --dashboard-viewport-width: 1440px;
+            --dashboard-viewport-height: 1024px;
+            --dashboard-scale: 1;
+            --dashboard-stage-width: var(--dashboard-viewport-width);
+            --dashboard-stage-height: var(--dashboard-viewport-height);
             margin-top: 12px;
             border: 1px solid rgba(15, 23, 42, 0.16);
             border-radius: 14px;
@@ -264,39 +276,49 @@
             background: linear-gradient(145deg, #e2e8f0 0%, #cbd5e1 100%);
             display: flex;
             justify-content: center;
+            align-items: flex-start;
             padding: 12px;
+            min-width: 0;
+        }
+
+        .frame-stage {
+            width: var(--dashboard-stage-width);
+            height: var(--dashboard-stage-height);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            flex: none;
         }
 
         .frame-wrap iframe {
-            width: min(100%, 100%);
+            width: var(--dashboard-viewport-width);
             border: 0;
-            height: 78vh;
-            min-height: 580px;
+            height: var(--dashboard-viewport-height);
+            min-height: 0;
             background: #fff;
             border-radius: 12px;
             box-shadow: 0 18px 35px rgba(2, 6, 23, 0.16);
-            transition: width 180ms ease, min-height 180ms ease, height 180ms ease;
+            transform: scale(var(--dashboard-scale));
+            transform-origin: top center;
+            transition: transform 180ms ease, width 180ms ease, height 180ms ease;
+            max-width: none;
+            max-height: none;
+            flex: none;
         }
 
         .frame-wrap[data-viewport="desktop"] iframe {
-            width: 100%;
-            min-height: 580px;
-            height: 78vh;
-            max-height: 1000px;
+            width: var(--dashboard-viewport-width);
+            height: var(--dashboard-viewport-height);
         }
 
         .frame-wrap[data-viewport="tablet"] iframe {
-            width: min(900px, 100%);
-            min-height: 760px;
-            height: 1040px;
-            max-height: none;
+            width: var(--dashboard-viewport-width);
+            height: var(--dashboard-viewport-height);
         }
 
         .frame-wrap[data-viewport="mobile"] iframe {
-            width: min(430px, 100%);
-            min-height: 680px;
-            height: 860px;
-            max-height: none;
+            width: var(--dashboard-viewport-width);
+            height: var(--dashboard-viewport-height);
         }
 
         .surface-head {
@@ -392,6 +414,10 @@
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
+            .surface.surface-dashboard {
+                width: 100%;
+            }
+
             .surface-head {
                 align-items: stretch;
             }
@@ -431,15 +457,6 @@
                 padding: 8px;
             }
 
-            .frame-wrap[data-viewport="tablet"] iframe {
-                min-height: 600px;
-                height: 800px;
-            }
-
-            .frame-wrap[data-viewport="mobile"] iframe {
-                min-height: 560px;
-                height: 740px;
-            }
         }
     </style>
 </head>
@@ -523,7 +540,7 @@
             <div class="log-box" id="simulationLog"></div>
         </section>
 
-        <section class="surface">
+        <section class="surface surface-dashboard">
             <div class="surface-head">
                 <div>
                     <h2>Live Dashboard Simulasi</h2>
@@ -547,7 +564,9 @@
                 </div>
             </div>
             <div class="frame-wrap" id="simulationDashboardFrameWrap" data-viewport="desktop">
-                <iframe src="{{ $simulationDashboardPath }}" title="Dashboard MQTT vs HTTP (Simulation Source)"></iframe>
+                <div class="frame-stage" id="simulationDashboardFrameStage">
+                    <iframe src="{{ $simulationDashboardPath }}" title="Dashboard MQTT vs HTTP (Simulation Source)"></iframe>
+                </div>
             </div>
         </section>
     </div>
@@ -580,9 +599,15 @@
                 'resetBeforeStart',
             ];
             const frameWrap = document.getElementById('simulationDashboardFrameWrap');
+            const frameStage = document.getElementById('simulationDashboardFrameStage');
             const viewportButtons = Array.from(document.querySelectorAll('[data-dashboard-viewport]'));
             const viewportLabel = document.getElementById('dashboardViewportLabel');
             const viewportStorageKey = 'simulation_dashboard_viewport';
+            const dashboardViewportSpecs = {
+                desktop: { width: 1440, height: 1024, label: 'Desktop' },
+                tablet: { width: 1024, height: 1366, label: 'Tablet' },
+                mobile: { width: 430, height: 932, label: 'Mobile' },
+            };
 
             function appendLog(message) {
                 const now = new Date();
@@ -786,10 +811,34 @@
                 return 'desktop';
             }
 
+            function getViewportSpec(viewport) {
+                const normalized = normalizeViewport(viewport);
+                return dashboardViewportSpecs[normalized] || dashboardViewportSpecs.desktop;
+            }
+
             function viewportText(viewport) {
-                if (viewport === 'tablet') return 'Tablet';
-                if (viewport === 'mobile') return 'Mobile';
-                return 'Desktop';
+                return getViewportSpec(viewport).label;
+            }
+
+            function syncDashboardViewportScale() {
+                if (!frameWrap || !frameStage) return;
+
+                const normalized = normalizeViewport(frameWrap.dataset.viewport || 'desktop');
+                const spec = getViewportSpec(normalized);
+                const wrapStyle = window.getComputedStyle(frameWrap);
+                const paddingLeft = parseFloat(wrapStyle.paddingLeft || '0') || 0;
+                const paddingRight = parseFloat(wrapStyle.paddingRight || '0') || 0;
+                const availableWidth = Math.max(frameWrap.clientWidth - paddingLeft - paddingRight, 240);
+                const scale = Math.min(1, availableWidth / spec.width);
+                const scaledWidth = Math.max(1, Math.round(spec.width * scale));
+                const scaledHeight = Math.max(1, Math.round(spec.height * scale));
+
+                frameWrap.style.setProperty('--dashboard-viewport-width', `${spec.width}px`);
+                frameWrap.style.setProperty('--dashboard-viewport-height', `${spec.height}px`);
+                frameWrap.style.setProperty('--dashboard-scale', scale.toFixed(4));
+                frameWrap.style.setProperty('--dashboard-stage-width', `${scaledWidth}px`);
+                frameWrap.style.setProperty('--dashboard-stage-height', `${scaledHeight}px`);
+                frameWrap.dataset.viewport = normalized;
             }
 
             function applyDashboardViewport(viewport, persist = true) {
@@ -805,6 +854,8 @@
                 if (viewportLabel) {
                     viewportLabel.textContent = viewportText(normalized);
                 }
+
+                syncDashboardViewportScale();
 
                 if (persist) {
                     try {
@@ -1038,6 +1089,14 @@
                     applyDashboardViewport(button.dataset.dashboardViewport || 'desktop', true);
                 });
             });
+            if (window.ResizeObserver && frameWrap) {
+                const observer = new ResizeObserver(function () {
+                    syncDashboardViewportScale();
+                });
+                observer.observe(frameWrap);
+            } else {
+                window.addEventListener('resize', syncDashboardViewportScale);
+            }
             document.getElementById('toggleSimulationBtn').addEventListener('click', toggleSimulation);
             document.getElementById('resetSimulationBtn').addEventListener('click', resetSimulation);
             document.getElementById('tickSimulationBtn').addEventListener('click', manualTick);
